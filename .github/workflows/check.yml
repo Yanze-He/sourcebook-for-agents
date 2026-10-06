@@ -1,0 +1,17 @@
+name: Main flow
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci && npm --prefix apps/capture ci && npm --prefix apps/workspace ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run build

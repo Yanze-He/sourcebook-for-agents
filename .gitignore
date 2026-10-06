@@ -1,0 +1,10 @@
+node_modules/
+.output/
+dist/
+release/
+.local/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+reports/

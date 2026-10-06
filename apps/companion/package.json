@@ -1,0 +1,13 @@
+{
+  "name": "sourcebook-companion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/main.mjs --dev",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node scripts/verify-build.mjs",
+    "package:macos": "node scripts/package-macos.mjs",
+    "package:windows": "node scripts/package-windows.mjs"
+  }
+}

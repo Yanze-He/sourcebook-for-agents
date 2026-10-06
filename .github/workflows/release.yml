@@ -1,0 +1,125 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        required: true
+        type: string
+      sign:
+        description: Sign and notarize platform installers
+        required: true
+        default: false
+        type: boolean
+      publish:
+        description: Create a private GitHub Release
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --prefix apps/capture
+      - run: npm --prefix apps/capture run build && npm --prefix apps/capture run zip
+      - run: |
+          mkdir -p release/extension
+          find apps/capture/.output -name '*.zip' -exec cp {} release/extension/sourcebook-picker-chromium.zip \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sourcebook-picker-chromium
+          path: release/extension/
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci && npm ci --prefix apps/capture && npm ci --prefix apps/workspace
+      - run: npm run build && npm --prefix apps/companion run package:macos
+      - name: Sign and notarize
+        if: github.event_name == 'push' || inputs.sign
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s build.keychain
+          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "release/macos/Sourcebook Companion.app"
+          rm "release/macos/Sourcebook-Companion.dmg"
+          hdiutil create -volname "Sourcebook Companion" -srcfolder "release/macos/Sourcebook Companion.app" -ov -format UDZO "release/macos/Sourcebook-Companion.dmg"
+          xcrun notarytool submit "release/macos/Sourcebook-Companion.dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "release/macos/Sourcebook-Companion.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sourcebook-companion-macos-arm64
+          path: release/macos/Sourcebook-Companion.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci; npm ci --prefix apps/capture; npm ci --prefix apps/workspace
+      - run: npm run build; npm --prefix apps/companion run package:windows
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Companion"
+          $env:SOURCEBOOK_WINDOWS_OUTPUT = "${{ github.workspace }}\release\windows\installer"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\companion\installer\sourcebook.iss
+      - name: Sign installer
+        if: github.event_name == 'push' || inputs.sign
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("certificate.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          & signtool sign /fd SHA256 /f certificate.pfx /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "release\windows\installer\Sourcebook-for-Agents-Setup.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sourcebook-companion-windows-x64
+          path: release/windows/installer/Sourcebook-for-Agents-Setup.exe
+
+  github-release:
+    needs: [extension, macos, windows]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+      - run: node scripts/write-checksums.mjs release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes
+          fi
+          find release -type f -print0 | xargs -0 gh release upload "$TAG" --clobber

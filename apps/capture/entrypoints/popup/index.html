@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sourcebook for Agents</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="popup">
+      <header class="topbar">
+        <div class="brand">
+          <strong>Sourcebook for Agents</strong>
+          <span id="status">检查中</span>
+        </div>
+        <div class="top-actions">
+          <button id="picker-toggle" class="toggle-button" type="button" aria-pressed="false">浮层关</button>
+          <button id="help" class="icon-button" type="button" aria-label="帮助">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.8 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.4 2-2.4 3.8" />
+              <path d="M12 17h.01" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="panel tools-panel" aria-label="Pick tools">
+        <div class="panel-title">
+          <strong>Pick 功能</strong>
+        </div>
+        <div class="action-grid">
+          <button id="select-chat-messages" class="action-card featured" type="button" aria-disabled="true" title="当前页未识别出聊天消息">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M5 7h14M5 12h14M5 17h14" />
+                <path d="M4 7l1 1.2L7.2 5.5M4 12l1 1.2 2.2-2.7M4 17l1 1.2 2.2-2.7" />
+              </svg>
+            </span>
+            <span class="button-label">Pick 对话</span>
+          </button>
+          <button id="start-picking" class="action-card" type="button" aria-disabled="true" title="请先打开右上角浮层开关">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M9 6l1.2-2h3.6L15 6h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z" />
+                <circle cx="12" cy="12.5" r="3.2" />
+              </svg>
+            </span>
+            <span class="button-label">Pick 媒体</span>
+          </button>
+          <button id="pick-page" class="action-card" type="button" aria-disabled="true" title="请先打开右上角浮层开关">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M7 3h7l4 4v14H7z" />
+                <path d="M14 3v5h5" />
+                <path d="M9 13h6M9 17h6" />
+              </svg>
+            </span>
+            <span class="button-label">Pick 网页</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel recent-panel" aria-label="Recent picks">
+        <div class="panel-title">
+          <strong>最近 Pick</strong>
+          <span id="recent-status">暂存 0/30，未保存 0</span>
+        </div>
+        <div id="recent-picks" class="recent-list">
+          <p>还没有最近内容。</p>
+        </div>
+        <div class="inbox-actions">
+          <button id="save-pending" type="button" aria-disabled="true" title="已全部保存" hidden>保存到 Inbox</button>
+          <button id="open-inbox" class="disconnected" type="button" title="打开本地主程序后可查看 Inbox。">
+            <span class="inbox-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M10 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8" />
+                <path d="M14 12H3" />
+                <path d="m6 9-3 3 3 3" />
+              </svg>
+            </span>
+            <span>未连接 Inbox</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="inbox-dialog" class="dialog-backdrop" aria-label="未连接 Inbox" hidden>
+        <div class="dialog">
+          <strong>未连接 Inbox</strong>
+          <p>请先打开本地主程序，或下载主产品后再查看本地 Inbox。</p>
+          <div class="dialog-actions">
+            <button id="dialog-download" type="button">下载主产品</button>
+            <button id="dialog-close" type="button">知道了</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>
