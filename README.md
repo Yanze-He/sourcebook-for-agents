@@ -1,50 +1,106 @@
 # Sourcebook for Agents
 
-一个本地优先的 Agent 素材工具：**Pick -> Sources -> Pack**。
+> Pick web context. Turn it into clear, reusable context packs for any AI agent.
 
-- **Pick**：Chromium 浏览器扩展，用于捕获网页文字、图片、链接、网页卡片和已加载的 Agent 对话。
-- **Sources**：在本地浏览器工作区查看、筛选和选择已捕获的素材。
-- **Pack**：将选中的素材和上下文导出为可交给 Agent 的 ZIP。
+Sourcebook for Agents is a local-first tool for people who work across the web and AI agents. Pick the references that matter - webpages, images, links, text, and loaded agent conversations - then review and package them into a portable ZIP for your next task.
 
-所有内容默认保存在用户电脑；本项目不依赖账号或云端服务。
+Your sources stay on your computer. No account or cloud workspace is required for the core loop.
 
-## 使用本地开发版
+## Why Sourcebook
 
-前提：Node.js 22.18+、npm、zip/unzip。macOS 和 Linux 支持完整本地开发；Windows 用于打包 Windows 安装程序。
+Useful context is scattered: an image from a product page, a paragraph from an article, a useful link, or part of an agent conversation. Copying it by hand into every new prompt is slow, brittle, and makes it easy to lose where something came from.
+
+Sourcebook gives that context a simple lifecycle:
+
+1. **Pick** - capture useful web content without leaving the page.
+2. **Sources** - review the collected references in one local workspace.
+3. **Pack** - export selected sources, original links, notes, and locally saved images as context ready for an agent.
+
+It is not another AI generation canvas. It is the local context layer between web research and the agents you already use.
+
+## What You Can Pick Today
+
+- Selected text, links, images, video references, and lightweight webpage cards.
+- Individual, selected, or loaded messages from supported agent chat pages.
+- Image files saved locally when the source permits download.
+- Source URL, title, page metadata, capture time, and a locator for every Pick.
+
+The Chromium extension works independently while the local app is offline: Picks are held in browser storage and sent to Sourcebook when the Companion is available again.
+
+## What a Pack Contains
+
+A Sourcebook Pack is a ZIP file designed to travel with a task. It includes:
+
+- `prompt.txt` with selected source text, notes, titles, and original URLs.
+- An `assets/` folder for images that have a local copy.
+- Clear warnings for media that can only be referenced by URL.
+
+You choose what goes into a Pack. Sourcebook never sends a prompt or files to an agent for you.
+
+## Quick Start
+
+### Run from source
+
+Requirements: Node.js 22.18+, npm, and `zip`/`unzip`.
 
 ```bash
+git clone https://github.com/Yanze-He/sourcebook-for-agents.git
+cd sourcebook-for-agents
 npm run setup
 npm run build
 npm run dev:companion
 ```
 
-Companion 会启动仅限本机访问的服务，并在默认浏览器打开 Sources。用户数据保存在：
+The Companion starts a loopback-only local service and opens Sources in your default browser. Your data lives on your computer:
 
-- macOS：`~/Library/Application Support/Sourcebook for Agents`
-- Windows：`%APPDATA%\\Sourcebook for Agents`
+- macOS: `~/Library/Application Support/Sourcebook for Agents`
+- Windows: `%APPDATA%\\Sourcebook for Agents`
 
-加载扩展：打开 Chromium 的扩展管理页，开启开发者模式，选择“加载已解压的扩展程序”，然后选取 `apps/capture/.output/chrome-mv3`。
+### Load the Picker extension
 
-## 安装包与发布
+1. Open Chromium's extension management page.
+2. Enable **Developer mode**.
+3. Select **Load unpacked**.
+4. Choose `apps/capture/.output/chrome-mv3`.
+5. Open a webpage, open the extension, and enable **Picker**.
 
-`npm run package:macos` 在 macOS 生成 Companion DMG；`npm run package:windows` 在 Windows 生成安装器输入目录。GitHub Actions 的手动发布工作流会生成 Chromium 扩展 ZIP、macOS DMG 和 Windows 安装程序。
+## Project Status
 
-首次发布前必须完成：软件许可证、隐私说明、浏览器商店资料，以及 macOS/Windows 的签名凭据配置。仓库是否公开和软件许可证是两个独立决定；当前仓库保持 private。
+Sourcebook for Agents is an early local-first P1. The current public scope is **Pick -> Sources -> Pack**.
 
-## 贡献边界
+Supported now:
+
+- Chrome and Chromium browsers.
+- Local SQLite storage, local image caching, and ZIP exports.
+- macOS and Windows Companion packaging scripts.
+
+Not included in this repository:
+
+- Cloud sync, accounts, teams, or billing.
+- A project, board, or canvas product.
+- Full webpage snapshots, OCR, ASR, or video downloads.
+- Firefox and Safari support.
+
+## Repository Map
 
 | Area | Path | Responsibility |
 | --- | --- | --- |
-| Pick | `apps/capture` | 浏览器扩展、网页/媒体/对话捕获、暂存队列、扩展体验 |
-| Sources | `apps/workspace/src` | 素材列表、预览、选择和来源信息 |
-| Pack | `apps/workspace/server` | Pack API、附件、ZIP 与本地数据模型 |
-| Companion | `apps/companion` | 本地服务启动、浏览器打开、用户数据目录、安装包 |
+| Pick | `apps/capture` | Browser extension, capture logic, pending queue, and Picker UX |
+| Sources | `apps/workspace/src` | Source list, previews, selection, and local workspace UX |
+| Pack | `apps/workspace/server` | Local API, media cache, Pack creation, and ZIP export |
+| Companion | `apps/companion` | Local startup, browser launch, data directories, and installers |
 
-提交前运行：
+## Development
 
 ```bash
 npm test
 npm run build
 ```
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md)、[架构说明](docs/architecture.md) 和各模块贡献指南。
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution boundaries, [the architecture guide](docs/architecture.md) for the runtime model, and the module guides in `docs/contribution/` for focused development instructions.
+
+## Privacy and Security
+
+The core product is local-first: the Companion binds only to `127.0.0.1`, and captured Sources are stored in a local SQLite database. Do not expose the local service through a public tunnel or reverse proxy.
+
+Before a public Chrome Web Store release, this project will publish a dedicated privacy policy, extension permission explanation, and secure extension-to-Companion pairing.
