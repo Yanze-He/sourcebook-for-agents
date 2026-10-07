@@ -4,25 +4,25 @@
 
 | Area | Start here | Owns |
 | --- | --- | --- |
-| Pick | `apps/capture` | 浏览器扩展、捕获逻辑、暂存队列与扩展 UX |
-| Sources | `apps/workspace/src` | Sources 列表、选择、预览和本地工作区 UX |
-| Pack | `apps/workspace/server` | Source Pack API、prompt、附件与 ZIP 导出 |
-| Companion | `apps/companion` | 本地启动、浏览器打开、用户数据目录、安装器 |
+| Pick | `apps/picker` | Browser extension, Pick logic, pending queue, and Picker UX |
+| Sources | `apps/sources/src` | Sources list, selection, previews, and local Sources UX |
+| Pack | `apps/sources/server` | Pack API, prompts, and local file preparation |
+| Desktop | `apps/desktop` | Local startup, browser launch, user data directories, and installers |
 
-## 本地开发
+## Local Development
 
 ```bash
 npm run setup
 npm run build
-npm run dev:companion
+npm run dev:desktop
 ```
 
-浏览器扩展以开发者模式加载 `apps/capture/.output/chrome-mv3`。模块级校验命令写在 `docs/contribution/` 对应文档中。
+Load the browser extension in developer mode from `apps/picker/.output/chrome-mv3`. Module-level checks are documented in `docs/contribution/`.
 
-## PR 要求
+## Pull Request Requirements
 
-- 描述受影响的贡献区域和用户可见变化。
-- 添加或更新聚焦测试。
-- 提交前运行 `npm test` 和 `npm run build`。
-- 不要提交 SQLite 数据库、媒体缓存、导出的 Pack、浏览器存储、签名证书、商店密钥或安装产物。
-- 本地 API 仅能绑定 loopback 地址。任何 API 兼容性变化必须版本化。
+- Describe the affected area and user-visible behavior.
+- Add or update focused tests.
+- Run `npm test` and `npm run build` before submitting.
+- Do not commit SQLite databases, media caches, browser storage, signing certificates, store keys, or installer artifacts.
+- The local API must remain loopback-only. Version any API compatibility change.

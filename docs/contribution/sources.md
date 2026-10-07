@@ -1,10 +1,8 @@
-# Sources Contributions
+# Sources Contribution Guide
 
-Use `apps/workspace/src` for Sources work.
+Use `apps/sources` for the Sources interface and local service.
 
-- Sources is the durable list of captured material, not a project container.
-- Keep preview, filtering, notes, metadata, local-file status, and source links usable without Canvas.
-- Use product copy `Sources` in English and `素材` in Chinese. Keep internal `inbox` identifiers unchanged for compatibility.
-- Do not require Board or Project IDs for standard Sources actions.
-
-Validate Sources changes with `npm --prefix apps/workspace test` and `npm --prefix apps/workspace run build`.
+- Use product copy `Sources` in English and `素材` in Chinese.
+- Treat a Book as an isolated local collection: all requests must carry or resolve a Book ID.
+- Keep local file copying, storage state, backups, and transfer operations in the service layer.
+- Keep Pack preparation separate from rendering and selection UI.

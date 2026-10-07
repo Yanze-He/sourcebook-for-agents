@@ -5,11 +5,11 @@
   "engines": { "node": ">=22.18.0" },
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "dev:companion": "npm --prefix apps/companion run dev",
-    "test": "npm --prefix apps/capture test && npm --prefix apps/workspace test && npm --prefix apps/companion test",
-    "build": "npm --prefix apps/capture run build && npm --prefix apps/workspace run build && npm --prefix apps/companion run build",
-    "package:macos": "npm run build && npm --prefix apps/companion run package:macos",
-    "package:windows": "npm run build && npm --prefix apps/companion run package:windows"
+    "dev:desktop": "npm --prefix apps/desktop run dev",
+    "test": "npm --prefix apps/picker test && npm --prefix apps/sources test && npm --prefix apps/desktop test",
+    "build": "npm --prefix apps/picker run build && npm --prefix apps/sources run build && npm --prefix apps/desktop run build",
+    "package:macos": "npm run build && npm --prefix apps/desktop run package:macos",
+    "package:windows": "npm run build && npm --prefix apps/desktop run package:windows"
   },
-  "devDependencies": { "playwright": "^1.63.0" }
+  "devDependencies": {}
 }

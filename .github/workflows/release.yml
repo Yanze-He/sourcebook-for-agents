@@ -17,8 +17,6 @@ on:
         required: true
         default: false
         type: boolean
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: write
@@ -49,9 +47,9 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci && npm ci --prefix apps/capture && npm ci --prefix apps/workspace
-      - run: npm run build && npm --prefix apps/companion run package:macos
+      - run: npm run build && npm --prefix apps/desktop run package:macos
       - name: Sign and notarize
-        if: github.event_name == 'push' || inputs.sign
+        if: inputs.sign
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -64,15 +62,15 @@ jobs:
           security create-keychain -p "" build.keychain
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security list-keychains -d user -s build.keychain
-          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "release/macos/Sourcebook Companion.app"
-          rm "release/macos/Sourcebook-Companion.dmg"
-          hdiutil create -volname "Sourcebook Companion" -srcfolder "release/macos/Sourcebook Companion.app" -ov -format UDZO "release/macos/Sourcebook-Companion.dmg"
-          xcrun notarytool submit "release/macos/Sourcebook-Companion.dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple "release/macos/Sourcebook-Companion.dmg"
+          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "release/macos/Sourcebook Desktop.app"
+          rm "release/macos/Sourcebook-Desktop.dmg"
+          hdiutil create -volname "Sourcebook Desktop" -srcfolder "release/macos/Sourcebook Desktop.app" -ov -format UDZO "release/macos/Sourcebook-Desktop.dmg"
+          xcrun notarytool submit "release/macos/Sourcebook-Desktop.dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "release/macos/Sourcebook-Desktop.dmg"
       - uses: actions/upload-artifact@v4
         with:
-          name: sourcebook-companion-macos-arm64
-          path: release/macos/Sourcebook-Companion.dmg
+          name: sourcebook-desktop-macos-arm64
+          path: release/macos/Sourcebook-Desktop.dmg
 
   windows:
     runs-on: windows-latest
@@ -82,17 +80,17 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci; npm ci --prefix apps/capture; npm ci --prefix apps/workspace
-      - run: npm run build; npm --prefix apps/companion run package:windows
+      - run: npm run build; npm --prefix apps/desktop run package:windows
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build installer
         shell: pwsh
         run: |
-          $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Companion"
+          $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Desktop"
           $env:SOURCEBOOK_WINDOWS_OUTPUT = "${{ github.workspace }}\release\windows\installer"
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\companion\installer\sourcebook.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\desktop\installer\sourcebook.iss
       - name: Sign installer
-        if: github.event_name == 'push' || inputs.sign
+        if: inputs.sign
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -102,12 +100,12 @@ jobs:
           & signtool sign /fd SHA256 /f certificate.pfx /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "release\windows\installer\Sourcebook-for-Agents-Setup.exe"
       - uses: actions/upload-artifact@v4
         with:
-          name: sourcebook-companion-windows-x64
+          name: sourcebook-desktop-windows-x64
           path: release/windows/installer/Sourcebook-for-Agents-Setup.exe
 
   github-release:
     needs: [extension, macos, windows]
-    if: github.event_name == 'push' || inputs.publish
+    if: inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,7 +115,7 @@ jobs:
       - run: node scripts/write-checksums.mjs release
       - env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes

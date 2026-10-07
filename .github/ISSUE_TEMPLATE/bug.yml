@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible problem in Pick, Sources, Pack, or Desktop.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include private captures, credentials, or sensitive page content."
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Pick, Sources, Pack, Desktop, Documentation]
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and reproduction steps
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, operating system, and Sourcebook version
+    validations:
+      required: true

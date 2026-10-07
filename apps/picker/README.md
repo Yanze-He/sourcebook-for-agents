@@ -1,0 +1,44 @@
+# Sourcebook for Agents Picker
+
+This directory contains the Sourcebook for Agents Chrome/Chromium extension and its local Pick integration.
+
+## Run
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Build and start the browser-first Sourcebook Desktop. Its local API is the single data store for Pick, Sources, and Pack:
+
+   ```bash
+   cd ../..
+   npm run build
+   npm run dev:desktop
+   ```
+
+3. In a separate terminal, from this Picker directory, build the extension:
+
+   ```bash
+   npm run build
+   ```
+
+4. Load the generated extension from `.output/chrome-mv3` in Chrome's extension page.
+
+5. Open the local Sources:
+
+   ```text
+   http://127.0.0.1:4177/
+   ```
+
+## MVP Scope
+
+- Pick selected web text.
+- Pick visible images (PNG, JPEG, GIF, WebP). New image Picks are copied into the current Book automatically; when the browser cannot read an image directly, Sourcebook downloads it from its source link.
+- Pick links.
+- Pick lightweight webpage metadata.
+- Save all picks to Sources.
+- Queue Picks in extension storage only while Sourcebook Desktop is unavailable; the background worker retries automatically once per minute when the selected Book is available again.
+- Pick individual, selected, or visible messages from supported AI chat pages.
+- Reload the unpacked extension in Chrome after rebuilding, then refresh the source page.

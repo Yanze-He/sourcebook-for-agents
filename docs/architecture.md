@@ -1,31 +1,33 @@
-# Sourcebook for Agents Architecture
+# Architecture
 
-## P1 boundary
+## Product Loop
 
-The public-ready P1 loop is **Pick -> Sources -> Pack**. The browser extension captures context; the local service owns all durable data; Sources lets users inspect and select material; Pack produces files ready for an agent.
+The public-ready local loop is **Pick -> Sources -> Pack**.
 
-`apps/workspace` is the public P1 host. New P1 work must not require a project, board, group, or canvas concept.
+- **Picker** (`apps/picker`) is the Chrome/Chromium extension. It recognizes selectable webpage material, creates versioned Pick payloads, keeps a browser-side pending queue, and sends Picks to Sourcebook Desktop when connected.
+- **Sources** (`apps/sources`) is the web interface for browsing, editing, selecting, importing, and preparing Sources.
+- **Desktop** (`apps/desktop`) starts the local service, owns the library location, opens Sources in the default browser, and packages the macOS and Windows application.
+- **Local service** (`apps/sources/server`) owns Book databases, file copies, backups, imports, transfer operations, and Pack assembly.
 
-## Runtime topology
+## Local Storage
+
+A Sourcebook library contains isolated Books:
 
 ```text
-Browser extension
-       |
-       v
-127.0.0.1 local service <----> SQLite, media cache, Pack exports
-       |
-       v
-Browser-hosted Sources and Pack workspace
+Sourcebook Library/
+  library.json
+  books/
+    sourcebook/
+      book.sqlite
+      assets/
 ```
 
-`apps/companion` starts the local service in `apps/workspace`, gives it a per-user data directory, serves the built public workspace through localhost, and opens the default browser. The Companion does not add a second web runtime or require users to install Node. This deliberately avoids Electron for P1 while retaining native ownership of SQLite, files, exports and the extension API.
+Each Book has its own SQLite database and asset directory. The active Book is explicit in every Pick request. A Source can move or copy to another Book only through the transfer API.
 
-## Source Pack contract
+## API Boundary
 
-`POST /api/source-packs` accepts an explicit set of `inboxItemIds` and creates a Pack without Project, Board or BoardCard state. The service writes `prompt.txt`, copies locally cached image assets into `assets/`, and makes a ZIP available at `/api/source-packs/:id/download`. This is the public P1 Pack boundary.
+Picker sends `POST /api/picks`. Sources is read through `GET /api/sources?bookId=…`; edits, local file operations, transfers, backups, and Packs use the matching `/api` routes. The application does not expose a cloud API in this release. See [the local API contract](local-api.md) for the MCP-ready Source creation endpoint.
 
-## Compatibility
+## Packaging
 
-The existing `/api/inbox/*` routes and `inbox_items` storage names remain internal compatibility contracts. Product copy calls the collection **Sources**. Any replacement API must be versioned and keep the current routes working for released Picker versions.
-
-Private products can consume Sources and Pack through the same local profile and local API, but they are deliberately outside this repository.
+Desktop packages embed the Sources build and service. The application runs the service on loopback, opens it in the system browser, and retains native ownership of SQLite and local files without Electron.

@@ -1,42 +1,41 @@
-# 公开版与服务部署决策草案
+# Release and Distribution
 
-状态：私有仓库开发中；公开版发布前仍需完成许可、隐私与商店资料审核。
+Sourcebook for Agents is currently a private, early-alpha repository. A commit passing CI is not a public release.
 
-审批要求：仓库公开必须得到所有者的明确审批。未经审批，禁止创建公开仓库、把私有仓库改为公开，或向公开仓库推送项目代码。当前 GitHub 保存只允许使用私有仓库。
+## Release scope
 
-## 推荐边界
+The public P1 is limited to **Pick -> Sources -> Pack**. It is a local-first product: the Desktop, SQLite database, media copies, and exported Packs remain on the user's computer.
 
-| 能力 | 推荐位置 | 当前状态 |
-| --- | --- | --- |
-| 网页 Pick、Sources、Pack、本地文件 | 未来 public `sourcebook-for-agents` | 已有独立本地运行与打包路径 |
-| 本地 SQLite、系统剪贴板、图片文件保存 | 用户电脑上的 Sourcebook 本地服务 | 已有实现，不能搬到服务器替代本机能力 |
-| 账号、订阅权益、限额、计费 | 独立 private Sourcebook cloud 服务 | 尚未实现 |
-| 云同步、团队空间、分享访问控制 | 独立私有服务与数据库/对象存储 | 尚未实现 |
-| 高级 AI 整理、收费模板服务、模型代理 | 私有 worker/API | 尚未实现 |
+Cloud sync, accounts, billing, teams, and any future canvas product are separate products and are not release dependencies for this repository.
 
-先保留当前仓库 private。确认社区版范围后，从审查通过的代码创建新的公开仓库和干净首提交；不要直接把含私有开发历史的仓库改为 public。前端开关只控制体验，不构成保密或收费边界。收费服务要在服务器鉴权和验证权益，不下发密钥。
+## What a release produces
 
-GitHub 可见性与软件许可是不同决策。发布前确认哪些代码允许用户使用、修改、再分发，完成依赖许可核对后选择许可；本次不代替你授予开放许可。
+The manual GitHub Actions release workflow can build:
 
-## 用户可用性发布门槛
+- A Chromium extension ZIP.
+- A macOS Desktop DMG.
+- A Windows Desktop installer.
+- SHA-256 checksums and generated release notes.
 
-1. 用干净机器验证 macOS DMG、Windows EXE、扩展 ZIP 与主链路。
-2. README 提供 3 分钟启动、真实截图、限制和数据存储说明。
-3. 添加版本号、CHANGELOG、Issue 模板和升级/数据备份流程。
-4. 公开版必须无账号即可完成本地捕获→整理→导出；付费服务不应成为本地基础功能依赖。
-5. 排查所有 Git 历史中的密钥、用户数据、私有模块，再执行公开发布。
-6. 设置 Apple Developer 证书、notarization 凭据与 Windows 代码签名证书后，再发布正式可下载安装包。
+The workflow is manual by design. Creating a `v*` tag alone does not publish an installer or GitHub Release.
 
-## Build artifacts
+## Release checklist
 
-`.github/workflows/release.yml` 生成三个独立产物：Chromium 扩展 ZIP、macOS arm64 DMG 和 Windows x64 安装程序。正式发布使用 GitHub Actions 的手动运行入口，先启用签名与公证，再选择创建 private GitHub Release。签名所需机密不存放在仓库内。
+1. Confirm `main` is green in CI.
+2. Test the extension and Desktop on clean macOS and Windows machines.
+3. Update `CHANGELOG.md` with user-visible changes and known limitations.
+4. Choose a version tag such as `v0.1.0-alpha.1`.
+5. Run **Build release artifacts** from GitHub Actions, with signing disabled only for internal testing.
+6. For externally distributed installers, configure Apple notarization and Windows code-signing secrets, then run again with signing enabled.
+7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before publishing a GitHub Release.
 
-## 服务器部署顺序
+## Before a public Chrome Web Store submission
 
-当前业务闭环没有必须上云的服务。建议先部署官网/下载页；等云功能明确后新增独立 API，使用 PostgreSQL 存用户与权益，S3 兼容对象存储放云素材，后台 worker 处理耗时任务。
+- Publish the privacy policy at a stable public URL.
+- Complete Chrome Web Store data-use disclosures and permission explanations.
+- Ship and test the final extension-to-Desktop pairing flow.
+- Confirm that only the minimum required extension permissions are requested.
 
-不要将当前 `4177` 本地 API 绑定 `0.0.0.0` 或反向代理到公网：它没有租户隔离和正式认证，并且依赖本机文件、剪贴板。复制剪贴板的能力必须留在本机。
+## Do not do this
 
-上线前需要确定：云服务第一项功能、云厂商/服务器系统、域名、部署访问方式、区域、预算。部署文件应按最终服务生成；现在没有虚构一个空服务来冒充可部署产品。
-
-上线验收：HTTPS、鉴权与租户隔离、服务端权益、限流、备份恢复、日志脱敏、健康检查、迁移/回滚，以及桌面端离线降级。
+Do not expose the loopback API through a reverse proxy, public tunnel, or LAN binding. It is a single-user local service, not a hosted multi-tenant API.
