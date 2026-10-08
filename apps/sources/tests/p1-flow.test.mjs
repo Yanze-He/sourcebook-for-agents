@@ -86,6 +86,29 @@ test("Picker writes require an explicit existing Book", async () => {
   assert.equal((await removedBook.json()).code, "BOOK_NOT_FOUND");
 });
 
+test("Manual text sources support optional titles", async () => {
+  const untitled = await post("/api/sources", {
+    bookId: "sourcebook",
+    modality: "text",
+    pickType: "manual_text",
+    sourceLabel: "Manual text",
+    sourceTitle: "Manual text",
+    contentText: "Remember to confirm the final materials with production.",
+  });
+  const titled = await post("/api/sources", {
+    bookId: "sourcebook",
+    modality: "text",
+    pickType: "manual_text",
+    title: "Production checklist",
+    sourceLabel: "Manual text",
+    sourceTitle: "Manual text",
+    contentText: "Confirm sample delivery and color approval.",
+  });
+  const sources = await get("/api/sources?bookId=sourcebook");
+  assert.equal(sources.items.find((item) => item.id === untitled.sourceItemId)?.itemTitle, "Remember to confirm the final materials with production.");
+  assert.equal(sources.items.find((item) => item.id === titled.sourceItemId)?.itemTitle, "Production checklist");
+});
+
 test("Conversation Picks deduplicate only matching content from the same source", async () => {
   const payload = {
     bookId: "sourcebook",

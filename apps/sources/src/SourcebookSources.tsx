@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Square, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
+import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Square, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import TurndownService from "turndown";
 
@@ -24,11 +24,11 @@ type Book = { id: string; name: string; createdAt?: string };
 
 const interfaceCopy = {
   en: {
-    showing: "Showing", search: "Search sources", filter: "Filter", favorites: "Favorites only", masonry: "Masonry view", list: "List view", refresh: "Refresh sources", noSources: "No sources yet", noMatches: "No matching sources", emptyGuide: "Use the Picker extension to collect web content or import local files.", tryAnother: "Try another search or filter.", settings: "Settings", setting: "Setting", help: "Help", feedback: "Feedback", installPicker: "Install Picker", switchLanguage: "中文", switchBook: "Switch Sourcebook", importLocalFiles: "Import local files", clearSearch: "Clear search",
+    showing: "Showing", search: "Search sources", filter: "Filter", favorites: "Favorites only", masonry: "Masonry view", list: "List view", refresh: "Refresh sources", noSources: "No sources yet", noMatches: "No matching sources", emptyGuide: "Use the Picker extension to collect web content or import local files.", tryAnother: "Try another search or filter.", settings: "Settings", setting: "Setting", help: "Help", feedback: "Feedback", installPicker: "Install Picker", switchLanguage: "中文", switchBook: "Switch Sourcebook", importLocalFiles: "Import local files", addText: "Record", textTitle: "Title (optional)", textContent: "Text", createText: "Create record", clearSearch: "Clear search",
     close: "Close", cancel: "Cancel", save: "Save", delete: "Delete", copy: "Copy", copyFiles: "Copy files", copyLink: "Copy link", select: "Select", selected: "Selected", unselect: "Unselect", edit: "Edit", loading: "Loading…", loadMore: "Load more", loadingSources: "Loading sources", readingSources: "Reading from your local Sourcebook.", selectAll: "Select all", clear: "Cancel", addNote: "Add note", packForAgent: "Pack for agent", sourcesSelected: "sources selected", sourceSelected: "source selected", note: "Note", info: "Info", source: "Source", picked: "Picked", format: "Format", size: "Size", localLink: "Local link", webLink: "Web link", localFile: "Local file", link: "Link", image: "Image", video: "Video", audio: "Audio", text: "Text", chat: "Chat", file: "File", open: "Open", visit: "Visit", view: "View", play: "Play", download: "Download", downloading: "Downloading", missing: "Missing", fileMissing: "File missing", downloadFailed: "Download failed", retry: "Retry", invalid: "Invalid", invalidLink: "Invalid link", copyForAgent: "Copy for agent", openDetail: "Open source detail", closeDetail: "Close detail", addFavorite: "Add to favorites", removeFavorite: "Remove from favorites", editTitle: "Edit title", saveTitle: "Save title", cancelTitleEdit: "Cancel title edit", sourceTitle: "Source title", showInFolder: "Show in folder", viewLocalFile: "View local file", downloadAgain: "Download this file again", retryDownload: "Retry download", downloadLocalFile: "Download local file", moveTo: "Move to…", confirmDelete: "Confirm delete", deleteSources: "Delete sources", deleteBook: "Delete Book", bookSetting: "Book Setting", newBook: "New Book", bookName: "Book name", createBook: "Create Book", targetBook: "Target Book", copyHere: "Copy here", moveHere: "Move here", exportBackup: "Export backup", importBackup: "Import backup", markdownContent: "Markdown content", mediaPreview: "Media preview", closePreview: "Close preview", downloadImage: "Download image", downloadMissingFile: "Download missing file?", imageDownloadMessage: "Sourcebook will save a local copy of this image in the current Book.", missingDownloadMessage: "A local copy is missing. Sourcebook will download it again into this Book.", addContext: "Add context for the agent…", noteHelp: "This note is added to the Pack prompt so the agent can understand your intent.", notSavedLocally: "Not saved locally",
   },
   zh: {
-    showing: "显示", search: "搜索素材", filter: "筛选", favorites: "仅看收藏", masonry: "瀑布流视图", list: "列表视图", refresh: "刷新素材", noSources: "还没有素材", noMatches: "没有匹配的素材", emptyGuide: "使用 Picker插件获取网页内容 或 导入本地文件", tryAnother: "请尝试其他搜索词或筛选条件。", settings: "设置", setting: "设置", help: "帮助", feedback: "反馈", installPicker: "安装Picker", switchLanguage: "English", switchBook: "切换 Sourcebook", importLocalFiles: "导入本地文件", clearSearch: "清空搜索",
+    showing: "显示", search: "搜索素材", filter: "筛选", favorites: "仅看收藏", masonry: "瀑布流视图", list: "列表视图", refresh: "刷新素材", noSources: "还没有素材", noMatches: "没有匹配的素材", emptyGuide: "使用 Picker插件获取网页内容 或 导入本地文件", tryAnother: "请尝试其他搜索词或筛选条件。", settings: "设置", setting: "设置", help: "帮助", feedback: "反馈", installPicker: "安装Picker", switchLanguage: "English", switchBook: "切换 Sourcebook", importLocalFiles: "导入本地文件", addText: "记录", textTitle: "标题（选填）", textContent: "文本内容", createText: "创建记录", clearSearch: "清空搜索",
     close: "关闭", cancel: "取消", save: "保存", delete: "删除", copy: "复制", copyFiles: "复制文件", copyLink: "复制链接", select: "选择", selected: "已选择", unselect: "取消选择", edit: "编辑", loading: "加载中…", loadMore: "加载更多", loadingSources: "正在加载素材", readingSources: "正在读取本地 Sourcebook。", selectAll: "全选", clear: "取消选择", addNote: "添加备注", packForAgent: "发送给 Agent", sourcesSelected: "个素材已选择", sourceSelected: "个素材已选择", note: "备注", info: "信息", source: "来源", picked: "Pick时间", format: "格式", size: "大小", localLink: "本地链接", webLink: "网页链接", localFile: "本地文件", link: "链接", image: "图片", video: "视频", audio: "音频", text: "文本", chat: "对话", file: "文件", open: "打开", visit: "跳转", view: "查看", play: "播放", download: "下载", downloading: "下载中", missing: "文件丢失", fileMissing: "文件丢失", downloadFailed: "下载失败", retry: "重试", invalid: "无效", invalidLink: "链接无效", copyForAgent: "复制给 Agent", openDetail: "打开素材详情", closeDetail: "关闭详情", addFavorite: "收藏", removeFavorite: "取消收藏", editTitle: "编辑标题", saveTitle: "保存标题", cancelTitleEdit: "取消编辑标题", sourceTitle: "素材标题", showInFolder: "在文件夹中显示", viewLocalFile: "查看本地文件", downloadAgain: "重新下载此文件", retryDownload: "重试下载", downloadLocalFile: "下载本地文件", moveTo: "移动到…", confirmDelete: "确认删除", deleteSources: "删除素材", deleteBook: "删除 Book", bookSetting: "Book 设置", newBook: "新建 Book", bookName: "Book 名称", createBook: "创建 Book", targetBook: "目标 Book", copyHere: "复制到这里", moveHere: "移动到这里", exportBackup: "导出备份", importBackup: "导入备份", markdownContent: "Markdown 内容", mediaPreview: "媒体预览", closePreview: "关闭预览", downloadImage: "下载图片", downloadMissingFile: "下载丢失文件？", imageDownloadMessage: "Sourcebook 会将此图片的本地副本保存到当前 Book。", missingDownloadMessage: "本地副本已丢失，Sourcebook 将重新下载到当前 Book。", addContext: "补充给 Agent 的上下文…", noteHelp: "此备注会加入 Pack 提示词，帮助 Agent 更好理解你的意图。", notSavedLocally: "尚未保存到本地",
   },
 } as const;
@@ -139,6 +139,7 @@ export default function SourcebookSources() {
   const [activeBookId, setActiveBookId] = useState("");
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [isCreateBookOpen, setIsCreateBookOpen] = useState(false);
+  const [isCreateTextOpen, setIsCreateTextOpen] = useState(false);
   const [renameBookTarget, setRenameBookTarget] = useState<Book | null>(null);
   const [deleteBookTarget, setDeleteBookTarget] = useState<Book | null>(null);
   const [transferItem, setTransferItem] = useState<SourceItem | null>(null);
@@ -365,6 +366,26 @@ export default function SourcebookSources() {
       await loadBooks(); await selectBook(response.book.id); setIsCreateBookOpen(false);
     } catch (error) { setMessage(errorMessage(error)); }
   }
+  async function createTextSource(title: string, contentText: string) {
+    const content = contentText.trim();
+    if (!content) return;
+    try {
+      await request(bookPath("/api/sources", activeBookId), {
+        method: "POST",
+        body: JSON.stringify({
+          modality: "text",
+          pickType: "manual_text",
+          title: title.trim() || "记录",
+          contentText: content,
+          sourceLabel: language === "zh" ? "手动文本" : "Manual text",
+          sourceTitle: language === "zh" ? "手动文本" : "Manual text",
+        }),
+      });
+      setIsCreateTextOpen(false);
+      await loadItems({ background: true });
+      showSourcesMessage(language === "zh" ? "文本已创建。" : "Text created.", 3600, "success");
+    } catch (error) { setMessage(errorMessage(error)); }
+  }
   async function renameBook(bookId: string, name: string) {
     try {
       const response = await request<{ book: Book }>(`/api/books/${encodeURIComponent(bookId)}`, { method: "PATCH", body: JSON.stringify({ name }) });
@@ -446,7 +467,8 @@ export default function SourcebookSources() {
               </div> : null}
             </div>
             <div className="book-actions">
-              <button aria-label={copy.importLocalFiles} className="secondary-button local-import-button" data-tooltip={copy.importLocalFiles} onClick={() => localImportInputRef.current?.click()} title={copy.importLocalFiles} type="button"><FileUp size={16} /><span>{copy.importLocalFiles}</span></button>
+              <button aria-label={copy.addText} className="secondary-button header-action-button local-import-button" data-tooltip={copy.addText} onClick={() => setIsCreateTextOpen(true)} title={copy.addText} type="button"><FilePlus2 size={16} /><span className="header-action-label">{copy.addText}</span></button>
+              <button aria-label={copy.importLocalFiles} className="secondary-button header-action-button local-import-button" data-tooltip={copy.importLocalFiles} onClick={() => localImportInputRef.current?.click()} title={copy.importLocalFiles} type="button"><FileUp size={16} /><span className="header-action-label">{copy.importLocalFiles}</span></button>
               <div className="settings-menu" ref={settingsRef}>
                 <button aria-label={copy.settings} aria-expanded={isSettingsOpen} className="icon-button" data-tooltip={copy.settings} onClick={() => setIsSettingsOpen((open) => !open)} title={copy.settings} type="button"><Settings size={16} /></button>
                 {isSettingsOpen ? <div className="settings-popover" role="menu">
@@ -481,6 +503,7 @@ export default function SourcebookSources() {
     <SourceDetailModal focusNote={focusDetailNote} item={detailItem} isSelected={Boolean(detailItem && selectedIds.includes(detailItem.id))} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onSelect={selectFromDetail} onTitleSave={saveTitle} />
     <DeleteModal count={selectedIds.length} isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={() => void removeSelected()} />
     <CreateBookModal isOpen={isCreateBookOpen} onClose={() => setIsCreateBookOpen(false)} onCreate={createBook} />
+    <CreateTextModal isOpen={isCreateTextOpen} onClose={() => setIsCreateTextOpen(false)} onCreate={createTextSource} />
     <RenameBookModal book={renameBookTarget} canDelete={books.length > 1} onClose={() => setRenameBookTarget(null)} onDelete={() => { if (renameBookTarget) { setDeleteBookTarget(renameBookTarget); setRenameBookTarget(null); } }} onRename={renameBook} />
     <DeleteBookModal book={deleteBookTarget} onClose={() => setDeleteBookTarget(null)} onConfirm={removeBook} />
     <TransferModal books={books.filter((book) => book.id !== activeBookId)} item={transferItem} onClose={() => setTransferItem(null)} onTransfer={transferSource} />
@@ -726,6 +749,13 @@ function CreateBookModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   useEffect(() => { if (isOpen) setName(""); }, [isOpen]);
   if (!isOpen) return null;
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal compact-book-modal" role="dialog" aria-modal="true" aria-label={copy.newBook}><header className="modal-head"><h2>{copy.newBook}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="book-modal-body"><label>{copy.bookName}<input autoFocus onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && name.trim()) onCreate(name); }} placeholder={useLanguage() === "en" ? "For example, Brand references" : "例如：品牌参考"} value={name} /></label><p>{useLanguage() === "en" ? "Sources and local files stay separate from your other Books." : "素材和本地文件将与其他 Book 保持独立。"}</p></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!name.trim()} onClick={() => onCreate(name)} type="button"><Plus size={15} />{copy.createBook}</button></footer></section></div>;
+}
+
+function CreateTextModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (title: string, content: string) => void }) {
+  const language = useLanguage(); const copy = interfaceCopy[language]; const [title, setTitle] = useState(""); const [content, setContent] = useState("");
+  useEffect(() => { if (isOpen) { setTitle(""); setContent(""); } }, [isOpen]);
+  if (!isOpen) return null;
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal add-text-modal" role="dialog" aria-modal="true" aria-label={copy.addText}><header className="modal-head"><h2>{copy.addText}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="add-text-body"><label>{copy.textTitle}<input onChange={(event) => setTitle(event.target.value)} placeholder={language === "zh" ? "例如：下一步要确认的事项" : "For example, Next items to confirm"} value={title} /></label><label>{copy.textContent}<textarea autoFocus onChange={(event) => setContent(event.target.value)} placeholder={language === "zh" ? "写下你的便签…" : "Write your note…"} value={content} /></label></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!content.trim()} onClick={() => onCreate(title, content)} type="button"><FileText size={15} />{copy.createText}</button></footer></section></div>;
 }
 
 function RenameBookModal({ book, canDelete, onClose, onDelete, onRename }: { book: Book | null; canDelete: boolean; onClose: () => void; onDelete: () => void; onRename: (bookId: string, name: string) => void }) {

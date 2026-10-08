@@ -1494,11 +1494,70 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   margin-left: auto;
 }
 
+.add-text-modal {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.add-text-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.add-text-body label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.add-text-body input,
+.add-text-body textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.add-text-body input {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.add-text-body textarea {
+  min-height: 210px;
+  padding: 10px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.add-text-body input:focus,
+.add-text-body textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, .12);
+}
+
 .local-import-button {
   width: auto;
   min-width: 0;
   padding: 0 11px;
   white-space: nowrap;
+}
+
+@media (max-width: 1120px) {
+  .book-actions .header-action-button {
+    width: 36px;
+    padding: 0;
+  }
+
+  .book-actions .header-action-label {
+    display: none;
+  }
 }
 
 /* Preserve tooltip overflow on the card while keeping content inside its rounded frame. */
