@@ -280,12 +280,12 @@ class WebPicker {
       if (message.type === "PICK_VISIBLE_CHAT") return this.pickVisibleChat();
       if (message.type === "START_PICK_MODE") return Promise.resolve(this.startPickMode());
       if (message.type === "STOP_PICK_MODE") return Promise.resolve(this.stopPickMode());
-      if (message.type === "CONFIRM_PICK_MODE") return this.confirmStagedPick(false);
+      if (message.type === "CONFIRM_PICK_MODE") return this.confirmStagedPick();
       if (message.type === "GET_PICKER_STATUS") return Promise.resolve(this.getPickerStatus());
       if (message.type === "SET_PICKER_ENABLED") return Promise.resolve(this.setPickerEnabled(message.enabled));
       if (message.type === "START_CHAT_MULTI_PICK") return Promise.resolve(this.startChatMultiPick());
       if (message.type === "CANCEL_CHAT_MULTI_PICK") return Promise.resolve(this.cancelChatMultiPick());
-      if (message.type === "CONFIRM_CHAT_MULTI_PICK") return this.pickSelectedChatMessages(false);
+      if (message.type === "CONFIRM_CHAT_MULTI_PICK") return this.pickSelectedChatMessages();
       return undefined;
     });
   }
@@ -907,18 +907,19 @@ class WebPicker {
     const stagedCount = this.stagedPicks.length;
     const title = document.createElement("span");
     title.className = "mode-title";
-    title.textContent = text.pickMediaMode;
+    title.dataset.role = "selection-count";
+    title.textContent = text.selectedCount(stagedCount);
 
     const hint = document.createElement("span");
     hint.className = "mode-detail";
-    hint.textContent = stagedCount ? text.selectedCount(stagedCount) : text.pickModeTitle;
+    hint.textContent = text.pickMediaMode;
 
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.dataset.variant = "primary";
     confirm.disabled = stagedCount === 0;
     confirm.textContent = stagedCount === 1 ? text.confirmPick : text.confirmCount(stagedCount);
-    confirm.addEventListener("click", () => void this.confirmStagedPick(true));
+    confirm.addEventListener("click", () => void this.confirmStagedPick());
 
     const cancel = document.createElement("button");
     cancel.type = "button";
@@ -926,7 +927,11 @@ class WebPicker {
     cancel.textContent = text.cancel;
     cancel.addEventListener("click", () => this.cancelPickMode());
 
-    this.multiPickBar.append(title, hint, confirm, cancel);
+    const actions = document.createElement("div");
+    actions.className = "bottom-bar-actions";
+    actions.append(cancel, confirm);
+
+    this.multiPickBar.append(title, hint, actions);
     this.multiPickBar.hidden = false;
   }
 
@@ -935,10 +940,9 @@ class WebPicker {
     this.openPickerPopup();
   }
 
-  private async confirmStagedPick(reopenPopup: boolean): Promise<PickerMessageResponse> {
+  private async confirmStagedPick(): Promise<PickerMessageResponse> {
     if (!this.stagedPicks.length) {
       this.stopPickMode();
-      if (reopenPopup) this.openPickerPopup();
       return { status: "ok" };
     }
 
@@ -951,7 +955,6 @@ class WebPicker {
     this.flashRects(stagedItems.flatMap((staged) => staged.rects));
     this.clearStagedPick();
     this.stopPickMode();
-    if (reopenPopup) this.openPickerPopup();
     return response;
   }
 
@@ -1057,6 +1060,7 @@ class WebPicker {
 
     const title = document.createElement("span");
     title.className = "mode-title";
+    title.dataset.role = "selection-count";
     title.textContent = text.pickChatMode;
 
     const context = document.createElement("span");
@@ -1070,11 +1074,12 @@ class WebPicker {
     pickSelected.dataset.role = "confirm";
     pickSelected.disabled = true;
     pickSelected.textContent = text.pickSelected;
-    pickSelected.addEventListener("click", () => void this.pickSelectedChatMessages(true));
+    pickSelected.addEventListener("click", () => void this.pickSelectedChatMessages());
 
     const pickVisible = document.createElement("button");
     pickVisible.type = "button";
     pickVisible.dataset.variant = "cancel";
+    pickVisible.dataset.role = "select-all";
     pickVisible.textContent = text.pickVisible;
     pickVisible.addEventListener("click", () => this.selectAllLoadedChatMessages());
 
@@ -1086,7 +1091,11 @@ class WebPicker {
 
     this.multiPickBar.innerHTML = "";
     this.multiPickBar.dataset.mode = "chat";
-    this.multiPickBar.append(title, context, pickSelected, pickVisible, cancel);
+    const actions = document.createElement("div");
+    actions.className = "bottom-bar-actions";
+    actions.append(pickVisible, cancel, pickSelected);
+
+    this.multiPickBar.append(title, context, actions);
     this.multiPickBar.hidden = false;
     this.renderSelectedChatFrames();
   }
@@ -1134,22 +1143,23 @@ class WebPicker {
     if (!context) return;
 
     const selectedCount = this.selectedChatMessages.size;
+    const count = this.multiPickBar.querySelector<HTMLElement>('[data-role="selection-count"]');
+    if (count) count.textContent = selectedCount ? text.selectedMessagesCount(selectedCount) : text.pickChatMode;
     context.textContent = selectedCount
-      ? text.selectedMessagesCount(selectedCount)
+      ? text.pickChatMode
       : text.selectMessagesTitle(providerLabel(this.chatMessageCache[0]?.provider || "chatgpt"));
 
     const confirm = this.multiPickBar.querySelector<HTMLButtonElement>('[data-role="confirm"]');
     if (confirm) confirm.disabled = selectedCount === 0;
   }
 
-  private async pickSelectedChatMessages(reopenPopup: boolean): Promise<PickerMessageResponse> {
+  private async pickSelectedChatMessages(): Promise<PickerMessageResponse> {
     const selected = Array.from(this.selectedChatMessages.values()).sort((a, b) => a.order - b.order);
     if (!selected.length) return { status: "ok" };
 
     const response = await this.saveChatMessages(selected, "selected_messages");
     this.flashChatMessages(selected);
     this.cancelChatMultiPick();
-    if (reopenPopup) this.openPickerPopup();
     return response;
   }
 
@@ -1871,20 +1881,20 @@ class WebPicker {
 
       .bottom-bar {
         align-items: center;
-        background: #101820;
-        border: 1px solid rgba(248, 250, 252, 0.3);
-        border-radius: 8px;
+        background: #1c1c1b;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
         bottom: 18px;
-        box-shadow: 0 18px 46px rgba(16, 24, 32, 0.26);
-        color: #f8fafc;
+        box-shadow: 0 18px 46px rgba(17, 17, 15, 0.26);
+        color: #f7f7f4;
         display: flex;
-        flex-wrap: wrap;
-        font: 500 13px/1.25 ui-sans-serif, system-ui, sans-serif;
-        gap: 8px;
-        justify-content: center;
+        font: 500 13px/1 ui-sans-serif, system-ui, sans-serif;
+        gap: 10px;
+        justify-content: flex-start;
         left: 50%;
-        max-width: min(760px, calc(100vw - 32px));
-        padding: 10px;
+        max-width: min(860px, calc(100vw - 32px));
+        min-height: 48px;
+        padding: 8px;
         pointer-events: auto;
         position: fixed;
         transform: translateX(-50%);
@@ -1895,46 +1905,59 @@ class WebPicker {
         color: #ffffff;
         flex: 0 0 auto;
         font-size: 13px;
-        font-weight: 780;
+        font-weight: 720;
       }
 
       .bottom-bar .mode-detail {
-        color: #b9c7dc;
-        max-width: min(260px, calc(100vw - 64px));
+        color: #989894;
+        flex: 1 1 120px;
+        font-size: 12px;
+        max-width: min(280px, calc(100vw - 220px));
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
+      .bottom-bar-actions {
+        align-items: center;
+        display: flex;
+        flex: 0 0 auto;
+        gap: 6px;
+        margin-left: auto;
+      }
+
       .bottom-bar button {
-        background: transparent;
-        border: 1px solid rgba(248, 250, 252, 0.36);
+        align-items: center;
+        background: #2b2b2a;
+        border: 1px solid #3c3c39;
         border-radius: 7px;
-        color: #101820;
+        color: #f7f7f4;
         cursor: pointer;
+        display: inline-flex;
         font: 700 12px/1 ui-sans-serif, system-ui, sans-serif;
-        height: 28px;
-        padding: 0 9px;
+        height: 32px;
+        justify-content: center;
+        padding: 0 13px;
         white-space: nowrap;
       }
 
       .bottom-bar button[data-variant="primary"] {
-        background: #f8fafc;
-        border-color: #f8fafc;
-        color: #101820;
+        background: #ffffff;
+        border-color: #ffffff;
+        color: #171716;
       }
 
       .bottom-bar button[data-variant="cancel"] {
-        background: transparent;
-        border: 1px solid rgba(248, 250, 252, 0.36);
-        color: #f8fafc;
+        background: #2b2b2a;
+        border-color: #3c3c39;
+        color: #f7f7f4;
       }
 
       .bottom-bar button:disabled,
       .bottom-bar button[data-variant="primary"]:disabled {
-        background: rgba(248, 250, 252, 0.16);
-        border-color: rgba(248, 250, 252, 0.16);
-        color: rgba(248, 250, 252, 0.46);
+        background: #343432;
+        border-color: #343432;
+        color: #777773;
         cursor: not-allowed;
       }
 
@@ -1974,6 +1997,11 @@ class WebPicker {
         justify-content: center;
         height: 68px;
         min-height: 68px;
+      }
+
+      .pick-task.is-loading > strong {
+        color: #ffffff;
+        font: 700 16px/1.2 ui-sans-serif, system-ui, sans-serif;
       }
 
       .pick-task-spinner {
@@ -2132,12 +2160,33 @@ class WebPicker {
       }
 
       .toast button:hover,
-      .toast button:focus-visible,
-      .bottom-bar button:hover,
-      .bottom-bar button:focus-visible {
+      .toast button:focus-visible {
         background: #e8e8e2;
+        border-color: #d0d0c8;
         color: #101820;
         outline: none;
+      }
+
+      .bottom-bar button:hover,
+      .bottom-bar button:focus-visible {
+        background: #41413e;
+        border-color: #555550;
+        color: #ffffff;
+        outline: none;
+      }
+
+      .bottom-bar button[data-variant="primary"]:hover,
+      .bottom-bar button[data-variant="primary"]:focus-visible {
+        background: #e9e9e4;
+        border-color: #e9e9e4;
+        color: #171716;
+      }
+
+      .bottom-bar button:disabled:hover,
+      .bottom-bar button:disabled:focus-visible {
+        background: #343432;
+        border-color: #343432;
+        color: #777773;
       }
 
       .toast button:disabled {
@@ -2148,19 +2197,29 @@ class WebPicker {
 
       @media (max-width: 520px) {
         .bottom-bar {
-          align-items: stretch;
+          align-items: center;
           flex-wrap: wrap;
-          justify-content: center;
+          gap: 8px;
+          justify-content: flex-start;
         }
 
-        .bottom-bar span {
+        .bottom-bar .mode-detail {
+          flex: 1 1 auto;
+          max-width: none;
+        }
+
+        .bottom-bar-actions {
           flex: 1 1 100%;
-          text-align: center;
-          white-space: normal;
+          margin-left: 0;
+          width: 100%;
         }
 
-        .bottom-bar .mode-count {
-          flex: 0 0 auto;
+        .bottom-bar-actions button {
+          flex: 1 1 0;
+        }
+
+        .bottom-bar-actions button[data-role="select-all"] {
+          flex-basis: 100%;
         }
 
       }

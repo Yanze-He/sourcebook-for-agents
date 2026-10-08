@@ -240,8 +240,23 @@ async function sendToActiveTab(message: PickerMessage, successLabel: string) {
 async function setPickerEnabled(enabled: boolean) {
   try {
     await browser.runtime.sendMessage({ type: "SET_PICKER_ENABLED", enabled } satisfies PickerMessage);
+    isEnabled = enabled;
+    if (!enabled) {
+      currentMode = "idle";
+      updatePickerToggle();
+      if (startPicking) {
+        setActionLabel(startPicking, text.startContinuousPick);
+        startPicking.dataset.active = "false";
+      }
+      if (selectChatMessages) {
+        setActionLabel(selectChatMessages, text.selectMessages);
+        selectChatMessages.dataset.active = "false";
+      }
+      setButtonState(startPicking, false, text.enableOverlayReason, text.mediaSupportHelp);
+      setButtonState(selectChatMessages, false, text.enableOverlayReason, text.chatSupportHelp);
+    }
     setStatus(enabled ? text.enabled : text.disabled);
-    void refreshPickerStatus();
+    await refreshPickerStatus();
   } catch {
     setStatus(text.settingFailed);
   }

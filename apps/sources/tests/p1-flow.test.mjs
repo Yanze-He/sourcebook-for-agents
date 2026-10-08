@@ -180,6 +180,12 @@ test("Books isolate picks and transfer keeps the source portable", async () => {
   const backup = Buffer.from(await archive.arrayBuffer()).toString("base64");
   const restored = await post("/api/library/restore", { archive: backup, mode: "append" });
   assert.equal(restored.books.length, 4);
+
+  const replaced = await post("/api/library/restore", { archive: backup, mode: "replace" });
+  assert.equal(replaced.books.length, 2);
+  assert.equal(replaced.activeBookId, "sourcebook");
+  const restoredBrandItems = await get(`/api/sources?bookId=${created.book.id}`);
+  assert.equal(restoredBrandItems.items.some((item) => item.itemTitle === "brief" && item.assetCacheState === "cached"), true);
 });
 
 test("Image links and managed local copies keep independent states", async () => {
