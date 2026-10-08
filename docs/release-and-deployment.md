@@ -29,6 +29,13 @@ Pushing a `v*` tag builds the artifacts and creates a prerelease in this private
 6. For externally distributed installers, configure Apple notarization and Windows code-signing secrets, then run again with signing enabled.
 7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before publishing a GitHub Release.
 
+## Private alpha installation
+
+- The macOS DMG contains a standard **Applications** shortcut. Drag **Sourcebook Desktop** to it before ejecting the disk image.
+- Unsigned macOS alpha builds trigger a Gatekeeper verification warning. This is expected for internal testing; do not ask testers to bypass it unless the asset came from the private Release page and its SHA-256 checksum matches.
+- The warning is removed only by a Developer ID signature and Apple notarization. An ad-hoc signature is not a substitute.
+- The Chromium extension ZIP must be unzipped and loaded through `chrome://extensions` with Developer mode enabled.
+
 ## Before a public Chrome Web Store submission
 
 - Publish the privacy policy at a stable public URL.

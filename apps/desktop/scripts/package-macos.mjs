@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -10,6 +10,7 @@ const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const outputRoot = join(repositoryRoot, "release", "macos");
 const appRoot = join(outputRoot, "Sourcebook Desktop.app");
+const dmgRoot = join(outputRoot, "dmg-root");
 const contents = join(appRoot, "Contents");
 const resources = join(contents, "Resources");
 
@@ -47,5 +48,10 @@ writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8
 </dict></plist>`);
 
 const dmgPath = join(outputRoot, "Sourcebook-Desktop.dmg");
-execFileSync("hdiutil", ["create", "-volname", "Sourcebook Desktop", "-srcfolder", appRoot, "-ov", "-format", "UDZO", dmgPath]);
+mkdirSync(dmgRoot, { recursive: true });
+cpSync(appRoot, join(dmgRoot, "Sourcebook Desktop.app"), { recursive: true });
+symlinkSync("/Applications", join(dmgRoot, "Applications"));
+writeFileSync(join(dmgRoot, "Install Sourcebook Desktop.txt"), `1. Drag “Sourcebook Desktop” onto the “Applications” shortcut.\n2. Eject this disk image.\n3. Open Sourcebook Desktop from Applications.\n`);
+execFileSync("hdiutil", ["create", "-volname", "Sourcebook Desktop", "-srcfolder", dmgRoot, "-ov", "-format", "UDZO", dmgPath]);
+rmSync(dmgRoot, { force: true, recursive: true });
 console.log(`Created ${dmgPath}`);

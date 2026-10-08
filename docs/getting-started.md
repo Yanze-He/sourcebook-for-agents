@@ -6,6 +6,16 @@ This guide takes you through one complete local workflow: start Sourcebook, conn
 
 You need Node.js 22.18+ and npm. Sourcebook currently supports Chrome and other Chromium browsers.
 
+### Private alpha install
+
+For the private alpha, download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image contains a **Sourcebook Desktop** app and an **Applications** shortcut: drag the app onto the shortcut, eject the disk image, then open Sourcebook Desktop from Applications.
+
+The alpha builds are unsigned. macOS may display a verification warning when you open the app for the first time. Do not bypass that warning unless you downloaded the asset from this repository's private Release page and verified its checksum. Signed and notarized builds are required before wider distribution.
+
+To install Picker, unzip `sourcebook-picker-chromium.zip`, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked** and select the extracted extension folder.
+
+### Run from source
+
 ```bash
 git clone https://github.com/Yanze-He/sourcebook-for-agents.git
 cd sourcebook-for-agents
