@@ -81,6 +81,10 @@ The Desktop starts the local Sources app in your default browser. It stores data
 
 Keep the Desktop running while you use Picker. If the extension cannot reach the local application, it shows an explicit reconnect state instead of silently creating a separate cloud or account workflow.
 
+## Release Security
+
+Release automation builds and tests artifacts only. macOS signing and Apple notarization happen on a maintainer-controlled Mac, then the completed DMG and its checksum are uploaded manually to GitHub Releases. The Developer ID private key and notarization credentials never enter this repository or GitHub Actions.
+
 For the first end-to-end session and common checks, see [Getting Started](docs/getting-started.md).
 
 ## Current Scope

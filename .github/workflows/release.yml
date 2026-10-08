@@ -5,24 +5,9 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag, for example v0.1.0
-        required: true
-        type: string
-      sign:
-        description: Sign and notarize platform installers
-        required: true
-        default: false
-        type: boolean
-      publish:
-        description: Create a private GitHub Release
-        required: true
-        default: false
-        type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   extension:
@@ -51,25 +36,6 @@ jobs:
           node-version: "24"
       - run: npm ci && npm ci --prefix apps/picker && npm ci --prefix apps/sources
       - run: npm run build && npm --prefix apps/desktop run package:macos
-      - name: Sign and notarize
-        if: inputs.sign
-        env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-        run: |
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security create-keychain -p "" build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -d user -s build.keychain
-          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "release/macos/Sourcebook Desktop.app"
-          rm "release/macos/Sourcebook-Desktop.dmg"
-          hdiutil create -volname "Sourcebook Desktop" -srcfolder "release/macos/Sourcebook Desktop.app" -ov -format UDZO "release/macos/Sourcebook-Desktop.dmg"
-          xcrun notarytool submit "release/macos/Sourcebook-Desktop.dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple "release/macos/Sourcebook-Desktop.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-desktop-macos-arm64
@@ -92,35 +58,7 @@ jobs:
           $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Desktop"
           $env:SOURCEBOOK_WINDOWS_OUTPUT = "${{ github.workspace }}\release\windows\installer"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\desktop\installer\sourcebook.iss
-      - name: Sign installer
-        if: inputs.sign
-        env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        shell: pwsh
-        run: |
-          [IO.File]::WriteAllBytes("certificate.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-          & signtool sign /fd SHA256 /f certificate.pfx /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "release\windows\installer\Sourcebook-for-Agents-Setup.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-desktop-windows-x64
           path: release/windows/installer/Sourcebook-for-Agents-Setup.exe
-
-  github-release:
-    needs: [extension, macos, windows]
-    if: github.event_name == 'push' || inputs.publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: release
-      - run: node scripts/write-checksums.mjs release
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.ref_name }}
-        run: |
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes --prerelease
-          fi
-          find release -type f -print0 | xargs -0 gh release upload "$TAG" --clobber

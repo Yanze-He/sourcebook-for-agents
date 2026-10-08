@@ -1,8 +1,12 @@
 # The repository owner reviews changes that cross a product boundary.
 * @Yanze-He
 
+/.github/ @Yanze-He
+/.github/workflows/ @Yanze-He
+
 /apps/capture/ @Yanze-He
 /apps/workspace/ @Yanze-He
 /apps/companion/ @Yanze-He
 /docs/contribution/ @Yanze-He
+/docs/release-and-deployment.md @Yanze-He
 /scripts/ @Yanze-He

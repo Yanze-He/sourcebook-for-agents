@@ -13,6 +13,7 @@ const appRoot = join(outputRoot, "Sourcebook Desktop.app");
 const dmgRoot = join(outputRoot, "dmg-root");
 const contents = join(appRoot, "Contents");
 const resources = join(contents, "Resources");
+const signingIdentity = process.env.MACOS_SIGNING_IDENTITY?.trim();
 
 for (const path of [join(sourcesRoot, "dist", "index.html"), join(sourcesRoot, "server", "local-api.mjs")]) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
@@ -46,6 +47,11 @@ writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>LSBackgroundOnly</key><true/>
 </dict></plist>`);
+
+if (signingIdentity) {
+  execFileSync("codesign", ["--force", "--deep", "--options", "runtime", "--timestamp", "--sign", signingIdentity, appRoot], { stdio: "inherit" });
+  execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appRoot], { stdio: "inherit" });
+}
 
 const dmgPath = join(outputRoot, "Sourcebook-Desktop.dmg");
 mkdirSync(dmgRoot, { recursive: true });

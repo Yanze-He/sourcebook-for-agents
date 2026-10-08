@@ -6,11 +6,11 @@ This guide takes you through one complete local workflow: start Sourcebook, conn
 
 You need Node.js 22.18+ and npm. Sourcebook currently supports Chrome and other Chromium browsers.
 
-### Private alpha install
+### Release install
 
-For the private alpha, download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image contains a **Sourcebook Desktop** app and an **Applications** shortcut: drag the app onto the shortcut, eject the disk image, then open Sourcebook Desktop from Applications.
+Download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image contains a **Sourcebook Desktop** app and an **Applications** shortcut: drag the app onto the shortcut, eject the disk image, then open Sourcebook Desktop from Applications.
 
-The alpha builds are unsigned. macOS may display a verification warning when you open the app for the first time. Do not bypass that warning unless you downloaded the asset from this repository's private Release page and verified its checksum. Signed and notarized builds are required before wider distribution.
+Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 
 To install Picker, unzip `sourcebook-picker-chromium.zip`, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked** and select the extracted extension folder.
 

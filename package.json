@@ -9,6 +9,7 @@
     "test": "npm --prefix apps/picker test && npm --prefix apps/sources test && npm --prefix apps/desktop test",
     "build": "npm --prefix apps/picker run build && npm --prefix apps/sources run build && npm --prefix apps/desktop run build",
     "package:macos": "npm run build && npm --prefix apps/desktop run package:macos",
+    "release:macos:local": "node scripts/release-macos-local.mjs",
     "package:windows": "npm run build && npm --prefix apps/desktop run package:windows"
   },
   "devDependencies": {}
