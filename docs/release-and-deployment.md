@@ -10,14 +10,14 @@ Cloud sync, accounts, billing, teams, and any future canvas product are separate
 
 ## What a release produces
 
-The manual GitHub Actions release workflow can build:
+The release workflow can build:
 
 - A Chromium extension ZIP.
 - A macOS Desktop DMG.
 - A Windows Desktop installer.
 - SHA-256 checksums and generated release notes.
 
-The workflow is manual by design. Creating a `v*` tag alone does not publish an installer or GitHub Release.
+Pushing a `v*` tag builds the artifacts and creates a prerelease in this private repository. The workflow can also be run manually for an internal build; set **Publish** to create or refresh its private GitHub Release.
 
 ## Release checklist
 
@@ -25,7 +25,7 @@ The workflow is manual by design. Creating a `v*` tag alone does not publish an 
 2. Test the extension and Desktop on clean macOS and Windows machines.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
 4. Choose a version tag such as `v0.1.0-alpha.1`.
-5. Run **Build release artifacts** from GitHub Actions, with signing disabled only for internal testing.
+5. Create and push a version tag such as `v0.1.0-alpha.1`, or run **Build release artifacts** manually. Keep signing disabled only for internal testing.
 6. For externally distributed installers, configure Apple notarization and Windows code-signing secrets, then run again with signing enabled.
 7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before publishing a GitHub Release.
 

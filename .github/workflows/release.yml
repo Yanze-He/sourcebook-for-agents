@@ -1,6 +1,9 @@
 name: Build release artifacts
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -105,7 +108,7 @@ jobs:
 
   github-release:
     needs: [extension, macos, windows]
-    if: inputs.publish
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,7 +118,7 @@ jobs:
       - run: node scripts/write-checksums.mjs release
       - env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes --prerelease
