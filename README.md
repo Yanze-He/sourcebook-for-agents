@@ -3,7 +3,7 @@
 > A local-first context library for the work you want to carry from the web into your next agent task.
 
 <p align="center">
-  <img src="docs/images/product-loop.svg" alt="Pick web material, review it in Sources, and prepare a context pack" width="100%" />
+  <img src="docs/images/sourcebook-product-mockup.png" alt="Sourcebook product mockup showing browser Pick, Sources, and a context pack" width="100%" />
 </p>
 
 Sourcebook for Agents keeps useful web context together without turning it into another chat product. Pick the references that matter while you browse, review them in a local library, and prepare a deliberate context pack for the next agent.
@@ -11,6 +11,10 @@ Sourcebook for Agents keeps useful web context together without turning it into 
 There are no accounts, cloud sync, or hidden uploads in the core product. Your library lives on your computer, and you decide what leaves it.
 
 ## The Product Loop
+
+<p align="center">
+  <img src="docs/images/product-loop.svg" alt="Pick web material, review it in Sources, and prepare a context pack" width="100%" />
+</p>
 
 | Step | What happens | Why it matters |
 | --- | --- | --- |
