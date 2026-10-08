@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+  <title id="title">Sourcebook local-first data flow</title>
+  <desc id="desc">A diagram showing web picks moving to a local Sourcebook library and a user-created context pack, without a cloud service.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="15" stdDeviation="19" flood-color="#151515" flood-opacity=".12"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="760" fill="#f7f6f1"/>
+  <text x="90" y="110" fill="#171717" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700">Your context stays in your workflow.</text>
+  <text x="90" y="155" fill="#6d6c67" font-family="Arial, Helvetica, sans-serif" font-size="24">The desktop service runs only on your computer. You decide when a context pack leaves it.</text>
+  <g filter="url(#shadow)">
+    <rect x="110" y="250" width="350" height="330" rx="28" fill="#fff" stroke="#dfddd5" stroke-width="3"/>
+    <rect x="146" y="288" width="66" height="66" rx="18" fill="#eceae4"/>
+    <path d="M165 307h28v11h-28zm0 18h28v11h-28z" fill="#171717"/>
+    <text x="236" y="320" fill="#171717" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">Browser</text>
+    <text x="146" y="406" fill="#171717" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">You choose what to pick</text>
+    <text x="146" y="440" fill="#74726b" font-family="Arial, Helvetica, sans-serif" font-size="18">Text, links, media, and</text>
+    <text x="146" y="468" fill="#74726b" font-family="Arial, Helvetica, sans-serif" font-size="18">supported chat messages.</text>
+    <rect x="146" y="505" width="154" height="38" rx="19" fill="#ecf3ff"/>
+    <text x="223" y="530" fill="#236af5" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" text-anchor="middle">Picker extension</text>
+  </g>
+  <path d="M485 416h120" stroke="#236af5" stroke-width="6" stroke-linecap="round"/>
+  <path d="M592 396l28 20-28 20" fill="none" stroke="#236af5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g filter="url(#shadow)">
+    <rect x="630" y="220" width="420" height="390" rx="32" fill="#171717"/>
+    <rect x="666" y="260" width="70" height="70" rx="18" fill="#fff"/>
+    <path d="M684 279h17v10h10v12h-10v10h-17v-10h-10v-12h10z" fill="#171717"/>
+    <text x="762" y="300" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="700">Local Sourcebook library</text>
+    <rect x="666" y="370" width="348" height="2" fill="#484848"/>
+    <text x="666" y="420" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700">SQLite database</text>
+    <text x="666" y="454" fill="#afafaa" font-family="Arial, Helvetica, sans-serif" font-size="18">Sources, notes, picks, and provenance</text>
+    <text x="666" y="506" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700">Local asset folder</text>
+    <text x="666" y="540" fill="#afafaa" font-family="Arial, Helvetica, sans-serif" font-size="18">Downloaded images when the source allows it</text>
+    <text x="666" y="574" fill="#73a8ff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">127.0.0.1 only · no Sourcebook cloud</text>
+  </g>
+  <path d="M1078 416h120" stroke="#236af5" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1185 396l28 20-28 20" fill="none" stroke="#236af5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g filter="url(#shadow)">
+    <rect x="1238" y="250" width="250" height="330" rx="28" fill="#fff" stroke="#dfddd5" stroke-width="3"/>
+    <rect x="1274" y="288" width="66" height="66" rx="18" fill="#236af5"/>
+    <path d="M1292 306h30v8h-30zm0 14h30v8h-30zm0 14h20v8h-20z" fill="#fff"/>
+    <text x="1274" y="406" fill="#171717" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Context pack</text>
+    <text x="1274" y="440" fill="#74726b" font-family="Arial, Helvetica, sans-serif" font-size="18">A deliberate selection</text>
+    <text x="1274" y="468" fill="#74726b" font-family="Arial, Helvetica, sans-serif" font-size="18">you can pass onward.</text>
+    <rect x="1274" y="505" width="164" height="38" rx="19" fill="#171717"/>
+    <text x="1356" y="530" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" text-anchor="middle">You control sharing</text>
+  </g>
+</svg>

@@ -39,6 +39,6 @@ This directory contains the Sourcebook for Agents Chrome/Chromium extension and 
 - Pick links.
 - Pick lightweight webpage metadata.
 - Save all picks to Sources.
-- Queue Picks in extension storage only while Sourcebook Desktop is unavailable; the background worker retries automatically once per minute when the selected Book is available again.
+- Require Sourcebook Desktop to be connected before exposing Pick controls; the popup offers refresh and Desktop download actions when the local service is unavailable.
 - Pick individual, selected, or visible messages from supported AI chat pages.
 - Reload the unpacked extension in Chrome after rebuilding, then refresh the source page.
