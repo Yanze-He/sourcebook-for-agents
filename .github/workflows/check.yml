@@ -1,4 +1,4 @@
-name: Main flow
+name: Sourcebook checks
 on: [push, pull_request]
 permissions:
   contents: read
@@ -10,13 +10,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            apps/capture/package-lock.json
-            apps/workspace/package-lock.json
-      - run: npm ci && npm --prefix apps/capture ci && npm --prefix apps/workspace ci
-      - run: npm --prefix apps/capture run typecheck
+            apps/picker/package-lock.json
+            apps/sources/package-lock.json
+      - run: npm ci && npm --prefix apps/picker ci && npm --prefix apps/sources ci
+      - run: npm --prefix apps/picker run typecheck
       - run: npm test
       - run: npm run build
