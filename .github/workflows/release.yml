@@ -29,11 +29,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --prefix apps/capture
-      - run: npm --prefix apps/capture run build && npm --prefix apps/capture run zip
+      - run: npm ci --prefix apps/picker
+      - run: npm --prefix apps/picker run build && npm --prefix apps/picker run zip
       - run: |
           mkdir -p release/extension
-          find apps/capture/.output -name '*.zip' -exec cp {} release/extension/sourcebook-picker-chromium.zip \;
+          find apps/picker/.output -name '*.zip' -exec cp {} release/extension/sourcebook-picker-chromium.zip \;
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-picker-chromium
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci && npm ci --prefix apps/capture && npm ci --prefix apps/workspace
+      - run: npm ci && npm ci --prefix apps/picker && npm ci --prefix apps/sources
       - run: npm run build && npm --prefix apps/desktop run package:macos
       - name: Sign and notarize
         if: inputs.sign
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci; npm ci --prefix apps/capture; npm ci --prefix apps/workspace
+      - run: npm ci; npm ci --prefix apps/picker; npm ci --prefix apps/sources
       - run: npm run build; npm --prefix apps/desktop run package:windows
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -118,6 +118,6 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes
+            gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes --prerelease
           fi
           find release -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
