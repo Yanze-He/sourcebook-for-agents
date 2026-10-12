@@ -103,7 +103,7 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message: PickerMessage): Promise<PickerMessageResponse> | undefined => {
     if (message.type === "SAVE_PICK") return savePick(message.payload);
-    if (message.type === "OPEN_SOURCES") return openSources();
+    if (message.type === "OPEN_SOURCES") return openSources(message.bookId);
     if (message.type === "OPEN_PICKER_POPUP") return openPickerPopup();
     if (message.type === "UPDATE_SOURCE_NOTE") return updateSourceNote(message.sourceItemId, message.note);
     if (message.type === "GET_PICKER_STATUS") return getActivePickerStatus();
@@ -432,9 +432,19 @@ async function getRecentPicks(activeBookId?: string): Promise<RecentPickResult> 
   };
 }
 
-async function openSources(): Promise<PickerMessageResponse> {
+async function openSources(bookId?: string): Promise<PickerMessageResponse> {
   try {
-    await browser.tabs.create({ url: `${await serviceOrigin()}/` });
+    const origin = await serviceOrigin();
+    const targetBookId = bookId || (await getBookState()).activeBookId;
+    const targetUrl = targetBookId ? `${origin}/?bookId=${encodeURIComponent(targetBookId)}` : `${origin}/`;
+    const sourcebookTabs = await browser.tabs.query({ url: `${origin}/*` });
+    const existingTab = sourcebookTabs.find((tab) => tab.id && tab.url && new URL(tab.url).origin === origin);
+    if (existingTab?.id) {
+      await browser.tabs.update(existingTab.id, { active: true, url: targetUrl });
+      if (typeof existingTab.windowId === "number") await browser.windows.update(existingTab.windowId, { focused: true });
+    } else {
+      await browser.tabs.create({ url: targetUrl });
+    }
     return { status: "ok" };
   } catch (error) {
     return { status: "error", message: isOffline(error) ? text.desktopUnavailable : error instanceof Error ? error.message : text.desktopUnavailable };
@@ -485,7 +495,7 @@ async function movePickToBook(sourceItemId: string, sourceBookId: string, target
 
 async function createBook(name: string): Promise<PickerMessageResponse> {
   try {
-    const response = await serviceFetch("/books", {
+    const response = await serviceFetch("/books?source=picker", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name })

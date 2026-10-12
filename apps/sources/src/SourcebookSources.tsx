@@ -21,15 +21,17 @@ type DateFilter = "all" | "today" | "yesterday" | "week" | "custom";
 type LinkFilter = "all" | "linked" | "invalid";
 type LocalFilter = "all" | "pending" | "local" | "missing" | "failed" | "downloading";
 type Book = { id: string; name: string; createdAt?: string };
+type BookManifest = { activeBookId: string; books: Book[]; unreadBookIds?: string[] };
+type BackupRestoreResponse = BookManifest & { imported?: Book[] };
 
 const interfaceCopy = {
   en: {
     showing: "Showing", search: "Search sources", filter: "Filter", favorites: "Favorites only", masonry: "Masonry view", list: "List view", refresh: "Refresh sources", noSources: "No sources yet", noMatches: "No matching sources", emptyGuide: "Use the Picker extension to collect web content or import local files.", tryAnother: "Try another search or filter.", settings: "Settings", setting: "Setting", help: "Help", feedback: "Feedback", installPicker: "Install Picker", switchLanguage: "中文", switchBook: "Switch Sourcebook", importLocalFiles: "Import local files", addText: "Record", textTitle: "Title (optional)", textContent: "Text", createText: "Create record", clearSearch: "Clear search",
-    close: "Close", cancel: "Cancel", save: "Save", delete: "Delete", copy: "Copy", copyFiles: "Copy files", copyLink: "Copy link", select: "Select", selected: "Selected", unselect: "Unselect", edit: "Edit", loading: "Loading…", loadMore: "Load more", loadingSources: "Loading sources", readingSources: "Reading from your local Sourcebook.", selectAll: "Select all", clear: "Cancel", addNote: "Add note", packForAgent: "Pack for agent", sourcesSelected: "sources selected", sourceSelected: "source selected", note: "Note", info: "Info", source: "Source", picked: "Picked", format: "Format", size: "Size", localLink: "Local link", webLink: "Web link", localFile: "Local file", link: "Link", image: "Image", video: "Video", audio: "Audio", text: "Text", chat: "Chat", file: "File", open: "Open", visit: "Visit", view: "View", play: "Play", download: "Download", downloading: "Downloading", missing: "Missing", fileMissing: "File missing", downloadFailed: "Download failed", retry: "Retry", invalid: "Invalid", invalidLink: "Invalid link", copyForAgent: "Copy for agent", openDetail: "Open source detail", closeDetail: "Close detail", addFavorite: "Add to favorites", removeFavorite: "Remove from favorites", editTitle: "Edit title", saveTitle: "Save title", cancelTitleEdit: "Cancel title edit", sourceTitle: "Source title", showInFolder: "Show in folder", viewLocalFile: "View local file", downloadAgain: "Download this file again", retryDownload: "Retry download", downloadLocalFile: "Download local file", moveTo: "Move to…", confirmDelete: "Confirm delete", deleteSources: "Delete sources", deleteBook: "Delete Book", bookSetting: "Book Setting", newBook: "New Book", bookName: "Book name", createBook: "Create Book", targetBook: "Target Book", copyHere: "Copy here", moveHere: "Move here", exportBackup: "Export backup", importBackup: "Import backup", markdownContent: "Markdown content", mediaPreview: "Media preview", closePreview: "Close preview", downloadImage: "Download image", downloadMissingFile: "Download missing file?", imageDownloadMessage: "Sourcebook will save a local copy of this image in the current Book.", missingDownloadMessage: "A local copy is missing. Sourcebook will download it again into this Book.", addContext: "Add context for the agent…", noteHelp: "This note is added to the Pack prompt so the agent can understand your intent.", notSavedLocally: "Not saved locally",
+    close: "Close", cancel: "Cancel", save: "Save", delete: "Delete", copy: "Copy", copyFiles: "Copy files", copyLink: "Copy link", select: "Select", selected: "Selected", unselect: "Unselect", edit: "Edit", loading: "Loading…", loadMore: "Load more", loadingSources: "Loading sources", readingSources: "Reading from your local Sourcebook.", selectAll: "Select all", clearSelection: "Clear selection", clear: "Cancel", addNote: "Add note", addToOtherBook: "Add to another Book", packForAgent: "Pack for agent", sourcesSelected: "sources selected", sourceSelected: "source selected", note: "Note", info: "Info", source: "Source", picked: "Picked", format: "Format", size: "Size", localLink: "Local link", webLink: "Web link", localFile: "Local file", link: "Link", image: "Image", video: "Video", audio: "Audio", text: "Text", chat: "Chat", file: "File", cover: "Cover", open: "Open", visit: "Visit", view: "View", play: "Play", download: "Download", downloading: "Downloading", missing: "Missing", fileMissing: "File missing", downloadFailed: "Download failed", retry: "Retry", invalid: "Invalid", invalidLink: "Invalid link", copyForAgent: "Copy for agent", openDetail: "Open source detail", closeDetail: "Close detail", addFavorite: "Add to favorites", removeFavorite: "Remove from favorites", editTitle: "Edit title", saveTitle: "Save title", cancelTitleEdit: "Cancel title edit", sourceTitle: "Source title", showInFolder: "Show in folder", viewLocalFile: "View local file", downloadAgain: "Download this file again", retryDownload: "Retry download", downloadLocalFile: "Download local file", moveTo: "Move to…", confirmDelete: "Confirm delete", deleteSources: "Delete sources", deleteBook: "Delete Book", bookSetting: "Book Setting", newBook: "New Book", bookName: "Book name", createBook: "Create Book", targetBook: "Target Book", copyHere: "Copy here", moveHere: "Move here", exportBackup: "Export backup", importBackup: "Import backup", selectBooksToExport: "Select Books to export", selectedBooks: "Books selected", exportSelectedBooks: "Export selected Books", clearLocalData: "Clear local data", markdownContent: "Markdown content", mediaPreview: "Media preview", closePreview: "Close preview", downloadImage: "Download image", downloadMissingFile: "Download missing file?", imageDownloadMessage: "Sourcebook will save a local copy of this image in the current Book.", missingDownloadMessage: "A local copy is missing. Sourcebook will download it again into this Book.", addContext: "Add context for the agent…", noteHelp: "This note is added to the Pack prompt so the agent can understand your intent.", notSavedLocally: "Not saved locally",
   },
   zh: {
     showing: "显示", search: "搜索素材", filter: "筛选", favorites: "仅看收藏", masonry: "瀑布流视图", list: "列表视图", refresh: "刷新素材", noSources: "还没有素材", noMatches: "没有匹配的素材", emptyGuide: "使用 Picker插件获取网页内容 或 导入本地文件", tryAnother: "请尝试其他搜索词或筛选条件。", settings: "设置", setting: "设置", help: "帮助", feedback: "反馈", installPicker: "安装Picker", switchLanguage: "English", switchBook: "切换 Sourcebook", importLocalFiles: "导入本地文件", addText: "记录", textTitle: "标题（选填）", textContent: "文本内容", createText: "创建记录", clearSearch: "清空搜索",
-    close: "关闭", cancel: "取消", save: "保存", delete: "删除", copy: "复制", copyFiles: "复制文件", copyLink: "复制链接", select: "选择", selected: "已选择", unselect: "取消选择", edit: "编辑", loading: "加载中…", loadMore: "加载更多", loadingSources: "正在加载素材", readingSources: "正在读取本地 Sourcebook。", selectAll: "全选", clear: "取消选择", addNote: "添加备注", packForAgent: "发送给 Agent", sourcesSelected: "个素材已选择", sourceSelected: "个素材已选择", note: "备注", info: "信息", source: "来源", picked: "Pick时间", format: "格式", size: "大小", localLink: "本地链接", webLink: "网页链接", localFile: "本地文件", link: "链接", image: "图片", video: "视频", audio: "音频", text: "文本", chat: "对话", file: "文件", open: "打开", visit: "跳转", view: "查看", play: "播放", download: "下载", downloading: "下载中", missing: "文件丢失", fileMissing: "文件丢失", downloadFailed: "下载失败", retry: "重试", invalid: "无效", invalidLink: "链接无效", copyForAgent: "复制给 Agent", openDetail: "打开素材详情", closeDetail: "关闭详情", addFavorite: "收藏", removeFavorite: "取消收藏", editTitle: "编辑标题", saveTitle: "保存标题", cancelTitleEdit: "取消编辑标题", sourceTitle: "素材标题", showInFolder: "在文件夹中显示", viewLocalFile: "查看本地文件", downloadAgain: "重新下载此文件", retryDownload: "重试下载", downloadLocalFile: "下载本地文件", moveTo: "移动到…", confirmDelete: "确认删除", deleteSources: "删除素材", deleteBook: "删除 Book", bookSetting: "Book 设置", newBook: "新建 Book", bookName: "Book 名称", createBook: "创建 Book", targetBook: "目标 Book", copyHere: "复制到这里", moveHere: "移动到这里", exportBackup: "导出备份", importBackup: "导入备份", markdownContent: "Markdown 内容", mediaPreview: "媒体预览", closePreview: "关闭预览", downloadImage: "下载图片", downloadMissingFile: "下载丢失文件？", imageDownloadMessage: "Sourcebook 会将此图片的本地副本保存到当前 Book。", missingDownloadMessage: "本地副本已丢失，Sourcebook 将重新下载到当前 Book。", addContext: "补充给 Agent 的上下文…", noteHelp: "此备注会加入 Pack 提示词，帮助 Agent 更好理解你的意图。", notSavedLocally: "尚未保存到本地",
+    close: "关闭", cancel: "取消", save: "保存", delete: "删除", copy: "复制", copyFiles: "复制文件", copyLink: "复制链接", select: "选择", selected: "已选择", unselect: "取消选择", edit: "编辑", loading: "加载中…", loadMore: "加载更多", loadingSources: "正在加载素材", readingSources: "正在读取本地 Sourcebook。", selectAll: "全选", clearSelection: "取消全选", clear: "取消选择", addNote: "添加备注", addToOtherBook: "添加到其他 Book", packForAgent: "发送给 Agent", sourcesSelected: "个素材已选择", sourceSelected: "个素材已选择", note: "备注", info: "信息", source: "来源", picked: "Pick时间", format: "格式", size: "大小", localLink: "本地链接", webLink: "网页链接", localFile: "本地文件", link: "链接", image: "图片", video: "视频", audio: "音频", text: "文本", chat: "对话", file: "文件", cover: "封面", open: "打开", visit: "跳转", view: "查看", play: "播放", download: "下载", downloading: "下载中", missing: "文件丢失", fileMissing: "文件丢失", downloadFailed: "下载失败", retry: "重试", invalid: "无效", invalidLink: "链接无效", copyForAgent: "复制给 Agent", openDetail: "打开素材详情", closeDetail: "关闭详情", addFavorite: "收藏", removeFavorite: "取消收藏", editTitle: "编辑标题", saveTitle: "保存标题", cancelTitleEdit: "取消编辑标题", sourceTitle: "素材标题", showInFolder: "在文件夹中显示", viewLocalFile: "查看本地文件", downloadAgain: "重新下载此文件", retryDownload: "重试下载", downloadLocalFile: "下载本地文件", moveTo: "移动到…", confirmDelete: "确认删除", deleteSources: "删除素材", deleteBook: "删除 Book", bookSetting: "Book 设置", newBook: "新建 Book", bookName: "Book 名称", createBook: "创建 Book", targetBook: "目标 Book", copyHere: "复制到这里", moveHere: "移动到这里", exportBackup: "导出备份", importBackup: "导入备份", selectBooksToExport: "选择要导出的 Book", selectedBooks: "已选择 Book", exportSelectedBooks: "导出所选 Book", clearLocalData: "清空本地数据", markdownContent: "Markdown 内容", mediaPreview: "媒体预览", closePreview: "关闭预览", downloadImage: "下载图片", downloadMissingFile: "下载丢失文件？", imageDownloadMessage: "Sourcebook 会将此图片的本地副本保存到当前 Book。", missingDownloadMessage: "本地副本已丢失，Sourcebook 将重新下载到当前 Book。", addContext: "补充给 Agent 的上下文…", noteHelp: "此备注会加入 Pack 提示词，帮助 Agent 更好理解你的意图。", notSavedLocally: "尚未保存到本地",
   },
 } as const;
 
@@ -137,6 +139,7 @@ export default function SourcebookSources() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [books, setBooks] = useState<Book[]>([]);
   const [activeBookId, setActiveBookId] = useState("");
+  const [unreadBookIds, setUnreadBookIds] = useState<string[]>([]);
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [isCreateBookOpen, setIsCreateBookOpen] = useState(false);
   const [isCreateTextOpen, setIsCreateTextOpen] = useState(false);
@@ -156,16 +159,22 @@ export default function SourcebookSources() {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isClearDataOpen, setIsClearDataOpen] = useState(false);
+  const [isClearingData, setIsClearingData] = useState(false);
   const [language, setLanguage] = useState<"en" | "zh">(() => window.localStorage.getItem("sourcebook-language") === "zh" || (window.localStorage.getItem("sourcebook-language") === null && navigator.language.toLowerCase().startsWith("zh")) ? "zh" : "en");
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isBackupExportOpen, setIsBackupExportOpen] = useState(false);
+  const [backupBookIds, setBackupBookIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"neutral" | "success" | "error">("neutral");
   const [detailItem, setDetailItem] = useState<SourceItem | null>(null);
   const [focusDetailNote, setFocusDetailNote] = useState(false);
   const [previewItem, setPreviewItem] = useState<SourceItem | null>(null);
   const [isPackOpen, setIsPackOpen] = useState(false);
+  const [isBookTransferOpen, setIsBookTransferOpen] = useState(false);
+  const [isTransferringSelected, setIsTransferringSelected] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isBatchNoteOpen, setIsBatchNoteOpen] = useState(false);
   const [downloadConfirmItem, setDownloadConfirmItem] = useState<SourceItem | null>(null);
@@ -178,6 +187,8 @@ export default function SourcebookSources() {
   const localImportInputRef = useRef<HTMLInputElement | null>(null);
   const messageTimeoutRef = useRef<number | null>(null);
   const packRef = useRef<HTMLDivElement | null>(null);
+  const bookTransferRef = useRef<HTMLDivElement | null>(null);
+  const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
   const copy = interfaceCopy[language];
 
   function showSourcesMessage(nextMessage: string, duration = 3600, tone: "neutral" | "success" | "error" = "neutral") {
@@ -187,13 +198,13 @@ export default function SourcebookSources() {
     messageTimeoutRef.current = duration ? window.setTimeout(() => setMessage(null), duration) : null;
   }
 
-  async function loadItems({ announce = false, background = false, limit = sourcePageSize }: { announce?: boolean; background?: boolean; limit?: number } = {}) {
+  async function loadItems({ announce = false, background = false, bookId = activeBookId, limit = sourcePageSize }: { announce?: boolean; background?: boolean; bookId?: string; limit?: number } = {}) {
     const requestStartedAt = Date.now();
     if (announce) { setIsRefreshing(true); showSourcesMessage("Refreshing sources…", 0); }
     else if (!background) setLoading(true);
     try {
-      const response = await request<SourcePage>(bookPath(`/api/sources?limit=${limit}`, activeBookId));
-      const nextItems = failurePreviewEnabled ? [...failurePreviewItems(activeBookId), ...response.items] : response.items;
+      const response = await request<SourcePage>(bookPath(`/api/sources?limit=${limit}`, bookId));
+      const nextItems = failurePreviewEnabled ? [...failurePreviewItems(bookId), ...response.items] : response.items;
       setItems((current) => nextItems.map((item) => {
         const downloadStartedAt = downloadStartTimesRef.current.get(item.id);
         if (downloadStartedAt && requestStartedAt < downloadStartedAt) {
@@ -223,17 +234,43 @@ export default function SourcebookSources() {
     finally { setIsLoadingMore(false); }
   }
   async function loadBooks() {
-    const response = await request<{ activeBookId: string; books: Book[] }>("/api/books");
-    setBooks(response.books); setActiveBookId(response.activeBookId);
+    let response = await request<BookManifest>("/api/books");
+    const requestedBookId = requestedBookIdRef.current;
+    const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : response.activeBookId;
+    if (targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
+    requestedBookIdRef.current = null;
+    if (requestedBookId) window.history.replaceState({}, "", window.location.pathname);
+    setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId);
   }
-  useEffect(() => { void loadBooks().then(() => void loadItems()); }, []);
+  useEffect(() => { void loadBooks(); }, []);
   useEffect(() => { if (activeBookId) void loadItems(); }, [activeBookId]);
   useEffect(() => { if (activeBookId && (query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites)) void loadItems({ limit: bookSourceLimit }); }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, source]);
   useEffect(() => { if (!items.some((item) => item.assetCacheState === "downloading")) return; const timer = window.setInterval(() => void loadItems({ background: true }), 1500); return () => window.clearInterval(timer); }, [activeBookId, items]);
+  useEffect(() => {
+    if (!activeBookId) return;
+    let refreshTimer: number | undefined;
+    const refresh = () => void loadItems({ background: true, bookId: activeBookId });
+    const queueRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(refresh, 180);
+    };
+    const stream = new EventSource(`/api/events?bookId=${encodeURIComponent(activeBookId)}`);
+    stream.addEventListener("sources", queueRefresh);
+    const refreshWhenVisible = () => { if (!document.hidden) { refresh(); void loadBooks(); } };
+    const refreshWhenFocused = () => { refresh(); void loadBooks(); };
+    window.addEventListener("focus", refreshWhenFocused);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearTimeout(refreshTimer);
+      stream.close();
+      window.removeEventListener("focus", refreshWhenFocused);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [activeBookId]);
   useEffect(() => () => { if (messageTimeoutRef.current) window.clearTimeout(messageTimeoutRef.current); }, []);
   useEffect(() => {
-    const closeIfOutside = (event: MouseEvent) => { if (!settingsRef.current?.contains(event.target as Node)) setIsSettingsOpen(false); if (!filterRef.current?.contains(event.target as Node)) setIsFiltersOpen(false); if (!bookRef.current?.contains(event.target as Node)) setIsBookOpen(false); if (!packRef.current?.contains(event.target as Node)) setIsPackOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setIsSettingsOpen(false); setIsFiltersOpen(false); setIsBookOpen(false); setIsPackOpen(false); } };
+    const closeIfOutside = (event: MouseEvent) => { if (!settingsRef.current?.contains(event.target as Node)) setIsSettingsOpen(false); if (!filterRef.current?.contains(event.target as Node)) setIsFiltersOpen(false); if (!bookRef.current?.contains(event.target as Node)) setIsBookOpen(false); if (!packRef.current?.contains(event.target as Node)) setIsPackOpen(false); if (!bookTransferRef.current?.contains(event.target as Node)) setIsBookTransferOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setIsSettingsOpen(false); setIsFiltersOpen(false); setIsBookOpen(false); setIsPackOpen(false); setIsBookTransferOpen(false); } };
     document.addEventListener("mousedown", closeIfOutside);
     document.addEventListener("keydown", closeOnEscape);
     return () => { document.removeEventListener("mousedown", closeIfOutside); document.removeEventListener("keydown", closeOnEscape); };
@@ -254,7 +291,7 @@ export default function SourcebookSources() {
     try {
       if (hasCopyablePackFile(item)) {
         const result = await request<{ copied: number }>(bookPath("/api/source-packs/copy-materials", item.bookId), { method: "POST", body: JSON.stringify({ sourceItemIds: [item.id] }) });
-        showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件。` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}.`, 3600, "success");
+        showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件，可粘贴到 Agent 对话框。` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}. Paste them into your agent chat.`, 3600, "success");
         return;
       }
       const link = webLinkFor(item);
@@ -268,8 +305,8 @@ export default function SourcebookSources() {
   async function copyPackedMaterials() {
     try {
       const result = await request<{ copied: number; skipped: number; linkReferences: number }>(bookPath("/api/source-packs/copy-materials", activeBookId), { method: "POST", body: JSON.stringify({ sourceItemIds: selectedIds }) });
-      const detail = result.skipped ? (language === "zh" ? `；${result.skipped} 个没有本地文件的素材可通过复制提示词以链接提供` : `; use Copy prompt to include ${result.skipped} source${result.skipped === 1 ? "" : "s"} without a local file as links`) : "";
-      showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件${detail}。` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}${detail}.`, 3600, "success");
+      const detail = result.skipped ? (language === "zh" ? `${result.skipped} 个没有本地文件的素材会在复制提示词时以链接提供。` : `${result.skipped} source${result.skipped === 1 ? "" : "s"} without a local file will be included as links when you copy the prompt.`) : "";
+      showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件，可粘贴到 Agent 对话框。${detail}` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}. Paste them into your agent chat.${detail ? " " + detail : ""}`, 3600, "success");
       return true;
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制素材：${errorMessage(error)}` : `Could not copy sources: ${errorMessage(error)}`, 6000, "error");
@@ -356,8 +393,8 @@ export default function SourcebookSources() {
   }
   async function selectBook(bookId: string) {
     try {
-      await request(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
-      setActiveBookId(bookId); setSelectedIds([]); setDetailItem(null); setIsBookOpen(false);
+      const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setDetailItem(null); setIsBookOpen(false);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function createBook(name: string) {
@@ -395,8 +432,8 @@ export default function SourcebookSources() {
   }
   async function removeBook(bookId: string) {
     try {
-      const response = await request<{ activeBookId: string; books: Book[] }>(`/api/books/${encodeURIComponent(bookId)}`, { method: "DELETE" });
-      setBooks(response.books); setActiveBookId(response.activeBookId); setSelectedIds([]); setDetailItem(null); setDeleteBookTarget(null);
+      const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}`, { method: "DELETE" });
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setDetailItem(null); setDeleteBookTarget(null);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function transferSource(targetBookId: string, mode: "copy" | "move") {
@@ -406,22 +443,68 @@ export default function SourcebookSources() {
       setTransferItem(null); setDetailItem(null); await loadItems(); showSourcesMessage(mode === "move" ? "Source moved to the selected Book." : "Source copied to the selected Book.");
     } catch (error) { setMessage(errorMessage(error)); }
   }
-  async function exportBackup() {
+  async function transferSelectedSources(targetBookId: string, mode: "copy" | "move") {
+    const sourceItemIds = [...selectedIds];
+    if (!sourceItemIds.length || isTransferringSelected) return;
+    setIsTransferringSelected(true);
     try {
+      for (const sourceItemId of sourceItemIds) {
+        await request(`/api/books/${encodeURIComponent(activeBookId)}/sources/${encodeURIComponent(sourceItemId)}/transfer`, { method: "POST", body: JSON.stringify({ targetBookId, mode }) });
+      }
+      setIsBookTransferOpen(false);
+      setSelectedIds([]);
+      await loadItems({ background: true });
+      const count = sourceItemIds.length;
+      showSourcesMessage(language === "zh" ? `已${mode === "move" ? "移动" : "复制"} ${count} 个素材到目标 Book。` : `${mode === "move" ? "Moved" : "Copied"} ${count} source${count === 1 ? "" : "s"} to the selected Book.`, 3600, "success");
+    } catch (error) {
+      await loadItems({ background: true });
+      showSourcesMessage(language === "zh" ? `转移未完成：${errorMessage(error)}` : `Transfer did not complete: ${errorMessage(error)}`, 6000, "error");
+    } finally {
+      setIsTransferringSelected(false);
+    }
+  }
+  function openBackupExport() {
+    setBackupBookIds(books.map((book) => book.id));
+    setIsSettingsOpen(false);
+    setIsBackupExportOpen(true);
+  }
+  async function exportBackup(bookIds: string[]) {
+    try {
+      if (!bookIds.length) return;
+      const parameters = new URLSearchParams();
+      bookIds.forEach((bookId) => parameters.append("bookId", bookId));
       const link = document.createElement("a");
-      link.href = "/api/library/backup";
+      link.href = `/api/library/backup?${parameters.toString()}`;
       link.download = `sourcebook-${new Date().toISOString().slice(0, 10)}.sourcebook-backup`;
       link.click();
+      setIsBackupExportOpen(false);
       showSourcesMessage("Backup downloaded.");
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function importBackup(file: File) {
     const mode = window.confirm("Import as new Books? Choose Cancel to replace the entire library.") ? "append" : "replace";
     try {
-      const archive = await fileToBase64(file);
-      await request("/api/library/restore", { method: "POST", body: JSON.stringify({ archive, mode }) });
-      await loadBooks(); await loadItems(); showSourcesMessage(mode === "replace" ? "Library restored from backup." : "Backup imported as new Books.");
+      const restored = await requestBackupRestore(file, mode);
+      const firstImportedBookId = restored.imported?.[0]?.id || restored.activeBookId;
+      const manifest = await request<BookManifest>(`/api/books/${encodeURIComponent(firstImportedBookId)}/activate`, { method: "POST" });
+      setBooks(manifest.books); setUnreadBookIds(manifest.unreadBookIds || []); setActiveBookId(manifest.activeBookId);
+      setItems([]); setSelectedIds([]); setDetailItem(null); setPreviewItem(null);
+      await loadItems({ bookId: firstImportedBookId });
+      showSourcesMessage(mode === "replace" ? "Library restored from backup." : "Backup imported as new Books.");
     } catch (error) { setMessage(errorMessage(error)); }
+  }
+  async function clearLocalData() {
+    setIsClearingData(true);
+    try {
+      const response = await request<BookManifest>("/api/library", { method: "DELETE" });
+      setBooks(response.books);
+      setUnreadBookIds(response.unreadBookIds || []);
+      setActiveBookId(response.activeBookId);
+      setItems([]); setSelectedIds([]); setDetailItem(null); setPreviewItem(null); setIsClearDataOpen(false);
+      await loadItems({ bookId: response.activeBookId });
+      showSourcesMessage(language === "zh" ? "本地数据已清空。" : "Local data cleared.", 3600, "success");
+    } catch (error) { showSourcesMessage(errorMessage(error), 6000, "error"); }
+    finally { setIsClearingData(false); }
   }
   async function importLocalFiles(files: File[]) {
     if (!files.length || isImporting) return;
@@ -447,6 +530,8 @@ export default function SourcebookSources() {
     ? <>使用 <button className="empty-action-link" onClick={openPickerInstall} type="button">Picker插件</button> 获取网页内容 或 <button className="empty-action-link" onClick={() => localImportInputRef.current?.click()} type="button">{copy.importLocalFiles}</button></>
     : <>Use the <button className="empty-action-link" onClick={openPickerInstall} type="button">Picker extension</button> to collect web content or <button className="empty-action-link" onClick={() => localImportInputRef.current?.click()} type="button">{copy.importLocalFiles}</button>.</>;
 
+  const hasUnreadBooks = unreadBookIds.some((bookId) => bookId !== activeBookId && books.some((book) => book.id === bookId));
+
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className="sources-page sources-surface public-sources-surface" aria-label="Sources">
       <header className="panel-head">
@@ -454,14 +539,16 @@ export default function SourcebookSources() {
           <div className="book-title-row">
             <SourcebookLockup />
             <div className="book-switcher" ref={bookRef}>
-              <button aria-expanded={isBookOpen} aria-haspopup="menu" aria-label={copy.switchBook} className={`book-switcher-button ${isBookOpen ? "is-open" : ""}`} onClick={() => setIsBookOpen((open) => !open)} type="button">
-                <span>{books.find((book) => book.id === activeBookId)?.name || "Default Book"}</span>
+              <button aria-expanded={isBookOpen} aria-haspopup="menu" aria-label={copy.switchBook} className={`book-switcher-button ${isBookOpen ? "is-open" : ""}`} onClick={() => { void loadBooks(); setIsBookOpen((open) => !open); }} type="button">
+                <span className="book-switcher-label">{books.find((book) => book.id === activeBookId)?.name || "Default Book"}</span>
+                {hasUnreadBooks ? <span aria-label="New Books available" className="book-unread-dot" role="status" /> : null}
+                <span className="book-switcher-count">{books.length} Books</span>
                 <ChevronDown aria-hidden="true" className="book-switcher-chevron" size={14} />
               </button>
               {isBookOpen ? <div className="book-switcher-menu" role="menu">
                 {books.map((book) => <div className="book-menu-item" key={book.id}>
                   <button aria-label={`Book actions for ${book.name}`} className="book-options-button" data-tooltip={copy.setting} onClick={() => { setIsBookOpen(false); setRenameBookTarget(book); }} type="button"><EllipsisVertical size={14} /></button>
-                  <button aria-pressed={book.id === activeBookId} className="book-menu-select" onClick={() => void selectBook(book.id)} role="menuitem" type="button"><span>{book.name}</span>{book.id === activeBookId ? <Check size={14} /> : null}</button>
+                  <button aria-pressed={book.id === activeBookId} className="book-menu-select" onClick={() => void selectBook(book.id)} role="menuitem" type="button"><span className="book-menu-label"><span>{book.name}</span>{unreadBookIds.includes(book.id) ? <span aria-label="New Book" className="book-unread-dot" role="status" /> : null}</span>{book.id === activeBookId ? <Check size={14} /> : null}</button>
                 </div>)}
                 <button className="book-new-button" onClick={() => { setIsBookOpen(false); setIsCreateBookOpen(true); }} type="button"><Plus size={14} />{copy.newBook}</button>
               </div> : null}
@@ -473,8 +560,9 @@ export default function SourcebookSources() {
                 <button aria-label={copy.settings} aria-expanded={isSettingsOpen} className="icon-button" data-tooltip={copy.settings} onClick={() => setIsSettingsOpen((open) => !open)} title={copy.settings} type="button"><Settings size={16} /></button>
                 {isSettingsOpen ? <div className="settings-popover" role="menu">
                   <button onClick={() => { openPickerInstall(); setIsSettingsOpen(false); }} role="menuitem" type="button"><Puzzle size={15} /><span>{copy.installPicker}</span></button>
-                  <button onClick={() => void exportBackup()} role="menuitem" type="button"><Download size={15} /><span>{copy.exportBackup}</span></button>
+                  <button onClick={openBackupExport} role="menuitem" type="button"><Download size={15} /><span>{copy.exportBackup}</span></button>
                   <button onClick={() => backupInputRef.current?.click()} role="menuitem" type="button"><Upload size={15} /><span>{copy.importBackup}</span></button>
+                  <button className="settings-danger-action" onClick={() => { setIsSettingsOpen(false); setIsClearDataOpen(true); }} role="menuitem" type="button"><Trash2 size={15} /><span>{copy.clearLocalData}</span></button>
                   <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents#readme", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><CircleHelp size={15} /><span>{copy.help}</span></button>
                   <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents/issues/new/choose", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><MessageSquare size={15} /><span>{copy.feedback}</span></button>
                   <button onClick={() => { setLanguage(language === "en" ? "zh" : "en"); setIsSettingsOpen(false); }} role="menuitem" type="button"><Languages size={15} /><span>{copy.switchLanguage}</span></button>
@@ -497,7 +585,7 @@ export default function SourcebookSources() {
       {loading ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
       {!loading && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
       {!loading && visibleItems.length > 0 ? <SourceMasonry items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onToggle={toggleSelected} /> : null}
-      {selectedIds.length > 0 ? <footer className="sources-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button></div><div className="sources-footer-actions"><button className="secondary-button" onClick={() => setSelectedIds([])} type="button"><X size={15} />{copy.clear}</button><button className="secondary-button" onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><button className="secondary-button sources-delete-button" onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><div className="sources-pack-wrap" ref={packRef}><button aria-expanded={isPackOpen} className={`primary-button sources-pack-button ${isPackOpen ? "is-open" : ""}`} onClick={() => setIsPackOpen((open) => !open)} type="button"><Package size={15} />{copy.packForAgent}</button>{isPackOpen ? <PackPopover items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} /> : null}</div></div></footer> : null}
+      {selectedIds.length > 0 ? <footer className="sources-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button></div><div className="sources-footer-actions"><button className="secondary-button sources-delete-button" onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button" onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><div className="sources-pack-wrap" ref={bookTransferRef}><button aria-expanded={isBookTransferOpen} className={`secondary-button sources-transfer-button ${isBookTransferOpen ? "is-open" : ""}`} onClick={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={selectedIds.length} isTransferring={isTransferringSelected} onClose={() => setIsBookTransferOpen(false)} onTransfer={transferSelectedSources} /> : null}</div><div className="sources-pack-wrap" ref={packRef}><button aria-expanded={isPackOpen} className={`primary-button sources-pack-button ${isPackOpen ? "is-open" : ""}`} onClick={() => { setIsBookTransferOpen(false); setIsPackOpen((open) => !open); }} type="button"><Package size={15} />{copy.packForAgent}</button>{isPackOpen ? <PackPopover items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} /> : null}</div><button aria-label={copy.clear} className="secondary-button sources-cancel-button" data-tooltip={copy.clear} onClick={() => setSelectedIds([])} type="button"><X size={17} /></button></div></footer> : null}
       {message ? <p className={`sources-message is-${messageTone}`} role="status">{isRefreshing || isImporting ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
     <SourceDetailModal focusNote={focusDetailNote} item={detailItem} isSelected={Boolean(detailItem && selectedIds.includes(detailItem.id))} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onSelect={selectFromDetail} onTitleSave={saveTitle} />
@@ -510,6 +598,8 @@ export default function SourcebookSources() {
     <BatchNoteModal count={selectedIds.length} isOpen={isBatchNoteOpen} onClose={() => setIsBatchNoteOpen(false)} onConfirm={appendBatchNote} />
     <SourcePreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     <DownloadImageModal item={downloadConfirmItem} onClose={() => setDownloadConfirmItem(null)} onConfirm={startDownload} />
+    <ClearLocalDataModal isClearing={isClearingData} isOpen={isClearDataOpen} onClose={() => !isClearingData && setIsClearDataOpen(false)} onConfirm={() => void clearLocalData()} />
+    <BackupExportModal books={books} isOpen={isBackupExportOpen} onClose={() => setIsBackupExportOpen(false)} onExport={exportBackup} onSelectionChange={setBackupBookIds} selectedBookIds={backupBookIds} />
   </main></LanguageContext.Provider>;
 }
 
@@ -534,6 +624,7 @@ function SourceCard({ item, selected, onFavorite, onOpen, onEditNote, onOpenLoca
   const isPlayable = (item.modality === "video" || item.modality === "audio") && !isWebVideo;
   const previewable = item.modality === "image" || isPlayable;
   const openableLocalFile = item.modality === "file" && localFileState(item) === "cached";
+  const showVideoCover = item.modality === "video" && localFileState(item) !== "cached";
   const duration = useMediaDuration(item);
   const previewLabel = item.modality === "audio" ? copy.play + " " + copy.audio : item.modality === "video" ? copy.play + " " + copy.video : copy.view + " " + copy.image;
   const usesFallbackArtwork = hasVisual && !hasTextArtwork && !hasRenderableThumbnail(item);
@@ -547,7 +638,7 @@ function SourceCard({ item, selected, onFavorite, onOpen, onEditNote, onOpenLoca
     </div>
     {item.favorite ? <button aria-label={copy.removeFavorite} className="source-card-favorite-pinned" data-tooltip={copy.removeFavorite} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); onFavorite(); }} type="button"><Star fill="currentColor" size={13} /></button> : null}
     {usesCardSourceMark ? <CardSourceMark item={item} /> : null}
-    {hasVisual ? <div className="source-masonry-media preserve-media-ratio">{item.modality === "conversation" || item.modality === "text" ? <CardSourceMark item={item} /> : null}{previewable ? <button aria-label={copy.openDetail} className="source-masonry-media-button" data-tooltip={copy.openDetail} onClick={(event) => { event.stopPropagation(); onOpen(); }} type="button"><SourceThumbnail item={item} /></button> : <SourceThumbnail item={item} />}{(item.modality === "video" || item.modality === "audio") && duration !== null ? <span className="media-duration">{formatDuration(duration)}</span> : null}</div> : null}
+    {hasVisual ? <div className="source-masonry-media preserve-media-ratio">{item.modality === "conversation" || item.modality === "text" ? <CardSourceMark item={item} /> : null}{previewable ? <button aria-label={copy.openDetail} className="source-masonry-media-button" data-tooltip={copy.openDetail} onClick={(event) => { event.stopPropagation(); onOpen(); }} type="button"><SourceThumbnail item={item} /></button> : <SourceThumbnail item={item} />}{showVideoCover ? <span className="video-cover-label">{copy.cover}</span> : null}{(item.modality === "video" || item.modality === "audio") && duration !== null ? <span className="media-duration">{formatDuration(duration)}</span> : null}</div> : null}
     <div className="source-masonry-body"><h2 title={item.itemTitle}>{item.itemTitle}</h2><div className="source-masonry-meta"><DataStatus item={item} onRequestDownload={onRequestDownload} onRetryDownload={onRetryDownload} /><div className="source-masonry-origin"><span>{sourceLabel(item)}</span><time>{formatDate(item.pickedAt)}</time></div></div>{!hasTextArtwork && !isWebLink && excerpt ? <p className="source-masonry-excerpt">{excerpt}</p> : null}{!hasVisual && !usesCardSourceMark && !excerpt ? <div className="source-masonry-abstract"><SourceThumbnail item={item} /></div> : null}<div className="source-card-actions"><button className={`source-note-summary ${item.userNote ? "has-note" : "is-empty"}`} onClick={(event) => { event.stopPropagation(); onEditNote(); }} title={item.userNote || `${copy.addNote}…`} type="button"><MessageSquare aria-hidden="true" size={12} /><span>{item.userNote || `${copy.addNote}…`}</span></button></div></div>
   </article>;
 }
@@ -692,7 +783,7 @@ function SourceDetailModal({ focusNote, item, isSelected, onClose, onContentSave
         <div className="detail-resource-header"><div className="detail-resource-main"><div className="detail-title-control">{isEditingTitle ? <><input autoFocus aria-label={copy.sourceTitle} className="detail-title-input" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveTitle(); if (event.key === "Escape") cancelTitleEdit(); }} /><div className="detail-title-actions"><button aria-label={copy.saveTitle} className="detail-title-action is-confirm" data-tooltip={copy.save} disabled={!draftTitle.trim()} onClick={() => void saveTitle()} type="button"><Check size={14} /></button><button aria-label={copy.cancelTitleEdit} className="detail-title-action" data-tooltip={copy.cancel} onClick={cancelTitleEdit} type="button"><X size={14} /></button></div></> : <><h2 className="detail-title-value" title={item.itemTitle}>{item.itemTitle}</h2><button aria-label={copy.editTitle} className="detail-title-action" data-tooltip={copy.editTitle} onClick={() => setIsEditingTitle(true)} type="button"><Pencil size={14} /></button></>}</div></div></div>
         {page ? <WebPageDetailPreview item={item} /> : null}
         {!page && item.modality === "image" && item.thumbnailUrl ? <figure className="detail-media-preview" role="button" tabIndex={0} onClick={() => onPreview(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onPreview(item); }}><img src={item.thumbnailUrl} alt={item.itemTitle} /></figure> : null}
-        {!page && webVideo && item.thumbnailUrl ? <button aria-label="Open link in browser" className="detail-media-preview detail-web-video-preview" onClick={() => openWebLink(item)} type="button"><img src={item.thumbnailUrl} alt={item.itemTitle} /></button> : null}
+        {!page && webVideo && item.thumbnailUrl ? <button aria-label="Open link in browser" className="detail-media-preview detail-web-video-preview" onClick={() => openWebLink(item)} type="button"><img src={item.thumbnailUrl} alt={item.itemTitle} /><span className="video-cover-label">{copy.cover}</span></button> : null}
         {!page && webVideo && !item.thumbnailUrl ? <WebPageDetailPreview item={item} /> : null}
         {!page && !webVideo && item.modality === "video" && (item.contentUrl || item.thumbnailUrl) ? <figure className="detail-media-preview"><video controls muted playsInline preload="metadata" src={item.contentUrl ?? item.thumbnailUrl ?? undefined} /></figure> : null}
         {!page && item.modality === "audio" && (item.contentUrl || item.thumbnailUrl) ? <figure className="detail-audio-preview"><audio controls autoPlay preload="metadata" src={item.contentUrl ?? item.thumbnailUrl ?? undefined} /></figure> : null}
@@ -743,6 +834,25 @@ function DeleteModal({ count, isOpen, onClose, onConfirm }: { count: number; isO
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={copy.deleteSources} onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal project-delete-modal"><header className="modal-head"><h2>{title}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><p className="project-delete-message">{description}</p><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="danger-button" onClick={onConfirm} type="button"><Trash2 size={15} />{copy.delete}</button></footer></section></div>;
 }
 
+function ClearLocalDataModal({ isClearing, isOpen, onClose, onConfirm }: { isClearing: boolean; isOpen: boolean; onClose: () => void; onConfirm: () => void }) {
+  const language = useLanguage(); const copy = interfaceCopy[language]; const [isFinalConfirm, setIsFinalConfirm] = useState(false);
+  useEffect(() => { if (isOpen) setIsFinalConfirm(false); }, [isOpen]);
+  if (!isOpen) return null;
+  const title = language === "zh" ? (isFinalConfirm ? "确认清空所有数据？" : "清空本地数据？") : (isFinalConfirm ? "Permanently delete all data?" : "Clear local data?");
+  const description = language === "zh" ? (isFinalConfirm ? "这会立即删除所有 Book、素材、备注和由 Sourcebook 保存的本地文件，且无法恢复。" : "建议先导出备份。下一步将要求你再次确认，清空操作不会影响已安装的浏览器插件。") : (isFinalConfirm ? "This immediately deletes every Book, source, note, and local file saved by Sourcebook. It cannot be undone." : "Export a backup first if you may need this library again. The next step asks for a final confirmation and does not remove the browser extension.");
+  const action = language === "zh" ? (isFinalConfirm ? "清空所有数据" : "继续") : (isFinalConfirm ? "Delete all data" : "Continue");
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={copy.clearLocalData} onMouseDown={(event) => event.target === event.currentTarget && !isClearing && onClose()}><section className="export-modal project-delete-modal"><header className="modal-head"><h2>{title}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} disabled={isClearing} onClick={onClose} type="button"><X size={16} /></button></header><p className="project-delete-message">{description}</p><footer className="modal-footer"><button className="text-button" disabled={isClearing} onClick={onClose} type="button">{copy.cancel}</button><button className="danger-button" disabled={isClearing} onClick={() => isFinalConfirm ? onConfirm() : setIsFinalConfirm(true)} type="button"><Trash2 size={15} />{isClearing ? copy.loading : action}</button></footer></section></div>;
+}
+
+function BackupExportModal({ books, isOpen, onClose, onExport, onSelectionChange, selectedBookIds }: { books: Book[]; isOpen: boolean; onClose: () => void; onExport: (bookIds: string[]) => void; onSelectionChange: (bookIds: string[]) => void; selectedBookIds: string[] }) {
+  const copy = interfaceCopy[useLanguage()];
+  if (!isOpen) return null;
+  const selected = new Set(selectedBookIds);
+  const allSelected = books.length > 0 && selectedBookIds.length === books.length;
+  const toggleBook = (bookId: string) => onSelectionChange(selected.has(bookId) ? selectedBookIds.filter((id) => id !== bookId) : [...selectedBookIds, bookId]);
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal backup-export-modal" role="dialog" aria-modal="true" aria-label={copy.selectBooksToExport}><header className="modal-head"><div><h2>{copy.selectBooksToExport}</h2><p>{selectedBookIds.length} {copy.selectedBooks}</p></div><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="backup-export-body"><button className="text-button backup-select-all" onClick={() => onSelectionChange(allSelected ? [] : books.map((book) => book.id))} type="button">{allSelected ? copy.clearSelection : copy.selectAll}</button><div className="backup-book-list">{books.map((book) => <label className="backup-book-option" key={book.id}><input checked={selected.has(book.id)} onChange={() => toggleBook(book.id)} type="checkbox" /><span>{book.name}</span></label>)}</div></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!selectedBookIds.length} onClick={() => onExport(selectedBookIds)} type="button"><Download size={15} />{copy.exportSelectedBooks}</button></footer></section></div>;
+}
+
 function CreateBookModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (name: string) => void }) {
   const copy = interfaceCopy[useLanguage()];
   const [name, setName] = useState("");
@@ -755,7 +865,7 @@ function CreateTextModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   const language = useLanguage(); const copy = interfaceCopy[language]; const [title, setTitle] = useState(""); const [content, setContent] = useState("");
   useEffect(() => { if (isOpen) { setTitle(""); setContent(""); } }, [isOpen]);
   if (!isOpen) return null;
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal add-text-modal" role="dialog" aria-modal="true" aria-label={copy.addText}><header className="modal-head"><h2>{copy.addText}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="add-text-body"><label>{copy.textTitle}<input onChange={(event) => setTitle(event.target.value)} placeholder={language === "zh" ? "例如：下一步要确认的事项" : "For example, Next items to confirm"} value={title} /></label><label>{copy.textContent}<textarea autoFocus onChange={(event) => setContent(event.target.value)} placeholder={language === "zh" ? "写下你的便签…" : "Write your note…"} value={content} /></label></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!content.trim()} onClick={() => onCreate(title, content)} type="button"><FileText size={15} />{copy.createText}</button></footer></section></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal add-text-modal" role="dialog" aria-modal="true" aria-label={copy.addText}><header className="modal-head"><h2>{copy.addText}</h2><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="add-text-body"><label>{copy.textTitle}<input onChange={(event) => setTitle(event.target.value)} placeholder={language === "zh" ? "给这条记录起个名字（可留空）" : "Give this record a name (optional)"} value={title} /></label><label>{copy.textContent}<textarea autoFocus onChange={(event) => setContent(event.target.value)} placeholder={language === "zh" ? "写下一句灵感、一个念头、一段文字，或任何想留住的内容…" : "Write an idea, a thought, a passage, or anything you want to keep…"} value={content} /></label></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!content.trim()} onClick={() => onCreate(title, content)} type="button"><FileText size={15} />{copy.createText}</button></footer></section></div>;
 }
 
 function RenameBookModal({ book, canDelete, onClose, onDelete, onRename }: { book: Book | null; canDelete: boolean; onClose: () => void; onDelete: () => void; onRename: (bookId: string, name: string) => void }) {
@@ -793,11 +903,15 @@ function PackPopover({ items, language, onClose, onCopyMaterials, onCopyPrompt }
   const copyableFiles = items.filter(hasCopyablePackFile).length;
   const linkReferences = items.filter((item) => !hasCopyablePackFile(item) && Boolean(webLinkFor(item))).length;
   const copy = language === "zh" ? {
+    title: "复制到剪贴板",
+    subtitle: copyableFiles ? "先复制文件并粘贴到 Agent，再复制提示词并粘贴。" : "复制提示词后粘贴到 Agent 对话中。",
     materials: "复制文件",
     prompt: "复制提示词",
     localFiles: "个文件可直接粘贴。",
     linkReferences: "个没有本地文件的素材会作为链接写入提示词。",
   } : {
+    title: "Copy to Clipboard",
+    subtitle: copyableFiles ? "Paste copied files into your agent, then paste the copied prompt." : "Paste the copied prompt into your agent chat.",
     materials: "Copy files",
     prompt: "Copy prompt",
     localFiles: ` file${copyableFiles === 1 ? "" : "s"} can be pasted directly.`,
@@ -805,12 +919,40 @@ function PackPopover({ items, language, onClose, onCopyMaterials, onCopyPrompt }
   };
   return <div className="pack-popover" role="dialog" aria-label={language === "zh" ? "发送给 Agent" : "Pack for agent"}>
     <button aria-label={language === "zh" ? "关闭" : "Close"} className="pack-popover-close icon-button" data-tooltip={language === "zh" ? "关闭" : "Close"} onClick={onClose} type="button"><X size={14} /></button>
-    <div className="pack-popover-header"><h2>Copy to Clipboard</h2><p>then paste it into your agent chat.</p></div>
+    <div className="pack-popover-header"><h2>{copy.title}</h2><p>{copy.subtitle}</p></div>
     <ul className="pack-popover-summary"><li><strong>{copyableFiles}</strong>{copy.localFiles}</li><li><strong>{linkReferences}</strong>{copy.linkReferences}</li></ul>
-    <div className="pack-popover-actions">
-      <button className="primary-button" disabled={copyableFiles === 0} onClick={() => void onCopyMaterials()} type="button"><Package size={14} />{copy.materials}</button>
-      <button className="primary-button" onClick={() => void onCopyPrompt()} type="button"><FileText size={14} />{copy.prompt}</button>
+    <div className="pack-popover-actions pack-sequence-actions">
+      <button className="primary-button" disabled={copyableFiles === 0} onClick={() => void onCopyMaterials()} type="button"><span aria-hidden="true" className="pack-step-number">1</span>{copy.materials}</button>
+      <span aria-hidden="true" className="pack-step-connector" />
+      <button className="primary-button" onClick={() => void onCopyPrompt()} type="button"><span aria-hidden="true" className="pack-step-number">2</span>{copy.prompt}</button>
     </div>
+  </div>;
+}
+
+function BookTransferPopover({ books, count, isTransferring, onClose, onTransfer }: { books: Book[]; count: number; isTransferring: boolean; onClose: () => void; onTransfer: (bookId: string, mode: "copy" | "move") => void }) {
+  const language = useLanguage();
+  const [targetBookId, setTargetBookId] = useState("");
+  useEffect(() => { setTargetBookId(books[0]?.id ?? ""); }, [books]);
+  const copy = language === "zh" ? {
+    title: "添加到其他 Book",
+    summary: `选择要接收这 ${count} 个素材的 Book。`,
+    empty: "请先创建另一个 Book，再转移素材。",
+    move: "移动",
+    copy: "复制",
+    close: "关闭",
+  } : {
+    title: "Add to another Book",
+    summary: `Choose a Book for ${count} selected source${count === 1 ? "" : "s"}.`,
+    empty: "Create another Book before transferring sources.",
+    move: "Move",
+    copy: "Copy",
+    close: "Close",
+  };
+  return <div className="pack-popover book-transfer-popover" role="dialog" aria-label={copy.title} aria-busy={isTransferring}>
+    <button aria-label={copy.close} className="pack-popover-close icon-button" data-tooltip={copy.close} disabled={isTransferring} onClick={onClose} type="button"><X size={14} /></button>
+    <div className="pack-popover-header"><h2>{copy.title}</h2><p>{copy.summary}</p></div>
+    {books.length ? <div className="book-transfer-options" role="listbox" aria-label={copy.title}>{books.map((book) => <button aria-selected={targetBookId === book.id} className={targetBookId === book.id ? "is-selected" : ""} disabled={isTransferring} key={book.id} onClick={() => setTargetBookId(book.id)} role="option" type="button"><span>{book.name}</span>{targetBookId === book.id ? <Check size={14} /> : null}</button>)}</div> : <p className="book-transfer-empty">{copy.empty}</p>}
+    <div className="pack-popover-actions book-transfer-actions"><button className="primary-button" disabled={!targetBookId || isTransferring} onClick={() => onTransfer(targetBookId, "move")} type="button">{isTransferring ? <LoaderCircle className="spin" size={14} /> : <ArrowRightLeft size={14} />}{copy.move}</button><button className="secondary-button" disabled={!targetBookId || isTransferring} onClick={() => onTransfer(targetBookId, "copy")} type="button"><Copy size={14} />{copy.copy}</button></div>
   </div>;
 }
 
@@ -895,5 +1037,6 @@ function failurePreviewItems(bookId: string): SourceItem[] {
 function matchesDate(value: string, filter: DateFilter, startValue: string, endValue: string) { const date = new Date(value); if (Number.isNaN(date.getTime()) || filter === "all") return filter === "all"; const now = new Date(); const startOfDay = (input: Date) => new Date(input.getFullYear(), input.getMonth(), input.getDate()); const today = startOfDay(now); if (filter === "today") return date >= today; if (filter === "yesterday") { const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1); return date >= yesterday && date < today; } if (filter === "week") { const weekStart = new Date(today); weekStart.setDate(today.getDate() - 6); return date >= weekStart; } if (filter === "custom") { const start = startValue ? new Date(`${startValue}T00:00:00`) : null; const end = endValue ? new Date(`${endValue}T23:59:59.999`) : null; return (!start || date >= start) && (!end || date <= end); } return true; }
 function bookPath(path: string, bookId: string | undefined) { if (!bookId || !path.startsWith("/api/")) return path; return `${path}${path.includes("?") ? "&" : "?"}bookId=${encodeURIComponent(bookId)}`; }
 async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(); let value = ""; const bytes = new Uint8Array(buffer); for (let index = 0; index < bytes.length; index += 0x8000) value += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(value); }
+async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Something went wrong. Try again."; }

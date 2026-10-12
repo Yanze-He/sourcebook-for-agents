@@ -4,11 +4,11 @@ This guide takes you through one complete local workflow: start Sourcebook, conn
 
 ## Before You Start
 
-You need Node.js 22.18+ and npm. Sourcebook currently supports Chrome and other Chromium browsers.
+To run Sourcebook from source, you need Node.js 22.18+, npm, and Go 1.24+. Node builds the web interface and extension; Go builds and runs the local desktop service. Sourcebook currently supports Chrome and other Chromium browsers.
 
 ### Release install
 
-Download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image contains a **Sourcebook Desktop** app and an **Applications** shortcut: drag the app onto the shortcut, eject the disk image, then open Sourcebook Desktop from Applications.
+Download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. On macOS, Sourcebook runs from the menu bar: use its icon to open Sources, restart the local service, or quit the app.
 
 Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 

@@ -4,6 +4,8 @@ node_modules/
 dist/
 release/
 .local/
+apps/service-go/service-go
+apps/service-go/.dev/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

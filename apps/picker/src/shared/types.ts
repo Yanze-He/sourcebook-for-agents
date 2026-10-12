@@ -147,7 +147,7 @@ export type PickerMessage =
   | { type: "CONFIRM_CHAT_MULTI_PICK" }
   | { type: "PICK_CONTEXT_IMAGE"; payload: PickPayload }
   | { type: "PICK_CONTEXT_LINK"; payload: PickPayload }
-  | { type: "OPEN_SOURCES" }
+  | { type: "OPEN_SOURCES"; bookId?: string }
   | { type: "OPEN_PICKER_POPUP" }
   | { type: "UPDATE_SOURCE_NOTE"; sourceItemId: string; note: string }
   | { type: "MOVE_PICK_TO_BOOK"; sourceItemId: string; sourceBookId: string; targetBookId: string }

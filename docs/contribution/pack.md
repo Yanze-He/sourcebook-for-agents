@@ -1,6 +1,6 @@
 # Pack Contributions
 
-Pack logic lives in `apps/sources/server/local-api.mjs`.
+Pack logic lives in `apps/service-go`.
 
 - A Pack is prepared from selected Sources without requiring any other product state.
 - Keep source URLs when an asset is not stored locally.

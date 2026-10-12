@@ -47,7 +47,7 @@ export SOURCEBOOK_NOTARY_PROFILE="sourcebook-notary"
 npm run release:macos:local
 ```
 
-The command builds the application, applies a Developer ID signature with Hardened Runtime and timestamping, creates the DMG, submits it to Apple notarization, staples the resulting ticket, validates the result, and writes `release/macos/SHA256SUMS.txt`.
+The command builds the platform-native Go service and application, applies a Developer ID signature with Hardened Runtime and timestamping, creates the DMG, submits it to Apple notarization, staples the resulting ticket, validates the result, and writes `release/macos/SHA256SUMS.txt`.
 
 Create or edit the matching GitHub Release manually, then upload the notarized `Sourcebook-Desktop.dmg`, its `SHA256SUMS.txt`, and any separately verified extension or Windows artifacts.
 
@@ -63,7 +63,7 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 
 ## Installation notes
 
-- The macOS DMG contains a standard **Applications** shortcut. Drag **Sourcebook Desktop** to it before ejecting the disk image.
+- The macOS DMG presents **Sourcebook Desktop** beside an **Applications** shortcut. Drag the app onto Applications, eject the disk image, then open it from Applications. The desktop helper appears in the macOS menu bar; its menu opens Sources, restarts the local service, or quits the helper.
 - Public macOS releases must be Developer ID signed and Apple notarized. Do not distribute an unsigned or unnotarized DMG as a public release.
 - Windows artifacts remain unsigned until a separate Windows code-signing certificate is configured.
 - The Chromium extension ZIP must be unzipped and loaded through `chrome://extensions` with Developer mode enabled.

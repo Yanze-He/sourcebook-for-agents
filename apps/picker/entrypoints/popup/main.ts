@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { PICKER_LANGUAGE_KEY, storedPickerLanguage } from "../../src/shared/i18n";
+import { PICKER_OVERLAY_POSITION_KEY, storedPickerOverlayPosition, type PickerOverlayPosition } from "../../src/shared/overlay-position";
 import { formatLocalDateTime } from "../../src/shared/datetime";
 import type { PickerMessage, PickerMessageResponse, PickerBook, PickerMode, PickerStatusResponse, RecentPickSummary } from "../../src/shared/types";
 import "./style.css";
@@ -18,6 +19,8 @@ const settingsPopover = document.querySelector<HTMLElement>("#settings-popover")
 const settingsHelp = document.querySelector<HTMLButtonElement>("#settings-help");
 const settingsFeedback = document.querySelector<HTMLButtonElement>("#settings-feedback");
 const settingsLanguage = document.querySelector<HTMLButtonElement>("#settings-language");
+const settingsPositionLabel = document.querySelector<HTMLElement>("#settings-position-label");
+const settingsPositionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-picker-position]"));
 const pickPage = document.querySelector<HTMLButtonElement>("#pick-page");
 const startPicking = document.querySelector<HTMLButtonElement>("#start-picking");
 const selectChatMessages = document.querySelector<HTMLButtonElement>("#select-chat-messages");
@@ -30,6 +33,7 @@ const bookMenu = document.querySelector<HTMLElement>("#book-menu");
 
 type Locale = "zh" | "en";
 let locale: Locale = storedPickerLanguage(window.localStorage.getItem(PICKER_LANGUAGE_KEY));
+let overlayPosition: PickerOverlayPosition = storedPickerOverlayPosition(window.localStorage.getItem(PICKER_OVERLAY_POSITION_KEY));
 const HELP_URL = "https://github.com/Yanze-He/sourcebook-for-agents#readme";
 const FEEDBACK_URL = "https://github.com/Yanze-He/sourcebook-for-agents/issues/new/choose";
 const DOWNLOAD_URL = "https://github.com/Yanze-He/sourcebook-for-agents/releases";
@@ -44,6 +48,11 @@ const copy = {
     settings: "设置",
     help: "帮助",
     feedback: "反馈",
+    overlayPosition: "浮层位置",
+    topRight: "右上",
+    bottomRight: "右下",
+    bottomLeft: "左下",
+    topLeft: "左上",
     switchLanguage: "English",
     helpLabel: "打开帮助文档",
     helpHint: "Picker 正在打开帮助文档。",
@@ -75,10 +84,10 @@ const copy = {
     cannotPick: "Picker 无法保存当前内容",
     unsupported: "Picker 不支持当前页面",
     connectionTitle: "Sourcebook Desktop 未连接",
-    connectionBody: "请先打开桌面应用，再使用 Picker 保存素材。",
-    refreshConnection: "刷新连接",
-    refreshingConnection: "正在刷新连接…",
-    refreshFailed: (time: string) => `${time} 刷新 · 连接失败`,
+    connectionBody: "请先启动 Sourcebook Desktop，等待它打开后，再点击“重新连接”。",
+    refreshConnection: "重新连接",
+    refreshingConnection: "正在重新连接…",
+    refreshFailed: (time: string) => `${time} 重新连接失败。请启动 Desktop 后再试。`,
     currentPageUnavailable: "Picker 无法在当前页面使用",
     enabled: "Picker 已开启",
     disabled: "Picker 已关闭",
@@ -106,6 +115,11 @@ const copy = {
     settings: "Settings",
     help: "Help",
     feedback: "Feedback",
+    overlayPosition: "Overlay position",
+    topRight: "Top right",
+    bottomRight: "Bottom right",
+    bottomLeft: "Bottom left",
+    topLeft: "Top left",
     switchLanguage: "中文",
     helpLabel: "Open help docs",
     helpHint: "Picker is opening help documentation.",
@@ -137,10 +151,10 @@ const copy = {
     cannotPick: "Picker could not save this content",
     unsupported: "Picker does not support this page",
     connectionTitle: "Sourcebook Desktop is not connected",
-    connectionBody: "Open the desktop app before using Picker to save sources.",
-    refreshConnection: "Refresh connection",
-    refreshingConnection: "Refreshing connection…",
-    refreshFailed: (time: string) => `${time} · Connection failed`,
+    connectionBody: "Start Sourcebook Desktop, wait for it to open, then click Reconnect.",
+    refreshConnection: "Reconnect",
+    refreshingConnection: "Reconnecting…",
+    refreshFailed: (time: string) => `${time} · Reconnect failed. Start Desktop, then try again.`,
     currentPageUnavailable: "Picker is not available on this page",
     enabled: "Picker is on",
     disabled: "Picker is off",
@@ -176,6 +190,7 @@ settingsMenu?.addEventListener("click", (event) => event.stopPropagation());
 settingsHelp?.addEventListener("click", () => void openHelp());
 settingsFeedback?.addEventListener("click", () => void openFeedback());
 settingsLanguage?.addEventListener("click", () => switchLanguage());
+settingsPositionButtons.forEach((button) => button.addEventListener("click", () => setOverlayPosition(storedPickerOverlayPosition(button.dataset.pickerPosition))));
 pickPage?.addEventListener("click", () => {
   if (showBlockedReason(pickPage)) return;
   void sendToActiveTab({ type: "PICK_PAGE" }, text.pageSaved);
@@ -306,6 +321,8 @@ function applyStaticText() {
   if (settingsHelp) settingsHelp.textContent = text.help;
   if (settingsFeedback) settingsFeedback.textContent = text.feedback;
   if (settingsLanguage) settingsLanguage.textContent = text.switchLanguage;
+  if (settingsPositionLabel) settingsPositionLabel.textContent = text.overlayPosition;
+  renderOverlayPosition();
   if (bookToggle) bookToggle.setAttribute("aria-label", text.currentBook);
   const bookLabel = document.querySelector<HTMLElement>(".book-switcher-label");
   if (bookLabel) bookLabel.textContent = text.defaultSaveTo;
@@ -346,7 +363,6 @@ function applyPickerStatus(response: PickerStatusResponse) {
     }
   }
   if (!response.localServiceConnected) {
-    closeSettings();
     closeBooks();
     return;
   }
@@ -383,7 +399,6 @@ function setUnavailableState(reportConnectionAttempt = false) {
   localServiceConnected = false;
   setConnectionGate(true);
   if (reportConnectionAttempt) setConnectionRefreshState("failed");
-  closeSettings();
   closeBooks();
 }
 
@@ -547,6 +562,30 @@ function switchLanguage() {
   closeSettings();
   applyStaticText();
   void refreshPickerStatus();
+}
+
+function setOverlayPosition(position: PickerOverlayPosition) {
+  overlayPosition = position;
+  window.localStorage.setItem(PICKER_OVERLAY_POSITION_KEY, position);
+  void browser.storage.local.set({ [PICKER_OVERLAY_POSITION_KEY]: position });
+  renderOverlayPosition();
+}
+
+function renderOverlayPosition() {
+  const labels: Record<PickerOverlayPosition, string> = {
+    "top-right": text.topRight,
+    "bottom-right": text.bottomRight,
+    "bottom-left": text.bottomLeft,
+    "top-left": text.topLeft,
+  };
+  settingsPositionButtons.forEach((button) => {
+    const position = storedPickerOverlayPosition(button.dataset.pickerPosition);
+    const active = position === overlayPosition;
+    const label = labels[position];
+    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  });
 }
 
 async function openDownload() {

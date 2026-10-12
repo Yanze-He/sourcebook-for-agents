@@ -1,18 +1,24 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 
 const directory = mkdtempSync(join(tmpdir(), "sourcebook-public-"));
 const port = 44000 + Math.floor(Math.random() * 1000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let service;
+const serviceBinary = process.env.SOURCEBOOK_SERVICE_BINARY;
+const sourcesRoot = fileURLToPath(new URL("../", import.meta.url));
+const serviceRoot = fileURLToPath(new URL("../../service-go/", import.meta.url));
+const compiledServiceBinary = join(directory, `sourcebook-service${process.platform === "win32" ? ".exe" : ""}`);
 
 before(async () => {
-  service = spawn(process.execPath, ["server/local-api.mjs"], {
-    cwd: new URL("../", import.meta.url),
+  if (!serviceBinary) execFileSync("go", ["build", "-o", compiledServiceBinary, "."], { cwd: serviceRoot });
+  service = spawn(serviceBinary || compiledServiceBinary, [], {
+    cwd: sourcesRoot,
     env: { ...process.env, API_PORT: String(port), SOURCEBOOK_DB_PATH: join(directory, "sourcebook.sqlite"), SOURCEBOOK_EXPORT_DIR: join(directory, "exports") },
   });
   const deadline = Date.now() + 5000;
@@ -200,11 +206,11 @@ test("Books isolate picks and transfer keeps the source portable", async () => {
 
   const archive = await fetch(`${baseUrl}/api/library/backup`);
   assert.equal(archive.ok, true);
-  const backup = Buffer.from(await archive.arrayBuffer()).toString("base64");
-  const restored = await post("/api/library/restore", { archive: backup, mode: "append" });
+  const backup = await archive.arrayBuffer();
+  const restored = await restoreBackup(backup, "append");
   assert.equal(restored.books.length, 4);
 
-  const replaced = await post("/api/library/restore", { archive: backup, mode: "replace" });
+  const replaced = await restoreBackup(backup, "replace");
   assert.equal(replaced.books.length, 2);
   assert.equal(replaced.activeBookId, "sourcebook");
   const restoredBrandItems = await get(`/api/sources?bookId=${created.book.id}`);
@@ -338,6 +344,16 @@ async function get(path) {
 
 async function post(path, value, method = "POST") {
   const response = await fetch(`${baseUrl}${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+  if (!response.ok) assert.fail(await response.text());
+  return response.json();
+}
+
+async function restoreBackup(archive, mode) {
+  const response = await fetch(`${baseUrl}/api/library/restore?mode=${encodeURIComponent(mode)}`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: archive,
+  });
   if (!response.ok) assert.fail(await response.text());
   return response.json();
 }

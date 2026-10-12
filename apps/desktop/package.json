@@ -9,5 +9,9 @@
     "build": "node scripts/verify-build.mjs",
     "package:macos": "node scripts/package-macos.mjs",
     "package:windows": "node scripts/package-windows.mjs"
+  },
+  "devDependencies": {
+    "appdmg": "^0.6.6",
+    "create-dmg": "^8.1.0"
   }
 }

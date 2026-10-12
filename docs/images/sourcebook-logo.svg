@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Sourcebook for Agents</title>
+  <rect width="128" height="128" rx="32" fill="#111827"/>
+  <rect x="36" y="24" width="72" height="72" rx="12" fill="#ffffff"/>
+  <rect x="23" y="35" width="17" height="11" rx="3" fill="#ffffff"/>
+  <rect x="23" y="54" width="17" height="11" rx="3" fill="#ffffff"/>
+  <rect x="23" y="73" width="17" height="11" rx="3" fill="#ffffff"/>
+  <rect x="50" y="92" width="14" height="12" rx="3" fill="#ffffff"/>
+  <rect x="80" y="92" width="14" height="12" rx="3" fill="#ffffff"/>
+  <path d="m64 52 10 10-10 10" fill="none" stroke="#111827" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+  <path d="M90 52v20" fill="none" stroke="#111827" stroke-linecap="round" stroke-width="8"/>
+</svg>

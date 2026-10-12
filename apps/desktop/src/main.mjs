@@ -1,35 +1,30 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sourcebookDataDirectory, sourcebookLibraryDirectory, sourcebookUrl } from "./paths.mjs";
+import { sourcebookUrl } from "./paths.mjs";
 
 const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = process.env.SOURCEBOOK_SOURCES_ROOT || join(repositoryRoot, "apps", "sources");
-const serviceEntry = process.env.SOURCEBOOK_SERVICE_ENTRY || join(sourcesRoot, "server", "local-api.mjs");
+const serviceRoot = process.env.SOURCEBOOK_SERVICE_ROOT || join(repositoryRoot, "apps", "service-go");
 const sourcesBuild = process.env.SOURCEBOOK_SOURCES_WEB_DIR || join(sourcesRoot, "dist");
 const port = Number(process.env.SOURCEBOOK_PORT || 4177);
 const url = sourcebookUrl(port);
-const dataDirectory = sourcebookDataDirectory();
-const libraryDirectory = sourcebookLibraryDirectory();
+const serviceBinary = process.env.SOURCEBOOK_SERVICE_BINARY || join(serviceRoot, ".dev", process.platform === "win32" ? "sourcebook-service.exe" : "sourcebook-service");
 
-if (!existsSync(serviceEntry)) throw new Error(`Sourcebook service is missing: ${serviceEntry}`);
+if (!existsSync(join(serviceRoot, "go.mod"))) throw new Error(`Sourcebook Go service is missing: ${serviceRoot}`);
 if (!existsSync(sourcesBuild)) throw new Error("Sourcebook Sources is not built. Run npm run build before starting the Desktop.");
 
-mkdirSync(dataDirectory, { recursive: true });
 const active = await healthCheck(url);
 if (active.status === "incompatible") {
   throw new Error(`端口 ${port} 已被其他本地服务占用。请关闭该服务，或使用 SOURCEBOOK_PORT 指定另一个端口。`);
 }
-const child = active.status === "ready" ? null : spawn(process.execPath, [serviceEntry], {
+if (active.status !== "ready" && !process.env.SOURCEBOOK_SERVICE_BINARY) buildService();
+const child = active.status === "ready" ? null : spawn(serviceBinary, [], {
   env: {
     ...process.env,
     API_PORT: String(port),
-    SOURCEBOOK_DB_PATH: join(dataDirectory, "sourcebook.sqlite"),
-    SOURCEBOOK_LIBRARY_DIR: libraryDirectory,
-    SOURCEBOOK_LIBRARY_CONFIG: join(dataDirectory, "library-location.json"),
-    SOURCEBOOK_EXPORT_DIR: join(dataDirectory, "exports"),
     SOURCEBOOK_SOURCES_WEB_DIR: sourcesBuild,
   },
   stdio: "inherit",
@@ -72,4 +67,10 @@ function openBrowser(target) {
   const args = process.platform === "win32" ? ["/c", "start", "", target] : [target];
   const browser = spawn(command, args, { detached: true, stdio: "ignore" });
   browser.unref();
+}
+
+function buildService() {
+  mkdirSync(dirname(serviceBinary), { recursive: true });
+  const result = spawnSync("go", ["build", "-trimpath", "-o", serviceBinary, "."], { cwd: serviceRoot, stdio: "inherit" });
+  if (result.status !== 0) throw new Error("Sourcebook Go service could not be built.");
 }

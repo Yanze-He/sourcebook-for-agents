@@ -51,6 +51,7 @@ button:disabled:hover, button[aria-disabled="true"]:hover { background: #efeee9;
   flex-direction: column;
   overflow: visible;
   padding: 14px 14px 10px;
+  position: relative;
   width: 320px;
 }
 
@@ -64,7 +65,7 @@ button:disabled:hover, button[aria-disabled="true"]:hover { background: #efeee9;
 .picker-wordmark { color: var(--ink); font-family: "SF Pro Rounded", "SF Pro Display", ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 760; letter-spacing: -0.02em; line-height: 1; white-space: nowrap; }
 .picker-wordmark span { color: var(--muted); font-size: 8px; font-weight: 720; letter-spacing: 0.07em; margin-left: 4px; text-transform: uppercase; vertical-align: middle; }
 
-.top-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 4px; }
+.top-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 4px; margin-right: 33px; }
 .toggle-button { background: var(--ink); border-color: var(--ink); border-radius: 6px; color: #ffffff; font-size: 10px; height: 29px; justify-content: flex-start; min-height: 29px; min-width: 94px; padding: 0 31px 0 9px; position: relative; }
 .toggle-button::after { background: #ffffff; border-radius: 999px; content: ""; height: 15px; position: absolute; right: 7px; top: 6px; transition: left 150ms ease, right 150ms ease; width: 15px; }
 .toggle-button:hover, .toggle-button:focus-visible { background: #2b2a27; border-color: #2b2a27; color: #ffffff; }
@@ -78,11 +79,19 @@ button:disabled:hover, button[aria-disabled="true"]:hover { background: #efeee9;
 .icon-button:hover, .icon-button:focus-visible { background: var(--surface-hover); border-color: transparent; }
 .icon-button svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 16px; }
 .settings-menu { position: relative; }
-.settings-popover { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); display: grid; gap: 2px; padding: 5px; position: absolute; right: 0; top: calc(100% + 7px); width: 154px; z-index: 30; }
+.settings-menu--persistent { position: absolute; right: 14px; top: 14px; z-index: 40; }
+.settings-popover { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); display: grid; gap: 2px; padding: 5px; position: absolute; right: 0; top: calc(100% + 7px); width: 172px; z-index: 30; }
 .settings-popover[hidden] { display: none; }
 .settings-popover button { align-items: center; background: transparent; border: 0; border-radius: 6px; display: flex; font-size: 12px; font-weight: 650; gap: 8px; height: 32px; justify-content: flex-start; min-height: 32px; padding: 0 8px; text-align: left; width: 100%; }
 .settings-popover button:hover, .settings-popover button:focus-visible { background: var(--surface-hover); box-shadow: none; }
 .settings-popover button svg { fill: none; flex: 0 0 auto; height: 15px; stroke: var(--muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 15px; }
+.settings-position { border-top: 1px solid var(--line); display: grid; gap: 6px; margin-top: 3px; padding: 8px 3px 3px; }
+.settings-position-label { color: var(--muted); font-size: 11px; font-weight: 700; line-height: 1; padding: 0 5px; }
+.settings-position-options { display: grid; gap: 3px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.settings-position-options button { align-content: center; display: grid; height: 29px; justify-content: center; min-height: 29px; min-width: 0; padding: 0; place-items: center; }
+.settings-position-options button svg { height: 16px; stroke: currentColor; width: 16px; }
+.settings-position-options button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.settings-position-options button[aria-pressed="true"] svg { stroke: currentColor; }
 
 .book-switcher { display: grid; gap: 6px; min-width: 0; }
 .book-switcher-label { color: var(--muted); font-size: 11px; font-weight: 720; line-height: 1; margin: 0; }
@@ -133,7 +142,7 @@ button[aria-disabled="true"] .button-icon { color: #999790; }
 .sources-icon svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .picker-status { color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1.3; margin: -2px 0 0; min-height: 13px; text-align: center; }
 
-.connection-gate { align-items: center; background: var(--background); display: grid; gap: 14px; justify-items: center; min-height: 274px; padding: 30px 18px; text-align: center; }
+.connection-gate { align-items: center; background: var(--background); display: grid; gap: 14px; justify-items: center; min-height: 274px; padding: 52px 18px 30px; text-align: center; }
 .connection-mark { align-items: center; display: inline-flex; height: 40px; justify-content: center; width: 40px; }
 .connection-mark img { display: block; height: 100%; object-fit: contain; width: 100%; }
 .connection-gate > div:nth-child(2) { display: grid; gap: 6px; }

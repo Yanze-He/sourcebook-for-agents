@@ -1,5 +1,9 @@
 # Sourcebook for Agents
 
+<p align="center">
+  <img src="docs/images/sourcebook-logo.svg" alt="Sourcebook for Agents" width="112" />
+</p>
+
 > A local-first context library for the work you want to carry from the web into your next agent task.
 
 <p align="center">
@@ -56,7 +60,7 @@ For the data model and runtime boundary, read the [architecture guide](docs/arch
 
 ### 1. Run Sourcebook from source
 
-**Requirements:** Node.js 22.18+ and npm.
+**Requirements:** Node.js 22.18+, npm, and Go 1.24+.
 
 ```bash
 git clone https://github.com/Yanze-He/sourcebook-for-agents.git
@@ -122,7 +126,7 @@ Not included today:
 | --- | --- | --- |
 | Pick | `apps/picker` | Chromium extension, page and chat Pick logic, Picker UX |
 | Sources | `apps/sources/src` | Source list, previews, selection, and local Sources UX |
-| Pack | `apps/sources/server` | Local API, media cache, Book operations, and Pack preparation |
+| Pack | `apps/service-go` | Local API, media cache, Book operations, and Pack preparation |
 | Desktop | `apps/desktop` | Local startup, browser launch, data directories, and installers |
 
 ## Development

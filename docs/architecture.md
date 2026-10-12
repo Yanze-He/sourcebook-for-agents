@@ -13,7 +13,7 @@ The public-ready local loop is **Pick -> Sources -> Pack**.
 - **Picker** (`apps/picker`) is the Chrome/Chromium extension. It recognizes selectable webpage material, creates versioned Pick payloads, and sends them to Sourcebook Desktop through the local connection.
 - **Sources** (`apps/sources`) is the web interface for browsing, editing, selecting, importing, and preparing Sources.
 - **Desktop** (`apps/desktop`) starts the local service, owns the library location, opens Sources in the default browser, and packages the macOS and Windows application.
-- **Local service** (`apps/sources/server`) owns Book databases, file copies, backups, imports, transfer operations, and Pack assembly.
+- **Local service** (`apps/service-go`) owns Book databases, file copies, backups, imports, transfer operations, and Pack assembly.
 
 ## Local Storage
 

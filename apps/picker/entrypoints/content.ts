@@ -4,10 +4,12 @@ import { chatMessageElement, extractChatMessageFromElement, extractVisibleChat }
 import { detectChatProvider, providerLabel } from "../src/chat/recognizer";
 import { buildConversationPick, transcriptFromMessages } from "../src/chat/transcript";
 import { PICKER_LANGUAGE_KEY, storedPickerLanguage, type UiLanguage } from "../src/shared/i18n";
+import { DEFAULT_PICKER_OVERLAY_POSITION, PICKER_OVERLAY_POSITION_KEY, storedPickerOverlayPosition, type PickerOverlayPosition } from "../src/shared/overlay-position";
 import { collectPageMetadata, getFaviconUrl, getPageTitle, getSourceOrigin } from "../src/shared/page";
 import { cssPath, isEditableTarget, isSensitivePage, quoteWithContext, textPositionInBody } from "../src/shared/selector";
 import { truncatePickTitle } from "../src/shared/title";
 import type { PickerMessage, PickerMessageResponse, PickResponse, ChatMessageCandidate, ChatProvider, PickerMode, PickPayload } from "../src/shared/types";
+import { tldrawImageAtPoint } from "../src/canvas/tldraw";
 
 type RectLike = Pick<DOMRect, "top" | "left" | "width" | "height">;
 type HoverPickTarget =
@@ -159,6 +161,7 @@ let text = copy[locale];
 
 export default defineContentScript({
   matches: ["http://*/*", "https://*/*"],
+  excludeMatches: ["http://127.0.0.1/*", "http://localhost/*"],
   runAt: "document_idle",
   main() {
     if (isSensitivePage(location.href)) return;
@@ -179,6 +182,7 @@ class WebPicker {
   private taskStack = document.createElement("div");
   private overlayLayer = document.createElement("div");
   private lastHoverTarget: HTMLImageElement | HTMLVideoElement | HTMLAudioElement | null = null;
+  private hoverPosition: PickerOverlayPosition = DEFAULT_PICKER_OVERLAY_POSITION;
   private lastChatTarget: ChatMessageCandidate | null = null;
   private lastPick: PickResponse | null = null;
   private lastAttemptPayload: PickPayload | null = null;
@@ -270,6 +274,10 @@ class WebPicker {
         locale = storedPickerLanguage(changes[PICKER_LANGUAGE_KEY].newValue);
         text = copy[locale];
       }
+      if (changes[PICKER_OVERLAY_POSITION_KEY]) {
+        this.hoverPosition = storedPickerOverlayPosition(changes[PICKER_OVERLAY_POSITION_KEY].newValue);
+        this.repositionHoverButton();
+      }
       if (changes[PICKER_ENABLED_KEY]) this.setPickerEnabled(changes[PICKER_ENABLED_KEY].newValue !== false);
     });
 
@@ -291,9 +299,10 @@ class WebPicker {
   }
 
   private async loadPickerEnabled() {
-    const stored = await browser.storage.local.get([PICKER_ENABLED_KEY, PICKER_LANGUAGE_KEY]);
+    const stored = await browser.storage.local.get([PICKER_ENABLED_KEY, PICKER_LANGUAGE_KEY, PICKER_OVERLAY_POSITION_KEY]);
     locale = storedPickerLanguage(stored[PICKER_LANGUAGE_KEY]);
     text = copy[locale];
+    this.hoverPosition = storedPickerOverlayPosition(stored[PICKER_OVERLAY_POSITION_KEY]);
     this.setPickerEnabled(stored[PICKER_ENABLED_KEY] !== false);
   }
 
@@ -368,7 +377,7 @@ class WebPicker {
     }
 
     if (this.mode === "pick_mode") {
-      const pickTarget = this.pickTargetFromElement(target);
+      const pickTarget = this.pickTargetFromElement(target, event);
       if (pickTarget) {
         this.clearHoverIntent();
         this.hideHoverButton();
@@ -384,6 +393,12 @@ class WebPicker {
     const image = target?.closest("img") || this.linkedImageFromElement(target);
     if (image && this.isPickableImage(image)) {
       this.scheduleHoverAffordance({ kind: "image", element: image });
+      return;
+    }
+
+    const canvasImage = tldrawImageAtPoint(target, { x: event.clientX, y: event.clientY });
+    if (canvasImage && this.isPickableImage(canvasImage)) {
+      this.scheduleHoverAffordance({ kind: "image", element: canvasImage });
       return;
     }
 
@@ -422,7 +437,7 @@ class WebPicker {
       return;
     }
 
-    const pickTarget = this.pickTargetFromElement(target);
+    const pickTarget = this.pickTargetFromElement(target, event);
     if (pickTarget) {
       event.preventDefault();
       event.stopPropagation();
@@ -439,7 +454,9 @@ class WebPicker {
     if (!target) return;
 
     const shouldBlock =
-      this.mode === "chat_select_mode" ? Boolean(this.chatTargetFromElement(target)) : Boolean(this.pickTargetFromElement(target));
+      this.mode === "chat_select_mode"
+        ? Boolean(this.chatTargetFromElement(target))
+        : Boolean(this.pickTargetFromElement(target, event));
     if (!shouldBlock) return;
 
     event.preventDefault();
@@ -503,9 +520,14 @@ class WebPicker {
     return event.composedPath().includes(this.host);
   }
 
-  private pickTargetFromElement(target: Element): HoverPickTarget | null {
+  private pickTargetFromElement(target: Element, event?: Pick<MouseEvent, "clientX" | "clientY">): HoverPickTarget | null {
     const image = target.closest("img") || this.linkedImageFromElement(target);
     if (image && this.isPickableImage(image)) return { kind: "image", element: image };
+
+    if (event) {
+      const canvasImage = tldrawImageAtPoint(target, { x: event.clientX, y: event.clientY });
+      if (canvasImage && this.isPickableImage(canvasImage)) return { kind: "image", element: canvasImage };
+    }
 
     const video = target.closest("video");
     if (video && this.isPickableVideo(video)) return { kind: "video", element: video };
@@ -529,9 +551,19 @@ class WebPicker {
     this.hoverButton.dataset.kind = kind;
     this.setPickButtonContent(this.hoverButton, kind === "image" ? text.pickImage : kind === "video" ? text.pickVideo : text.pickAudio);
     this.hoverButton.hidden = false;
-    const buttonWidth = this.hoverButton.getBoundingClientRect().width;
-    this.hoverButton.style.top = `${Math.max(inset, Math.min(window.innerHeight - 32 - inset, rect.top + inset))}px`;
-    this.hoverButton.style.left = `${Math.max(inset, Math.min(window.innerWidth - buttonWidth - inset, rect.right - buttonWidth - inset))}px`;
+    const buttonRect = this.hoverButton.getBoundingClientRect();
+    const bottom = this.hoverPosition.startsWith("bottom");
+    const left = this.hoverPosition.endsWith("left");
+    const top = bottom ? rect.bottom - buttonRect.height - inset : rect.top + inset;
+    const offsetLeft = left ? rect.left + inset : rect.right - buttonRect.width - inset;
+    this.hoverButton.style.top = `${Math.max(inset, Math.min(window.innerHeight - buttonRect.height - inset, top))}px`;
+    this.hoverButton.style.left = `${Math.max(inset, Math.min(window.innerWidth - buttonRect.width - inset, offsetLeft))}px`;
+  }
+
+  private repositionHoverButton() {
+    const kind = this.hoverButton.dataset.kind;
+    if (this.hoverButton.hidden || !this.lastHoverTarget || (kind !== "image" && kind !== "video" && kind !== "audio")) return;
+    this.showHoverButton(this.lastHoverTarget, kind);
   }
 
   private hideHoverButton() {
@@ -1443,7 +1475,7 @@ class WebPicker {
     view.type = "button";
     view.className = "pick-task-view";
     view.textContent = text.view;
-    view.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES" } satisfies PickerMessage));
+    view.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES", bookId: task.sourceBookId || currentBookId } satisfies PickerMessage));
     task.element.replaceChildren(this.taskPreview(task.payload), details, view, chooser);
   }
 
@@ -1643,7 +1675,7 @@ class WebPicker {
       const open = document.createElement("button");
       open.type = "button";
       open.textContent = text.openSources;
-      open.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES" } satisfies PickerMessage));
+      open.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES", bookId: this.lastPick?.bookId } satisfies PickerMessage));
 
       toast.element.append(note, open);
     }

@@ -1,41 +1,54 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import appdmg from "appdmg";
 
 if (process.platform !== "darwin") throw new Error("macOS packages must be built on macOS.");
 
 const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
+const serviceRoot = join(repositoryRoot, "apps", "service-go");
 const outputRoot = join(repositoryRoot, "release", "macos");
 const appRoot = join(outputRoot, "Sourcebook Desktop.app");
-const dmgRoot = join(outputRoot, "dmg-root");
 const contents = join(appRoot, "Contents");
 const resources = join(contents, "Resources");
 const signingIdentity = process.env.MACOS_SIGNING_IDENTITY?.trim();
+const appIconSource = join(desktopRoot, "installer", "sourcebook-app-icon.png");
+const installerIconSource = join(desktopRoot, "installer", "sourcebook-installer-icon.png");
+const menuBarHostSource = join(desktopRoot, "installer", "SourcebookMenuBar.m");
+const fileIconSetterSource = join(desktopRoot, "installer", "SetFileIcon.m");
 
-for (const path of [join(sourcesRoot, "dist", "index.html"), join(sourcesRoot, "server", "local-api.mjs")]) {
+for (const path of [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource]) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
 }
 
-rmSync(outputRoot, { force: true, recursive: true });
+mkdirSync(outputRoot, { recursive: true });
+for (const output of [
+  "Sourcebook Desktop.app",
+  "dmg-staging",
+  "Sourcebook Desktop.dmg",
+  "Sourcebook-Desktop.dmg",
+  "SourcebookDesktop.iconset",
+  "SourcebookDesktop-icon-render",
+  "SourcebookInstallerVolume.icns",
+  "SourcebookInstallerVolume.iconset",
+  "SourcebookInstallerVolume-icon-render",
+  "set-sourcebook-file-icon",
+]) {
+  rmSync(join(outputRoot, output), { force: true, recursive: true });
+}
 mkdirSync(join(contents, "MacOS"), { recursive: true });
 mkdirSync(resources, { recursive: true });
 
-copyFileSync(process.execPath, join(contents, "MacOS", "node"));
-chmodSync(join(contents, "MacOS", "node"), 0o755);
-cpSync(join(desktopRoot, "src"), join(resources, "desktop"), { recursive: true });
-cpSync(join(sourcesRoot, "server"), join(resources, "service"), { recursive: true });
 cpSync(join(sourcesRoot, "dist"), join(resources, "sources"), { recursive: true });
+buildService(join(contents, "MacOS", "sourcebook-service"));
+createIcon(appIconSource, join(resources, "SourcebookDesktop.icns"), "SourcebookDesktop");
+const installerVolumeIcon = join(outputRoot, "SourcebookInstallerVolume.icns");
+createIcon(installerIconSource, installerVolumeIcon, "SourcebookInstallerVolume");
 
-writeFileSync(join(contents, "MacOS", "Sourcebook Desktop"), `#!/bin/sh
-ROOT="$(cd "$(dirname "$0")/../Resources" && pwd)"
-export SOURCEBOOK_SERVICE_ENTRY="$ROOT/service/local-api.mjs"
-export SOURCEBOOK_SOURCES_WEB_DIR="$ROOT/sources"
-exec "$(dirname "$0")/node" "$ROOT/desktop/main.mjs" "$@"
-`);
-chmodSync(join(contents, "MacOS", "Sourcebook Desktop"), 0o755);
+createMenuBarHost(join(contents, "MacOS", "Sourcebook Desktop"));
 writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -43,9 +56,10 @@ writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8
   <key>CFBundleExecutable</key><string>Sourcebook Desktop</string>
   <key>CFBundleIdentifier</key><string>com.sourcebookforagents.desktop</string>
   <key>CFBundleName</key><string>Sourcebook Desktop</string>
+  <key>CFBundleIconFile</key><string>SourcebookDesktop.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>LSBackgroundOnly</key><true/>
+  <key>NSAppleEventsUsageDescription</key><string>Sourcebook uses your browser only to return to an existing local Sourcebook page.</string>
 </dict></plist>`);
 
 if (signingIdentity) {
@@ -54,10 +68,97 @@ if (signingIdentity) {
 }
 
 const dmgPath = join(outputRoot, "Sourcebook-Desktop.dmg");
-mkdirSync(dmgRoot, { recursive: true });
-cpSync(appRoot, join(dmgRoot, "Sourcebook Desktop.app"), { recursive: true });
-symlinkSync("/Applications", join(dmgRoot, "Applications"));
-writeFileSync(join(dmgRoot, "Install Sourcebook Desktop.txt"), `1. Drag “Sourcebook Desktop” onto the “Applications” shortcut.\n2. Eject this disk image.\n3. Open Sourcebook Desktop from Applications.\n`);
-execFileSync("hdiutil", ["create", "-volname", "Sourcebook Desktop", "-srcfolder", dmgRoot, "-ov", "-format", "UDZO", dmgPath]);
-rmSync(dmgRoot, { force: true, recursive: true });
+await createDmg(installerVolumeIcon);
+setDmgFileIcon(installerVolumeIcon, dmgPath);
+rmSync(installerVolumeIcon, { force: true });
 console.log(`Created ${dmgPath}`);
+
+function buildService(destination) {
+  console.log(`Building the native Go service for macOS ${process.arch}…`);
+  execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w", "-o", destination, "."], {
+    cwd: serviceRoot,
+    env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
+    stdio: "inherit",
+  });
+  chmodSync(destination, 0o755);
+}
+
+function createIcon(source, destination, name) {
+  const iconset = join(outputRoot, `${name}.iconset`);
+  const renderedIconRoot = join(outputRoot, `${name}-icon-render`);
+  mkdirSync(iconset, { recursive: true });
+  mkdirSync(renderedIconRoot, { recursive: true });
+  const renderedIcon = join(renderedIconRoot, `${name}.png`);
+  if (source.endsWith(".png")) {
+    copyFileSync(source, renderedIcon);
+  } else {
+    try {
+      execFileSync("sips", ["-s", "format", "png", "-Z", "1024", source, "--out", renderedIcon], { stdio: "ignore" });
+    } catch {
+      execFileSync("qlmanage", ["-t", "-s", "1024", "-o", renderedIconRoot, source], { stdio: "ignore" });
+      const quickLookIcon = join(renderedIconRoot, `${basename(source)}.png`);
+      if (existsSync(quickLookIcon)) renameSync(quickLookIcon, renderedIcon);
+    }
+  }
+  if (!existsSync(renderedIcon)) throw new Error("macOS could not render the application icon.");
+
+  for (const [file, size] of [
+    ["icon_16x16.png", 16], ["icon_16x16@2x.png", 32],
+    ["icon_32x32.png", 32], ["icon_32x32@2x.png", 64],
+    ["icon_128x128.png", 128], ["icon_128x128@2x.png", 256],
+    ["icon_256x256.png", 256], ["icon_256x256@2x.png", 512],
+    ["icon_512x512.png", 512], ["icon_512x512@2x.png", 1024],
+  ]) {
+    execFileSync("sips", ["-z", String(size), String(size), renderedIcon, "--out", join(iconset, file)], { stdio: "ignore" });
+  }
+  execFileSync("iconutil", ["-c", "icns", iconset, "-o", destination], { stdio: "inherit" });
+  rmSync(iconset, { force: true, recursive: true });
+  rmSync(renderedIconRoot, { force: true, recursive: true });
+}
+
+function createMenuBarHost(destination) {
+  execFileSync("xcrun", ["clang", "-fobjc-arc", "-framework", "Cocoa", menuBarHostSource, "-o", destination], { stdio: "inherit" });
+  chmodSync(destination, 0o755);
+}
+
+function setDmgFileIcon(icon, target) {
+  const setter = join(outputRoot, "set-sourcebook-file-icon");
+  execFileSync("xcrun", ["clang", "-fobjc-arc", "-framework", "Cocoa", fileIconSetterSource, "-o", setter], { stdio: "inherit" });
+  execFileSync(setter, [icon, target], { stdio: "inherit" });
+  rmSync(setter, { force: true });
+}
+
+async function createDmg(installerVolumeIcon) {
+  const generatedDmg = join(outputRoot, "Sourcebook Desktop.dmg");
+  const stagingRoot = join(outputRoot, "dmg-staging");
+  const stagingApp = join(stagingRoot, "Sourcebook Desktop.app");
+  const background = join(desktopRoot, "node_modules", "create-dmg", "assets", "dmg-background.png");
+  if (!existsSync(background)) throw new Error("Missing create-dmg background asset. Run npm install in apps/desktop before packaging.");
+  mkdirSync(stagingRoot, { recursive: true });
+  cpSync(appRoot, stagingApp, { recursive: true });
+  console.log("Creating DMG…");
+  await new Promise((resolve, reject) => {
+    const builder = appdmg({
+      target: generatedDmg,
+      basepath: repositoryRoot,
+      specification: {
+        title: "Sourcebook Desktop",
+        icon: installerVolumeIcon,
+        background,
+        "icon-size": 160,
+        format: "ULFO",
+        filesystem: "APFS",
+        window: { size: { width: 660, height: 400 } },
+        contents: [
+          { x: 180, y: 170, type: "file", path: stagingApp },
+          { x: 480, y: 170, type: "link", path: "/Applications" },
+        ],
+      },
+    });
+    builder.on("finish", resolve);
+    builder.on("error", reject);
+  });
+  rmSync(stagingRoot, { force: true, recursive: true });
+  if (!existsSync(generatedDmg)) throw new Error("create-dmg did not produce the expected DMG.");
+  renameSync(generatedDmg, dmgPath);
+}
