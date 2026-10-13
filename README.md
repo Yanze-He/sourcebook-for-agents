@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/brand/sourcebook-flat.svg" alt="Sourcebook for Agents" width="96" />
+  <img src="docs/images/sourcebook-hero-value-v7.png" alt="From your sources to any agent: pick web material, pack selected context, and continue with the agent you choose." width="100%" />
 </p>
 
 # Sourcebook for Agents
@@ -11,10 +11,6 @@ For researchers, designers, creators and people working across AI tools:
 - **Research & planning:** Bring references and useful AI answers together for the next analysis or brief.
 - **Design & creation:** Keep visual references, posts and project files in one Book.
 - **Switching agents:** Carry selected context into the next task without repeating the whole backstory.
-
-<p align="center">
-  <img src="docs/images/sourcebook-hero-value-v6.png" alt="From your sources to any agent: pick web material, pack selected context, and continue with the agent you choose." width="100%" />
-</p>
 
 ## Pick
 
