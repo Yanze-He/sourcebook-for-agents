@@ -324,7 +324,7 @@ async function fetchPortableImage(url: string, sourceUrl: string, failOnAvif = f
       response = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", headers: { accept: "image/webp,image/apng,image/*;q=0.8,*/*;q=0.5" } });
     }
     if (!response.ok) return undefined;
-    const mime = response.headers.get("content-type")?.split(";")[0].toLowerCase() || "image/jpeg";
+    const mime = response.headers.get("content-type")?.split(";")[0]?.toLowerCase() || "image/jpeg";
     // Video URLs occasionally leak into a post's candidate list. Do not read an
     // entire movie into memory only to discover it cannot be used as a cover.
     if (!mime.startsWith("image/")) return undefined;

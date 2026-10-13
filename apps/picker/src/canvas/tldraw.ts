@@ -48,6 +48,7 @@ export function tldrawImageAtPoint(target: Element, point: TldrawPoint): HTMLIma
   const images = cachedImages(root, layer);
   for (let index = images.length - 1; index >= 0; index -= 1) {
     const image = images[index];
+    if (!image) continue;
     if (!image.isConnected || !(image.currentSrc || image.src)) continue;
     if (isPointWithinRect(point, image.getBoundingClientRect())) return image;
   }

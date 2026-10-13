@@ -152,8 +152,12 @@ function serializedXiaohongshuVideoCoverCandidates(root: Document, href: string)
   for (const script of Array.from(root.querySelectorAll<HTMLScriptElement>("script"))) {
     const source = script.textContent || "";
     if (!/video|firstFrame|videoCover|videoInfo|playUrl/i.test(source)) continue;
-    for (const match of source.matchAll(directCover)) values.push(decodeSerializedUrl(match[1]));
-    for (const match of source.matchAll(nestedCover)) values.push(decodeSerializedUrl(match[1]));
+    for (const match of source.matchAll(directCover)) {
+      if (match[1]) values.push(decodeSerializedUrl(match[1]));
+    }
+    for (const match of source.matchAll(nestedCover)) {
+      if (match[1]) values.push(decodeSerializedUrl(match[1]));
+    }
   }
   return unique(values.map((value) => absoluteUrl(value, href)).filter(isUsableImageUrl));
 }

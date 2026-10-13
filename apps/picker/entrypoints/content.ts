@@ -1429,14 +1429,15 @@ class WebPicker {
       return node;
     };
     const body = create("g", { fill: "currentColor" });
-    for (const [x, y, width, height, rx] of [
+    const rects: Array<[string, string, string, string, string]> = [
       ["36", "60", "42", "28", "5"],
       ["36", "105", "42", "28", "5"],
       ["36", "150", "42", "28", "5"],
       ["66", "36", "166", "166", "15"],
       ["94", "190", "36", "34", "6"],
       ["168", "190", "36", "34", "6"],
-    ]) body.append(create("rect", { x, y, width, height, rx }));
+    ];
+    for (const [x, y, width, height, rx] of rects) body.append(create("rect", { x, y, width, height, rx }));
     icon.append(
       body,
       create("path", {
