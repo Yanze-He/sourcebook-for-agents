@@ -64,9 +64,11 @@ const copy = {
     startContinuousPick: "Pick 媒体",
     done: "完成",
     pickPage: "Pick 网页",
+    pickPost: "Pick 帖子",
     selectMessages: "Pick 对话",
     cancel: "取消",
-    pickPageTip: "保存当前网页的标题、URL、来源信息和缩略图。",
+    pickPageTip: "保存当前网页的标题、URL、来源信息和描述摘要。",
+    pickPostTip: "保存当前帖子的正文、作者、发布时间和媒体信息。",
     pickMediaTip: "连续选择图片、视频、链接等媒体资源，确认后保存。",
     pickChatTip: "选择多条 Agent 对话，合并保存为一个上下文片段。",
     mediaSupportHelp: "支持 PNG、JPEG、GIF、WebP 图片；视频和音频仅保存为链接。",
@@ -75,6 +77,7 @@ const copy = {
     recentLimit: "只显示最近 5 条",
     noRecent: "还没有最近内容。",
     pageSaved: "Picker 已保存当前网页",
+    postSaved: "Picker 已保存当前帖子",
     chatSaved: "Picker 已保存所选对话",
     mediaSaved: "Picker 已保存所选媒体",
     selectMessagesPrompt: "Picker 已进入对话选择模式",
@@ -131,9 +134,11 @@ const copy = {
     startContinuousPick: "Pick media",
     done: "Done",
     pickPage: "Pick page",
+    pickPost: "Pick post",
     selectMessages: "Pick chat",
     cancel: "Cancel",
-    pickPageTip: "Save this page title, URL, source information, and preview image.",
+    pickPageTip: "Save this page title, URL, source information, and summary.",
+    pickPostTip: "Save the current post text, author, date, and media details.",
     pickMediaTip: "Select images, videos, and links in sequence, then confirm to save.",
     pickChatTip: "Select multiple agent messages and save them as one context fragment.",
     mediaSupportHelp: "Supports PNG, JPEG, GIF, and WebP images. Video and audio are saved as links only.",
@@ -142,6 +147,7 @@ const copy = {
     recentLimit: "Latest 5 only",
     noRecent: "No recent picks yet.",
     pageSaved: "Picker saved this page",
+    postSaved: "Picker saved this post",
     chatSaved: "Picker saved the selected chat",
     mediaSaved: "Picker saved the selected media",
     selectMessagesPrompt: "Picker is ready to select chat messages",
@@ -181,6 +187,7 @@ let localServiceConnected = false;
 let pickerAttentionTimer: number | undefined;
 let lastConnectionRefresh: Date | undefined;
 let connectionRefreshFailed = false;
+let currentPostPlatform: PickerStatusResponse["postPlatform"];
 
 applyStaticText();
 void browser.storage.local.set({ [PICKER_LANGUAGE_KEY]: locale });
@@ -193,7 +200,7 @@ settingsLanguage?.addEventListener("click", () => switchLanguage());
 settingsPositionButtons.forEach((button) => button.addEventListener("click", () => setOverlayPosition(storedPickerOverlayPosition(button.dataset.pickerPosition))));
 pickPage?.addEventListener("click", () => {
   if (showBlockedReason(pickPage)) return;
-  void sendToActiveTab({ type: "PICK_PAGE" }, text.pageSaved);
+  void sendToActiveTab({ type: "PICK_PAGE" }, currentPostPlatform ? text.postSaved : text.pageSaved);
 });
 startPicking?.addEventListener("click", () => {
   if (showBlockedReason(startPicking)) return;
@@ -352,6 +359,7 @@ function applyPickerStatus(response: PickerStatusResponse) {
   currentMode = response.mode;
   isEnabled = response.enabled;
   localServiceConnected = response.localServiceConnected;
+  currentPostPlatform = response.postPlatform;
   setConnectionGate(!response.localServiceConnected);
   if (response.localServiceConnected) {
     connectionRefreshFailed = false;
@@ -382,7 +390,10 @@ function applyPickerStatus(response: PickerStatusResponse) {
 
   const pageActionEnabled = response.enabled && response.pageAvailable;
   const pageDisabledReason = disabledReasonForPageAction(response);
-  setButtonState(pickPage, pageActionEnabled, pageDisabledReason, text.pickPageTip);
+  const pageActionLabel = response.postPlatform ? text.pickPost : text.pickPage;
+  const pageActionTip = response.postPlatform ? text.pickPostTip : text.pickPageTip;
+  if (pickPage) setActionLabel(pickPage, pageActionLabel);
+  setButtonState(pickPage, pageActionEnabled, pageDisabledReason, pageActionTip);
   setButtonState(startPicking, pageActionEnabled, pageDisabledReason, text.mediaSupportHelp);
 
   const chatEnabled = Boolean(pageActionEnabled && response.chatProvider);
@@ -641,7 +652,7 @@ function createRecentFallback(modality: RecentPickSummary["modality"]): HTMLElem
 }
 
 function recentFallbackLabel(modality: RecentPickSummary["modality"]): string {
-  return ({ image: "IMG", video: "VID", audio: "AUD", conversation: "CHAT", link: "LINK", text: "TXT" } as const)[modality];
+  return ({ image: "IMG", video: "VID", audio: "AUD", conversation: "CHAT", link: "LINK", post: "POST", text: "TXT" } as const)[modality];
 }
 
 function hostLabel(origin: string): string {

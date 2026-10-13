@@ -168,6 +168,11 @@ test("Books isolate picks and transfer keeps the source portable", async () => {
   assert.equal((await get("/api/sources?bookId=sourcebook")).items.some((item) => item.id === pick.sourceItemId), true);
   assert.equal((await get(`/api/sources?bookId=${created.book.id}`)).items.length, 1);
 
+  const moved = await post(`/api/books/sourcebook/sources/${pick.sourceItemId}/transfer`, { targetBookId: created.book.id, mode: "move" });
+  assert.equal(moved.mode, "move");
+  assert.equal((await get("/api/sources?bookId=sourcebook")).items.some((item) => item.id === pick.sourceItemId), false);
+  assert.equal((await get(`/api/sources?bookId=${created.book.id}`)).items.length, 2);
+
   await post(`/api/books/${created.book.id}/import`, {
     name: "brief.txt",
     mimeType: "text/plain",
@@ -256,12 +261,17 @@ test("Video Sources retain a page cover while audio avoids unrelated page artwor
     sourceUrl: "https://example.com/trailer",
     sourceTitle: "Trailer page",
     sourceOrigin: "https://example.com",
+    thumbnailBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9fQAAAABJRU5ErkJggg==",
+    thumbnailMimeType: "image/png",
     pageMetadata: { mediaDurationSeconds: 42, ogImage: "https://example.com/trailer-cover.jpg" },
     pickedAt: "2026-10-07T14:59:00.000Z",
   });
   const video = (await get("/api/sources")).items.find((item) => item.id === videoPick.sourceItemId);
   assert.equal(video.thumbnailUrl, `/api/books/sourcebook/sources/${videoPick.sourceItemId}/preview`);
   assert.equal(video.metadata.mediaPreviewUrl, "https://example.com/trailer-cover.jpg");
+  const localCover = await fetch(`${baseUrl}${video.thumbnailUrl}`);
+  assert.equal(localCover.ok, true);
+  assert.equal(localCover.headers.get("content-type"), "image/png");
 
   const pick = await post("/api/picks", {
     bookId: "sourcebook",
@@ -291,6 +301,46 @@ test("Video Sources retain a page cover while audio avoids unrelated page artwor
   assert.equal(localAudio.modality, "audio");
   assert.equal(localAudio.assetCacheState, "cached");
   assert.match(localAudio.localPath, /^assets\/voice-note-/);
+});
+
+test("Links keep their summary and detail cover while Posts persist their snapshot", async () => {
+  const link = await post("/api/picks", {
+    bookId: "sourcebook",
+    sourceType: "webpage",
+    modality: "link",
+    pickType: "whole_page",
+    sourceUrl: "https://example.com/design",
+    sourceTitle: "Design reference",
+    pageMetadata: { pageTitle: "Design reference", description: "A concise reference summary.", ogImage: "https://example.com/cover.jpg" },
+  });
+  const postPick = await post("/api/picks", {
+    bookId: "sourcebook",
+    sourceType: "webpage",
+    modality: "post",
+    pickType: "post",
+    sourceUrl: "https://x.com/sourcebook/status/123",
+    sourceTitle: "X",
+    contentText: "A saved post body for agent context.",
+    thumbnailUrl: "https://example.com/post.jpg",
+    thumbnailBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9fQAAAABJRU5ErkJggg==",
+    thumbnailMimeType: "image/png",
+    post: { schemaVersion: 1, platform: "x", externalId: "123", bodyText: "A saved post body for agent context.", author: { displayName: "Sourcebook", handle: "@sourcebook" }, media: [{ kind: "image", sourceUrl: "https://example.com/post.jpg" }] },
+  });
+  const sources = await get("/api/sources");
+  const savedLink = sources.items.find((item) => item.id === link.sourceItemId);
+  const savedPost = sources.items.find((item) => item.id === postPick.sourceItemId);
+  assert.equal(savedLink.thumbnailUrl, "https://example.com/cover.jpg");
+  assert.equal(savedLink.resourceSummary, "A concise reference summary.");
+  assert.equal(savedPost.modality, "post");
+  assert.equal(savedPost.itemTitle, "Post from X");
+  assert.equal(savedPost.contentText, "A saved post body for agent context.");
+  assert.equal(savedPost.metadata.post.author.handle, "@sourcebook");
+  assert.equal("platform" in savedPost.metadata.post, false);
+  assert.equal("media" in savedPost.metadata.post, false);
+  assert.equal(savedPost.thumbnailUrl, `/api/books/sourcebook/sources/${postPick.sourceItemId}/preview`);
+  const localPostCover = await fetch(`${baseUrl}${savedPost.thumbnailUrl}`);
+  assert.equal(localPostCover.ok, true);
+  assert.equal(localPostCover.headers.get("content-type"), "image/png");
 });
 
 test("Source pages use stable cursors and each Book rejects a 201st source", async () => {

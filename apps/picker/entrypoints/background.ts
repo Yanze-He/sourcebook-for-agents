@@ -1,6 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { PICKER_LANGUAGE_KEY, storedPickerLanguage, type UiLanguage } from "../src/shared/i18n";
+import { uniqueCoverCandidates } from "../src/shared/page";
 import type { PickerMessage, PickerMessageResponse, PickResponse, PickerBook, PickerStatusResponse, PickPayload, RecentPickSummary, ResolvedPickPayload } from "../src/shared/types";
 
 const DEFAULT_SERVICE_ORIGINS = ["http://127.0.0.1:4177", "http://127.0.0.1:4297"];
@@ -275,7 +276,7 @@ function isOffline(error: unknown): boolean {
 
 async function savePick(payload: PickPayload): Promise<PickerMessageResponse> {
   try {
-    const preparedPayload = await prepareImagePayload(await withActiveBook(payload));
+    const preparedPayload = await prepareMediaPayload(await withActiveBook(payload));
     const response = await serviceFetch("/picks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -293,24 +294,51 @@ async function savePick(payload: PickPayload): Promise<PickerMessageResponse> {
   }
 }
 
-async function prepareImagePayload(payload: ResolvedPickPayload): Promise<ResolvedPickPayload> {
-  if (payload.modality !== "image" || !payload.contentUrl || payload.contentBase64) return payload;
+async function prepareMediaPayload(payload: ResolvedPickPayload): Promise<ResolvedPickPayload> {
+  if (payload.modality === "image" && payload.contentUrl && !payload.contentBase64) {
+    const image = await fetchPortableImage(payload.contentUrl, payload.sourceUrl, true);
+    if (image) return { ...payload, contentBase64: image.base64, contentMimeType: image.mimeType };
+  }
+  if ((payload.modality === "video" || payload.modality === "post") && !payload.thumbnailBase64) {
+    const candidates = uniqueThumbnailCandidates(payload.thumbnailUrl, payload.thumbnailCandidates);
+    for (const thumbnailUrl of candidates) {
+      const image = await fetchPortableImage(thumbnailUrl, payload.sourceUrl);
+      if (image) return { ...payload, thumbnailUrl, thumbnailBase64: image.base64, thumbnailMimeType: image.mimeType };
+    }
+  }
+  return payload;
+}
+
+function uniqueThumbnailCandidates(primary: string | undefined, alternatives: string[] | undefined): string[] {
+  return uniqueCoverCandidates([primary, ...(alternatives || [])]);
+}
+
+async function fetchPortableImage(url: string, sourceUrl: string, failOnAvif = false): Promise<{ base64: string; mimeType: string } | undefined> {
+  if (url.startsWith("blob:")) return undefined;
   try {
-    // Prefer a portable format, but normalize AVIF when a site still returns it.
-    const response = await fetch(payload.contentUrl, { credentials: "include", referrer: payload.sourceUrl, headers: { accept: "image/webp,image/apng,image/*;q=0.8,*/*;q=0.5" } });
-    if (!response.ok) return payload;
+    // Some CDNs reject an extension-origin request with page credentials, while
+    // others require the page referer. Try the page-context form first, then a
+    // deliberately cookie-free image request for public thumbnails such as YouTube.
+    let response = await fetch(url, { credentials: "include", referrer: sourceUrl, headers: { accept: "image/webp,image/apng,image/*;q=0.8,*/*;q=0.5" } });
+    if (!response.ok) {
+      response = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", headers: { accept: "image/webp,image/apng,image/*;q=0.8,*/*;q=0.5" } });
+    }
+    if (!response.ok) return undefined;
     const mime = response.headers.get("content-type")?.split(";")[0].toLowerCase() || "image/jpeg";
+    // Video URLs occasionally leak into a post's candidate list. Do not read an
+    // entire movie into memory only to discover it cannot be used as a cover.
+    if (!mime.startsWith("image/")) return undefined;
     const sourceBlob = await response.blob();
-    if (sourceBlob.size > 20 * 1024 * 1024) return payload;
+    if (sourceBlob.size > 20 * 1024 * 1024) return undefined;
     const normalized = mime === "image/avif" ? await avifToWebp(sourceBlob) : sourceBlob;
     const bytes = new Uint8Array(await normalized.arrayBuffer());
-    if (bytes.byteLength > 20 * 1024 * 1024) return payload;
+    if (bytes.byteLength > 20 * 1024 * 1024) return undefined;
     let binary = "";
     for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-    return { ...payload, contentBase64: btoa(binary), contentMimeType: normalized.type || mime };
+    return { base64: btoa(binary), mimeType: normalized.type || mime };
   } catch (error) {
-    if (error instanceof AvifConversionError) throw new PickerApiError("AVIF_CONVERSION_FAILED", text.avifConversionFailed, 422);
-    return payload;
+    if (failOnAvif && error instanceof AvifConversionError) throw new PickerApiError("AVIF_CONVERSION_FAILED", text.avifConversionFailed, 422);
+    return undefined;
   }
 }
 
@@ -582,6 +610,7 @@ function recentPickFromSourceItem(item: Record<string, unknown>, serviceBaseUrl:
       item.modality === "video" ||
       item.modality === "audio" ||
       item.modality === "link" ||
+      item.modality === "post" ||
       item.modality === "conversation"
         ? item.modality
         : "text",

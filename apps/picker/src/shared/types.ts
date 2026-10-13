@@ -1,6 +1,6 @@
-export type PickModality = "text" | "image" | "video" | "audio" | "link" | "conversation";
+export type PickModality = "text" | "image" | "video" | "audio" | "link" | "post" | "conversation";
 
-export type PickType = "selection" | "image" | "video" | "audio" | "link" | "whole_page" | "chat_message" | "selected_messages" | "visible_conversation";
+export type PickType = "selection" | "image" | "video" | "audio" | "link" | "whole_page" | "post" | "chat_message" | "selected_messages" | "visible_conversation";
 
 export type TextQuoteSelector = {
   exact: string;
@@ -35,6 +35,33 @@ export type PageMetadata = {
   ogImage?: string;
   siteName?: string;
   mediaDurationSeconds?: number;
+};
+
+export type PostPlatform = "x" | "xiaohongshu";
+
+export type PostAuthor = {
+  displayName?: string;
+  handle?: string;
+  profileUrl?: string;
+  avatarUrl?: string;
+};
+
+export type PostMedia = {
+  kind: "image" | "video";
+  sourceUrl?: string;
+  thumbnailUrl?: string;
+  altText?: string;
+};
+
+/** A normalized social post snapshot. Platform-specific details remain versioned in extensions. */
+export type PostSnapshot = {
+  schemaVersion: 1;
+  title?: string;
+  bodyText: string;
+  author?: Pick<PostAuthor, "displayName" | "handle">;
+  publishedAt?: string;
+  tags?: string[];
+  extensions?: Record<string, unknown>;
 };
 
 export type ChatProvider =
@@ -75,9 +102,14 @@ export type PickPayload = {
   sourceType: "webpage";
   modality: PickModality;
   pickType: PickType;
+  title?: string;
   contentText?: string;
   contentUrl?: string;
   thumbnailUrl?: string;
+  /** Ordered cover candidates collected while the original webpage is still available. */
+  thumbnailCandidates?: string[];
+  thumbnailBase64?: string;
+  thumbnailMimeType?: string;
   contentBase64?: string;
   contentMimeType?: string;
   sourceUrl: string;
@@ -86,6 +118,7 @@ export type PickPayload = {
   faviconUrl?: string;
   locator?: PickLocator;
   pageMetadata?: PageMetadata;
+  post?: PostSnapshot;
   conversation?: ConversationPick;
   pickedAt: string;
   userNote?: string;
@@ -110,6 +143,7 @@ export type PickerStatusResponse = {
   pageAvailable: boolean;
   chatProvider?: ChatProvider;
   messageCount: number;
+  postPlatform?: PostPlatform;
   browserStoredCount: number;
   localServiceConnected: boolean;
   recentPicks: RecentPickSummary[];

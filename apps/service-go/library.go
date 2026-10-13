@@ -897,7 +897,7 @@ func schema(db *sql.DB) error {
 		"CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, label TEXT NOT NULL, url TEXT NOT NULL, picked_at TEXT NOT NULL)",
 		"CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, kind TEXT NOT NULL, source_id TEXT NOT NULL REFERENCES sources(id), title TEXT NOT NULL, summary TEXT NOT NULL, content_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, favorite INTEGER NOT NULL DEFAULT 0)",
 		"CREATE TABLE IF NOT EXISTS text_contents (resource_id TEXT PRIMARY KEY REFERENCES resources(id) ON DELETE CASCADE, text TEXT NOT NULL)",
-		"CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE, mime_type TEXT NOT NULL, original_url TEXT, file_uri TEXT NOT NULL, cache_state TEXT NOT NULL, file_name TEXT, link_state TEXT NOT NULL DEFAULT 'linked')",
+		"CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE, mime_type TEXT NOT NULL, original_url TEXT, file_uri TEXT NOT NULL, cache_state TEXT NOT NULL, file_name TEXT, link_state TEXT NOT NULL DEFAULT 'linked', preview_file_name TEXT, preview_mime_type TEXT)",
 		"CREATE TABLE IF NOT EXISTS source_items (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL REFERENCES resources(id), source_id TEXT NOT NULL REFERENCES sources(id), title TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', storage_state TEXT NOT NULL, created_at TEXT NOT NULL)",
 		"CREATE TABLE IF NOT EXISTS picks (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL REFERENCES resources(id), source_id TEXT NOT NULL REFERENCES sources(id), source_item_id TEXT NOT NULL REFERENCES source_items(id) ON DELETE CASCADE, modality TEXT NOT NULL, pick_type TEXT NOT NULL, metadata_json TEXT NOT NULL, picked_at TEXT NOT NULL)",
 		"CREATE TABLE IF NOT EXISTS source_packs (id TEXT PRIMARY KEY, name TEXT NOT NULL, prompt TEXT NOT NULL, output_path TEXT NOT NULL, created_at TEXT NOT NULL)",
@@ -911,6 +911,8 @@ func schema(db *sql.DB) error {
 	// These upgrades are intentionally best-effort for existing Node-created databases.
 	_, _ = db.Exec("ALTER TABLE resources ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
 	_, _ = db.Exec("ALTER TABLE assets ADD COLUMN link_state TEXT NOT NULL DEFAULT 'linked'")
+	_, _ = db.Exec("ALTER TABLE assets ADD COLUMN preview_file_name TEXT")
+	_, _ = db.Exec("ALTER TABLE assets ADD COLUMN preview_mime_type TEXT")
 	_, _ = db.Exec("UPDATE assets SET cache_state='pending' WHERE cache_state='external_reference'")
 	_, _ = db.Exec("UPDATE assets SET link_state='none' WHERE original_url IS NULL")
 	_, _ = db.Exec("UPDATE picks SET modality='link' WHERE modality='page'")

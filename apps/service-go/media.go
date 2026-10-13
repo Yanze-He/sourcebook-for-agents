@@ -13,6 +13,10 @@ import (
 )
 
 func downloadImage(value string) ([]byte, string, string, error) {
+	return downloadImageWithReferer(value, "")
+}
+
+func downloadImageWithReferer(value, referer string) ([]byte, string, string, error) {
 	current := value
 	for redirects := 0; redirects <= 4; redirects++ {
 		parsed, err := publicHTTPSURL(current)
@@ -29,7 +33,7 @@ func downloadImage(value string) ([]byte, string, string, error) {
 		}
 		request.Header.Set("user-agent", "Sourcebook Desktop")
 		request.Header.Set("accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-		request.Header.Set("referer", parsed.Scheme+"://"+parsed.Host+"/")
+		request.Header.Set("referer", imageReferer(referer, parsed))
 		response, err := client.Do(request)
 		if err != nil {
 			return nil, "", "", err
@@ -66,6 +70,14 @@ func downloadImage(value string) ([]byte, string, string, error) {
 		return data, mimeType, extension, nil
 	}
 	return nil, "", "", errors.New("图片重定向次数过多")
+}
+
+func imageReferer(value string, fallback *url.URL) string {
+	parsed, err := url.Parse(value)
+	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" {
+		return parsed.String()
+	}
+	return fallback.Scheme + "://" + fallback.Host + "/"
 }
 
 func checkImageLink(value string) map[string]any {

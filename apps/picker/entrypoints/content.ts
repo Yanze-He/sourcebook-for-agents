@@ -5,7 +5,8 @@ import { detectChatProvider, providerLabel } from "../src/chat/recognizer";
 import { buildConversationPick, transcriptFromMessages } from "../src/chat/transcript";
 import { PICKER_LANGUAGE_KEY, storedPickerLanguage, type UiLanguage } from "../src/shared/i18n";
 import { DEFAULT_PICKER_OVERLAY_POSITION, PICKER_OVERLAY_POSITION_KEY, storedPickerOverlayPosition, type PickerOverlayPosition } from "../src/shared/overlay-position";
-import { collectPageMetadata, getFaviconUrl, getPageTitle, getSourceOrigin } from "../src/shared/page";
+import { collectPageMetadata, collectVideoCoverCandidates, getFaviconUrl, getPageTitle, getSourceOrigin, uniqueCoverCandidates } from "../src/shared/page";
+import { detectPost } from "../src/post/adapters";
 import { cssPath, isEditableTarget, isSensitivePage, quoteWithContext, textPositionInBody } from "../src/shared/selector";
 import { truncatePickTitle } from "../src/shared/title";
 import type { PickerMessage, PickerMessageResponse, PickResponse, ChatMessageCandidate, ChatProvider, PickerMode, PickPayload } from "../src/shared/types";
@@ -809,11 +810,20 @@ class WebPicker {
     // Page players commonly expose a blob URL, which cannot be opened outside this tab.
     // Preserve the page URL in that case and rely on its page cover for the video preview.
     const contentUrl = candidateUrl && !candidateUrl.startsWith("blob:") ? candidateUrl : location.href;
-    const thumbnailUrl = (video.poster ? absoluteUrl(video.poster) : undefined) ?? pageMetadata.ogImage;
+    // A Xiaohongshu player frequently exposes only a blob poster on the actual
+    // video node. Its note state contains the portable first-frame URL, so reuse
+    // the Post detector here as well as in the Pick Post flow. Keeping the node
+    // candidates second still preserves an explicit player poster when present.
+    const postCoverCandidates = detectPost(document, location.href)?.thumbnailCandidates || [];
+    const thumbnailCandidates = uniqueCoverCandidates([
+      ...postCoverCandidates,
+      ...collectVideoCoverCandidates(video, document, location.href)
+    ], location.href);
     return this.basePayload("video", "video", {
       contentText: video.getAttribute("aria-label") || video.title || video.poster || undefined,
       contentUrl,
-      thumbnailUrl,
+      thumbnailUrl: thumbnailCandidates[0],
+      thumbnailCandidates,
       locator: {
         videoSelector: cssPath(video)
       },
@@ -848,14 +858,33 @@ class WebPicker {
   }
 
   private async pickPage(): Promise<PickerMessageResponse> {
-    const metadata = collectPageMetadata(document, { includePreviewImage: false });
+    const detected = detectPost(document, location.href);
+    if (detected) return this.pickPost(detected);
+    const metadata = collectPageMetadata(document);
     const payload = this.basePayload("link", "whole_page", {
       contentUrl: location.href,
-      thumbnailUrl: metadata.ogImage,
       pageMetadata: metadata
     });
 
     return this.savePick(payload);
+  }
+
+  private async pickPost(detected: NonNullable<ReturnType<typeof detectPost>>): Promise<PickerMessageResponse> {
+    const metadata = collectPageMetadata();
+    const post = detected.post;
+    const thumbnailCandidates = uniqueCoverCandidates([detected.thumbnailUrl, ...(detected.thumbnailCandidates || []), metadata.ogImage], location.href);
+    return this.savePick(this.basePayload("post", "post", {
+      title: post.title,
+      contentText: post.bodyText,
+      contentUrl: location.href,
+      thumbnailUrl: thumbnailCandidates[0],
+      thumbnailCandidates,
+      post,
+      pageMetadata: {
+        ...metadata,
+        description: post.bodyText.slice(0, 240) || metadata.description
+      }
+    }));
   }
 
   private detectChatPage(): PickerMessageResponse {
@@ -904,6 +933,7 @@ class WebPicker {
 
   private getPickerStatus(): PickerMessageResponse {
     const extracted = extractVisibleChat(document);
+    const post = detectPost(document, location.href);
     return {
       status: "picker_status",
       mode: this.mode,
@@ -911,6 +941,7 @@ class WebPicker {
       pageAvailable: true,
       chatProvider: extracted?.provider,
       messageCount: extracted?.messages.length || 0,
+      postPlatform: post?.platform,
       browserStoredCount: 0,
       localServiceConnected: false,
       recentPicks: []
@@ -1585,16 +1616,21 @@ class WebPicker {
   }
 
   private taskPreview(payload: PickPayload): HTMLElement {
-    if ((payload.modality === "image" || payload.modality === "video") && (payload.thumbnailUrl || payload.contentUrl)) {
+    if ((payload.modality === "image" || payload.modality === "video" || payload.modality === "post") && (payload.thumbnailUrl || payload.contentUrl)) {
       const image = document.createElement("img");
       image.className = "pick-task-preview";
       image.src = payload.thumbnailUrl || payload.contentUrl || "";
       image.alt = "";
+      image.addEventListener("error", () => image.replaceWith(this.taskPreviewFallback(payload)));
       return image;
     }
+    return this.taskPreviewFallback(payload);
+  }
+
+  private taskPreviewFallback(payload: PickPayload): HTMLElement {
     const fallback = document.createElement("span");
     fallback.className = "pick-task-fallback";
-    fallback.textContent = "P";
+    fallback.textContent = payload.modality === "video" ? "VID" : "P";
     return fallback;
   }
 

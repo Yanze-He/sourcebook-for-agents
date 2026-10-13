@@ -34,6 +34,8 @@ var sourceBookPattern = regexp.MustCompile(`^[\w-]+$`)
 type Server struct {
 	library            *Library
 	webRoot            string
+	settingsPath       string
+	settingsMu         sync.Mutex
 	libraryOperationMu sync.RWMutex
 	changeMu           sync.Mutex
 	changeSubscribers  map[string]map[chan struct{}]struct{}
@@ -48,7 +50,7 @@ type apiError struct {
 func (err *apiError) Error() string { return err.message }
 
 func NewServer(library *Library, webRoot string) http.Handler {
-	return &Server{library: library, webRoot: webRoot, changeSubscribers: map[string]map[chan struct{}]struct{}{}}
+	return &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(filepath.Dir(library.root), "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
 }
 
 func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -76,7 +78,7 @@ func (server *Server) serveRequest(response http.ResponseWriter, request *http.R
 		response.Header().Set("Access-Control-Allow-Origin", origin)
 	}
 	response.Header().Set("Vary", "Origin")
-	response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+	response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 	response.Header().Set("Access-Control-Allow-Headers", "content-type")
 	if request.Method == http.MethodOptions {
 		response.WriteHeader(http.StatusNoContent)
@@ -108,7 +110,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"ok": true, "app": "sourcebook-for-agents", "apiVersion": "3",
-			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync"},
+			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync", "prompt-settings"},
 			"connection":   map[string]any{"protocolVersion": 1, "origin": "http://" + request.Host},
 			"library":      manifest,
 		})
@@ -119,6 +121,12 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 	if request.Method == http.MethodGet && path == "/api/books" {
 		return server.listBooks(response)
+	}
+	if request.Method == http.MethodGet && path == "/api/settings/prompt" {
+		return server.getPromptSettings(response)
+	}
+	if request.Method == http.MethodPut && path == "/api/settings/prompt" {
+		return server.updatePromptSettings(response, request)
 	}
 	if request.Method == http.MethodPost && path == "/api/books" {
 		return server.createBook(response, request)
@@ -207,6 +215,96 @@ func (server *Server) listBooks(response http.ResponseWriter) error {
 	}
 	writeJSON(response, http.StatusOK, manifest)
 	return nil
+}
+
+type desktopSettings struct {
+	PromptTemplate string `json:"promptTemplate,omitempty"`
+}
+
+func (server *Server) getPromptSettings(response http.ResponseWriter) error {
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		return err
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"template": settings.PromptTemplate})
+	return nil
+}
+
+func (server *Server) updatePromptSettings(response http.ResponseWriter, request *http.Request) error {
+	value, err := readBody(request)
+	if err != nil {
+		return err
+	}
+	template := strings.TrimSpace(stringValue(value["template"]))
+	if len([]byte(template)) > 64*1024 {
+		return &apiError{status: http.StatusBadRequest, code: "PROMPT_TEMPLATE_TOO_LARGE", message: "提示词模板不能超过 64 KB。"}
+	}
+	settings, err := server.writeDesktopSettings(desktopSettings{PromptTemplate: template})
+	if err != nil {
+		return err
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"template": settings.PromptTemplate})
+	return nil
+}
+
+func (server *Server) readDesktopSettings() (desktopSettings, error) {
+	server.settingsMu.Lock()
+	defer server.settingsMu.Unlock()
+	return readDesktopSettingsFile(server.settingsPath)
+}
+
+func (server *Server) writeDesktopSettings(settings desktopSettings) (desktopSettings, error) {
+	server.settingsMu.Lock()
+	defer server.settingsMu.Unlock()
+	if settings.PromptTemplate == "" {
+		if err := os.Remove(server.settingsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return desktopSettings{}, err
+		}
+		return desktopSettings{}, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(server.settingsPath), 0o755); err != nil {
+		return desktopSettings{}, err
+	}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return desktopSettings{}, err
+	}
+	file, err := os.CreateTemp(filepath.Dir(server.settingsPath), ".desktop-settings-*")
+	if err != nil {
+		return desktopSettings{}, err
+	}
+	temporaryPath := file.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return desktopSettings{}, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return desktopSettings{}, err
+	}
+	if err := file.Close(); err != nil {
+		return desktopSettings{}, err
+	}
+	if err := os.Rename(temporaryPath, server.settingsPath); err != nil {
+		return desktopSettings{}, err
+	}
+	return settings, nil
+}
+
+func readDesktopSettingsFile(path string) (desktopSettings, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return desktopSettings{}, nil
+	}
+	if err != nil {
+		return desktopSettings{}, err
+	}
+	settings := desktopSettings{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return desktopSettings{}, errors.New("提示词设置文件无法读取，请在设置中恢复默认后重试。")
+	}
+	return settings, nil
 }
 
 func (server *Server) createBook(response http.ResponseWriter, request *http.Request) error {
@@ -485,6 +583,13 @@ func savePick(ctx *BookContext, value map[string]any) (map[string]any, error) {
 	identity := contentURL
 	if modality == "link" {
 		identity = firstString(pageMetadata["canonicalUrl"], contentURL, stringValue(value["sourceUrl"]))
+	} else if modality == "post" {
+		post, _ := objectValue(value["post"])
+		postID := ""
+		if platform, externalID := stringValue(post["platform"]), stringValue(post["externalId"]); platform != "" && externalID != "" {
+			postID = platform + ":" + externalID
+		}
+		identity = firstString(postID, pageMetadata["canonicalUrl"], contentURL, stringValue(value["sourceUrl"]))
 	} else if modality == "conversation" {
 		identity = stringValue(value["sourceUrl"]) + "\n" + strings.ToLower(strings.Join(strings.Fields(contentText), " "))
 	} else if identity == "" {
@@ -533,8 +638,18 @@ func savePick(ctx *BookContext, value map[string]any) (map[string]any, error) {
 				return nil, err
 			}
 		}
-		if (modality == "image" || modality == "video" || modality == "audio") && firstString(contentURL, stringValue(value["thumbnailUrl"])) != "" {
-			if err = addAsset(tx, ctx, resourceID, suffix, title, value, modality, firstString(contentURL, stringValue(value["thumbnailUrl"]))); err != nil {
+		shouldAddAsset := (modality == "image" || modality == "video" || modality == "audio") && firstString(contentURL, stringValue(value["thumbnailUrl"])) != ""
+		// Posts do not download their remote media, but a cover received from the
+		// Picker is a portable preview and should survive a later CDN expiry.
+		if modality == "post" && stringValue(value["thumbnailBase64"]) != "" {
+			shouldAddAsset = true
+		}
+		if shouldAddAsset {
+			originalURL := firstString(contentURL, stringValue(value["thumbnailUrl"]))
+			if modality == "post" {
+				originalURL = firstString(stringValue(value["thumbnailUrl"]), contentURL)
+			}
+			if err = addAsset(tx, ctx, resourceID, suffix, title, value, modality, originalURL); err != nil {
 				return nil, err
 			}
 		}
@@ -589,8 +704,27 @@ func addAsset(tx *sql.Tx, ctx *BookContext, resourceID, suffix, title string, va
 		_, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, "/api/books/"+ctx.Book.ID+"/media/"+assetID, "cached", fileName, "linked")
 		return err
 	}
-	mimeType := map[string]string{"image": "image/*", "audio": "audio/*", "video": "video/*"}[modality]
-	_, err := tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, originalURL, "pending", nil, "linked")
+	mimeType := map[string]string{"image": "image/*", "audio": "audio/*", "video": "video/*", "post": "image/*"}[modality]
+	var previewFileName, previewMimeType any
+	if (modality == "video" || modality == "post") && stringValue(value["thumbnailBase64"]) != "" {
+		bytes, err := base64.StdEncoding.DecodeString(stringValue(value["thumbnailBase64"]))
+		if err != nil || len(bytes) == 0 {
+			return errors.New("素材封面无效")
+		}
+		if len(bytes) > maxMediaBytes {
+			return errors.New("素材封面超过 20 MB")
+		}
+		previewMime, extension, err := imageType(bytes)
+		if err != nil {
+			return err
+		}
+		fileName := safeName(title+"-cover", extension, assetID)
+		if err := os.WriteFile(filepath.Join(ctx.MediaRoot, fileName), bytes, 0o644); err != nil {
+			return err
+		}
+		previewFileName, previewMimeType = fileName, previewMime
+	}
+	_, err := tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state,preview_file_name,preview_mime_type) VALUES (?,?,?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, originalURL, "pending", nil, "linked", previewFileName, previewMimeType)
 	return err
 }
 
@@ -699,7 +833,7 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT source_items.id,source_items.resource_id,source_items.title,source_items.note,source_items.storage_state,source_items.created_at,resources.favorite,resources.summary,picks.modality,picks.pick_type,picks.metadata_json,text_contents.text,assets.id,assets.mime_type,assets.original_url,assets.file_uri,assets.cache_state,assets.link_state,assets.file_name,sources.url,sources.label FROM source_items JOIN resources ON resources.id=source_items.resource_id JOIN picks ON picks.source_item_id=source_items.id JOIN sources ON sources.id=source_items.source_id LEFT JOIN text_contents ON text_contents.resource_id=source_items.resource_id LEFT JOIN assets ON assets.resource_id=source_items.resource_id`
+	query := `SELECT source_items.id,source_items.resource_id,source_items.title,source_items.note,source_items.storage_state,source_items.created_at,resources.favorite,resources.summary,picks.modality,picks.pick_type,picks.metadata_json,text_contents.text,assets.id,assets.mime_type,assets.original_url,assets.file_uri,assets.cache_state,assets.link_state,assets.file_name,assets.preview_file_name,assets.preview_mime_type,sources.url,sources.label FROM source_items JOIN resources ON resources.id=source_items.resource_id JOIN picks ON picks.source_item_id=source_items.id JOIN sources ON sources.id=source_items.source_id LEFT JOIN text_contents ON text_contents.resource_id=source_items.resource_id LEFT JOIN assets ON assets.resource_id=source_items.resource_id`
 	args := []any{}
 	if createdAt != "" {
 		query += " WHERE (source_items.created_at < ? OR (source_items.created_at = ? AND source_items.id < ?))"
@@ -716,8 +850,8 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 	for rows.Next() {
 		var itemID, resourceID, itemTitle, note, status, pickedAt, summary, modality, pickType, metadataJSON string
 		var favorite int
-		var contentText, assetID, mimeType, contentURL, thumbnailURL, cacheState, linkState, fileName, sourceURL, sourceTitle sql.NullString
-		if err := rows.Scan(&itemID, &resourceID, &itemTitle, &note, &status, &pickedAt, &favorite, &summary, &modality, &pickType, &metadataJSON, &contentText, &assetID, &mimeType, &contentURL, &thumbnailURL, &cacheState, &linkState, &fileName, &sourceURL, &sourceTitle); err != nil {
+		var contentText, assetID, mimeType, contentURL, thumbnailURL, cacheState, linkState, fileName, previewFileName, previewMimeType, sourceURL, sourceTitle sql.NullString
+		if err := rows.Scan(&itemID, &resourceID, &itemTitle, &note, &status, &pickedAt, &favorite, &summary, &modality, &pickType, &metadataJSON, &contentText, &assetID, &mimeType, &contentURL, &thumbnailURL, &cacheState, &linkState, &fileName, &previewFileName, &previewMimeType, &sourceURL, &sourceTitle); err != nil {
 			return nil, err
 		}
 		metadata := map[string]any{}
@@ -746,20 +880,37 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 			if previewURL == "" {
 				previewURL = externalURL(metadata["ogImage"])
 			}
-			if previewURL != "" {
+		} else if effectiveModality == "post" {
+			previewURL = externalURL(postThumbnail(metadata))
+		}
+		if effectiveModality == "video" || effectiveModality == "post" {
+			if previewFileName.Valid && previewMimeType.Valid {
+				previewURL = "/api/books/" + ctx.Book.ID + "/sources/" + itemID + "/preview"
+			} else if previewURL != "" {
 				metadata["mediaPreviewUrl"] = previewURL
 				previewURL = "/api/books/" + ctx.Book.ID + "/sources/" + itemID + "/preview"
 			}
 		}
 		thumbnail := nullableString(thumbnailURL)
-		if assetID.Valid && cacheState.String == "cached" {
+		if assetID.Valid && cacheState.String == "cached" && fileName.Valid {
 			// Backups may be imported under a new Book ID. Build this URL from the
 			// current Book and asset IDs instead of trusting a stored historic URI.
 			thumbnail = "/api/books/" + ctx.Book.ID + "/media/" + assetID.String
 		}
 		if effectiveModality == "link" {
-			thumbnail = nil
-			delete(metadata, "ogImage")
+			// Link cards stay text-first, but the detail view can still show the
+			// page's social preview image when the site provides one.
+			if preview := externalURL(metadata["ogImage"]); preview != "" {
+				thumbnail = preview
+			} else {
+				thumbnail = nil
+			}
+		} else if effectiveModality == "post" {
+			if previewURL != "" {
+				thumbnail = previewURL
+			} else {
+				thumbnail = postThumbnail(metadata)
+			}
 		} else if previewURL != "" {
 			thumbnail = previewURL
 		} else if cacheState.String == "missing" || cacheState.String == "failed" || cacheState.String == "pending" || cacheState.String == "downloading" {
@@ -979,6 +1130,15 @@ func removeItems(ctx *BookContext, ids []string) (int, error) {
 		return 0, err
 	}
 	defer rollback(tx)
+	// Early Sourcebook databases did not always declare these relationships with
+	// ON DELETE CASCADE. Remove dependent rows explicitly so deleting or moving
+	// an older Source never leaves a foreign-key reference behind.
+	if _, err = tx.Exec("DELETE FROM source_pack_items WHERE source_item_id IN ("+marks+")", values...); err != nil {
+		return 0, err
+	}
+	if _, err = tx.Exec("DELETE FROM picks WHERE source_item_id IN ("+marks+")", values...); err != nil {
+		return 0, err
+	}
 	if _, err = tx.Exec("DELETE FROM source_items WHERE id IN ("+marks+")", values...); err != nil {
 		return 0, err
 	}
@@ -1159,31 +1319,44 @@ func (server *Server) previewSource(response http.ResponseWriter, bookID, source
 		return err
 	}
 	var modality, metadataJSON string
-	err = ctx.DB.QueryRow("SELECT picks.modality,picks.metadata_json FROM source_items JOIN picks ON picks.source_item_id=source_items.id WHERE source_items.id=?", sourceItemID).Scan(&modality, &metadataJSON)
-	if errors.Is(err, sql.ErrNoRows) || modality != "video" {
-		return &apiError{status: http.StatusNotFound, code: "PREVIEW_UNAVAILABLE", message: "视频封面不可用"}
+	var previewFileName, previewMimeType, sourceURL sql.NullString
+	err = ctx.DB.QueryRow("SELECT picks.modality,picks.metadata_json,assets.preview_file_name,assets.preview_mime_type,sources.url FROM source_items JOIN picks ON picks.source_item_id=source_items.id JOIN sources ON sources.id=source_items.source_id LEFT JOIN assets ON assets.resource_id=source_items.resource_id WHERE source_items.id=?", sourceItemID).Scan(&modality, &metadataJSON, &previewFileName, &previewMimeType, &sourceURL)
+	if errors.Is(err, sql.ErrNoRows) || (modality != "video" && modality != "post") {
+		return &apiError{status: http.StatusNotFound, code: "PREVIEW_UNAVAILABLE", message: "素材封面不可用"}
 	}
 	if err != nil {
 		return err
 	}
+	if previewFileName.Valid && previewMimeType.Valid {
+		data, err := os.ReadFile(filepath.Join(ctx.MediaRoot, filepath.Base(previewFileName.String)))
+		if err == nil {
+			response.Header().Set("content-type", previewMimeType.String)
+			response.Header().Set("cache-control", "private, max-age=31536000, immutable")
+			response.Header().Set("x-content-type-options", "nosniff")
+			_, _ = response.Write(data)
+			return nil
+		}
+	}
 	metadata := map[string]any{}
 	_ = json.Unmarshal([]byte(metadataJSON), &metadata)
-	preview := firstString(metadata["mediaPreviewUrl"], metadata["videoPreviewUrl"], metadata["ogImage"])
-	if strings.HasPrefix(preview, "http://") {
-		preview = "https://" + strings.TrimPrefix(preview, "http://")
+	previews := previewCandidates(metadata, modality)
+	if len(previews) == 0 {
+		return &apiError{status: http.StatusNotFound, code: "PREVIEW_UNAVAILABLE", message: "素材封面不可用"}
 	}
-	if preview == "" {
-		return &apiError{status: http.StatusNotFound, code: "PREVIEW_UNAVAILABLE", message: "视频封面不可用"}
+	var downloadErr error
+	for _, preview := range previews {
+		data, mimeType, _, err := downloadImageWithReferer(preview, sourceURL.String)
+		if err != nil {
+			downloadErr = err
+			continue
+		}
+		response.Header().Set("content-type", mimeType)
+		response.Header().Set("cache-control", "private, max-age=86400")
+		response.Header().Set("x-content-type-options", "nosniff")
+		_, _ = response.Write(data)
+		return nil
 	}
-	data, mimeType, _, err := downloadImage(preview)
-	if err != nil {
-		return &apiError{status: http.StatusBadGateway, code: "PREVIEW_UNAVAILABLE", message: err.Error()}
-	}
-	response.Header().Set("content-type", mimeType)
-	response.Header().Set("cache-control", "private, max-age=86400")
-	response.Header().Set("x-content-type-options", "nosniff")
-	_, _ = response.Write(data)
-	return nil
+	return &apiError{status: http.StatusBadGateway, code: "PREVIEW_UNAVAILABLE", message: firstString(errorString(downloadErr), "素材封面不可用")}
 }
 
 func (server *Server) transferSource(response http.ResponseWriter, request *http.Request, fromBookID, sourceItemID string) error {
@@ -1248,7 +1421,9 @@ func (server *Server) transferSource(response http.ResponseWriter, request *http
 		}
 	} else {
 		var oldNote sql.NullString
-		_ = target.DB.QueryRow("SELECT note FROM source_items WHERE resource_id=? ORDER BY created_at DESC LIMIT 1", resourceID).Scan(&oldNote)
+		// The target Book has one SQLite connection. Query through the active
+		// transaction so a duplicate transfer never waits on its own transaction.
+		_ = tx.QueryRow("SELECT note FROM source_items WHERE resource_id=? ORDER BY created_at DESC LIMIT 1", resourceID).Scan(&oldNote)
 		if oldNote.Valid && row.Note != "" && !strings.Contains(oldNote.String, row.Note) {
 			row.Note = oldNote.String + ", " + row.Note
 		}
@@ -1288,6 +1463,8 @@ type transferRow struct {
 	CacheState        sql.NullString
 	LinkState         sql.NullString
 	FileName          sql.NullString
+	PreviewFileName   sql.NullString
+	PreviewMimeType   sql.NullString
 	Modality          string
 	PickType          string
 	MetadataJSON      string
@@ -1300,8 +1477,8 @@ type transferRow struct {
 
 func sourceForTransfer(ctx *BookContext, sourceItemID string) (transferRow, error) {
 	row := transferRow{}
-	err := ctx.DB.QueryRow(`SELECT source_items.resource_id,resources.kind,resources.title,resources.summary,resources.content_hash,resources.favorite,resources.created_at,sources.label,sources.url,sources.picked_at,text_contents.text,assets.mime_type,assets.original_url,assets.cache_state,assets.link_state,assets.file_name,picks.modality,picks.pick_type,picks.metadata_json,picks.picked_at,source_items.title,source_items.note,source_items.storage_state,source_items.created_at FROM source_items JOIN resources ON resources.id=source_items.resource_id JOIN sources ON sources.id=source_items.source_id LEFT JOIN text_contents ON text_contents.resource_id=resources.id LEFT JOIN assets ON assets.resource_id=resources.id JOIN picks ON picks.source_item_id=source_items.id WHERE source_items.id=?`, sourceItemID).Scan(
-		&row.ResourceID, &row.Kind, &row.ResourceTitle, &row.Summary, &row.ContentHash, &row.Favorite, &row.ResourceCreatedAt, &row.SourceLabel, &row.SourceURL, &row.SourcePickedAt, &row.ContentText, &row.MimeType, &row.OriginalURL, &row.CacheState, &row.LinkState, &row.FileName, &row.Modality, &row.PickType, &row.MetadataJSON, &row.PickPickedAt, &row.ItemTitle, &row.Note, &row.StorageState, &row.ItemCreatedAt,
+	err := ctx.DB.QueryRow(`SELECT source_items.resource_id,resources.kind,resources.title,resources.summary,resources.content_hash,resources.favorite,resources.created_at,sources.label,sources.url,sources.picked_at,text_contents.text,assets.mime_type,assets.original_url,assets.cache_state,assets.link_state,assets.file_name,assets.preview_file_name,assets.preview_mime_type,picks.modality,picks.pick_type,picks.metadata_json,picks.picked_at,source_items.title,source_items.note,source_items.storage_state,source_items.created_at FROM source_items JOIN resources ON resources.id=source_items.resource_id JOIN sources ON sources.id=source_items.source_id LEFT JOIN text_contents ON text_contents.resource_id=resources.id LEFT JOIN assets ON assets.resource_id=resources.id JOIN picks ON picks.source_item_id=source_items.id WHERE source_items.id=?`, sourceItemID).Scan(
+		&row.ResourceID, &row.Kind, &row.ResourceTitle, &row.Summary, &row.ContentHash, &row.Favorite, &row.ResourceCreatedAt, &row.SourceLabel, &row.SourceURL, &row.SourcePickedAt, &row.ContentText, &row.MimeType, &row.OriginalURL, &row.CacheState, &row.LinkState, &row.FileName, &row.PreviewFileName, &row.PreviewMimeType, &row.Modality, &row.PickType, &row.MetadataJSON, &row.PickPickedAt, &row.ItemTitle, &row.Note, &row.StorageState, &row.ItemCreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, errors.New("素材不存在")
@@ -1326,7 +1503,17 @@ func copyTransferAsset(tx *sql.Tx, from, target *BookContext, row transferRow, r
 			state = "missing"
 		}
 	}
-	_, err := tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, row.MimeType.String, nullableString(row.OriginalURL), fileURI, state, nullableFileName(fileName), nullableOr(row.LinkState, "none"))
+	previewFileName := ""
+	if row.PreviewFileName.Valid {
+		sourcePath := filepath.Join(from.MediaRoot, row.PreviewFileName.String)
+		if _, err := os.Stat(sourcePath); err == nil {
+			previewFileName = safeName(row.ResourceTitle+"-cover", filepath.Ext(row.PreviewFileName.String), "preview-"+assetID)
+			if err := copyFile(sourcePath, filepath.Join(target.MediaRoot, previewFileName)); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state,preview_file_name,preview_mime_type) VALUES (?,?,?,?,?,?,?,?,?,?)", assetID, resourceID, row.MimeType.String, nullableString(row.OriginalURL), fileURI, state, nullableFileName(fileName), nullableOr(row.LinkState, "none"), nullableFileName(previewFileName), nullableString(row.PreviewMimeType))
 	return err
 }
 
@@ -1420,7 +1607,7 @@ func allowedOrigin(value string) bool {
 }
 
 func validModality(value string) bool {
-	for _, modality := range []string{"text", "image", "video", "audio", "file", "link", "conversation"} {
+	for _, modality := range []string{"text", "image", "video", "audio", "file", "link", "post", "conversation"} {
 		if value == modality {
 			return true
 		}
@@ -1441,6 +1628,19 @@ func titleFor(value map[string]any, modality string) string {
 	if modality == "link" {
 		if metadata, ok := objectValue(value["pageMetadata"]); ok {
 			return cleanTitle(firstString(metadata["pageTitle"], value["sourceTitle"], host(stringValue(value["sourceUrl"]))), 160)
+		}
+	}
+	if modality == "post" {
+		if post, ok := objectValue(value["post"]); ok {
+			if title := cleanTitle(stringValue(post["title"]), 160); title != "" {
+				return title
+			}
+			// X posts commonly have no separate title. A stable label is clearer
+			// than duplicating the full body in the card header.
+			if strings.EqualFold(host(stringValue(value["sourceUrl"])), "x.com") || strings.EqualFold(host(stringValue(value["sourceUrl"])), "twitter.com") {
+				return "Post from X"
+			}
+			return "Post from " + host(stringValue(value["sourceUrl"]))
 		}
 	}
 	if modality == "image" && strings.TrimSpace(stringValue(value["contentText"])) != "" {
@@ -1479,7 +1679,20 @@ func mergeMetadata(value map[string]any, modality string) map[string]any {
 	if value["conversation"] != nil {
 		metadata["conversation"] = value["conversation"]
 	}
+	if post, ok := objectValue(value["post"]); ok {
+		metadata["post"] = compactPost(post)
+	}
+	if candidates := externalURLs(value["thumbnailCandidates"]); len(candidates) > 0 {
+		metadata["thumbnailCandidates"] = candidates
+	}
 	if modality == "video" {
+		if preview := externalURL(value["thumbnailUrl"]); preview != "" {
+			metadata["mediaPreviewUrl"] = preview
+		} else if preview := externalURL(metadata["ogImage"]); preview != "" {
+			metadata["mediaPreviewUrl"] = preview
+		}
+	}
+	if modality == "post" {
 		if preview := externalURL(value["thumbnailUrl"]); preview != "" {
 			metadata["mediaPreviewUrl"] = preview
 		} else if preview := externalURL(metadata["ogImage"]); preview != "" {
@@ -1489,6 +1702,69 @@ func mergeMetadata(value map[string]any, modality string) map[string]any {
 	return metadata
 }
 
+// Keep the Picker's full ordered cover chain. The first URL is normally used,
+// but CDN variants (notably YouTube maxres and Xiaohongshu first frames) can
+// expire or return 404 independently, so the local preview route retries each
+// candidate before declaring a cover unavailable.
+func previewCandidates(metadata map[string]any, modality string) []string {
+	values := []any{metadata["mediaPreviewUrl"], metadata["videoPreviewUrl"], metadata["ogImage"]}
+	values = append(values, valuesFrom(metadata["thumbnailCandidates"])...)
+	if modality == "post" {
+		values = append(values, postThumbnail(metadata))
+	}
+	seen := map[string]bool{}
+	result := []string{}
+	for _, value := range values {
+		preview := externalURL(value)
+		if preview == "" {
+			continue
+		}
+		if strings.HasPrefix(preview, "http://") {
+			preview = "https://" + strings.TrimPrefix(preview, "http://")
+		}
+		if !seen[preview] {
+			seen[preview] = true
+			result = append(result, preview)
+		}
+	}
+	return result
+}
+
+func externalURLs(value any) []string {
+	seen := map[string]bool{}
+	result := []string{}
+	for _, candidate := range valuesFrom(value) {
+		url := externalURL(candidate)
+		if url != "" && !seen[url] {
+			seen[url] = true
+			result = append(result, url)
+		}
+	}
+	return result
+}
+
+func valuesFrom(value any) []any {
+	switch values := value.(type) {
+	case []any:
+		return values
+	case []string:
+		result := make([]any, len(values))
+		for index, value := range values {
+			result[index] = value
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 func kindFor(modality string) string {
 	if modality == "conversation" {
 		return "agent-output"
@@ -1496,7 +1772,62 @@ func kindFor(modality string) string {
 	if modality == "link" {
 		return "webpage"
 	}
+	if modality == "post" {
+		return "post"
+	}
 	return modality
+}
+
+func postThumbnail(metadata map[string]any) any {
+	if preview := externalURL(metadata["mediaPreviewUrl"]); preview != "" {
+		return preview
+	}
+	post, ok := objectValue(metadata["post"])
+	if !ok {
+		return nil
+	}
+	media, ok := post["media"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, entry := range media {
+		item, ok := objectValue(entry)
+		if !ok {
+			continue
+		}
+		if preview := externalURL(firstString(item["thumbnailUrl"], item["sourceUrl"])); preview != "" {
+			return preview
+		}
+	}
+	return nil
+}
+
+// Post capture is intentionally compact. Picker-side platform and media details
+// select the best cover while the page is open, but are not durable user data.
+func compactPost(post map[string]any) map[string]any {
+	compact := map[string]any{"schemaVersion": 1, "bodyText": strings.TrimSpace(stringValue(post["bodyText"]))}
+	if title := strings.TrimSpace(stringValue(post["title"])); title != "" {
+		compact["title"] = title
+	}
+	if publishedAt := strings.TrimSpace(stringValue(post["publishedAt"])); publishedAt != "" {
+		compact["publishedAt"] = publishedAt
+	}
+	if author, ok := objectValue(post["author"]); ok {
+		compactAuthor := map[string]any{}
+		if displayName := strings.TrimSpace(stringValue(author["displayName"])); displayName != "" {
+			compactAuthor["displayName"] = displayName
+		}
+		if handle := strings.TrimSpace(stringValue(author["handle"])); handle != "" {
+			compactAuthor["handle"] = handle
+		}
+		if len(compactAuthor) > 0 {
+			compact["author"] = compactAuthor
+		}
+	}
+	if tags := stringSlice(post["tags"]); len(tags) > 0 {
+		compact["tags"] = tags
+	}
+	return compact
 }
 
 func cleanTitle(value string, limit int) string {

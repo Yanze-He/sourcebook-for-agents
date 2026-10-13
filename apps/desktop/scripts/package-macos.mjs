@@ -1,8 +1,11 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import appdmg from "appdmg";
+
+const require = createRequire(import.meta.url);
 
 if (process.platform !== "darwin") throw new Error("macOS packages must be built on macOS.");
 
@@ -111,7 +114,25 @@ function createIcon(source, destination, name) {
   ]) {
     execFileSync("sips", ["-z", String(size), String(size), renderedIcon, "--out", join(iconset, file)], { stdio: "ignore" });
   }
-  execFileSync("iconutil", ["-c", "icns", iconset, "-o", destination], { stdio: "inherit" });
+  try {
+    execFileSync("iconutil", ["-c", "icns", iconset, "-o", destination], { stdio: "inherit" });
+  } catch {
+    // Some macOS 15 installations reject otherwise valid PNG iconsets. Encode
+    // the same standard PNG representations directly so packaging remains
+    // deterministic and the app still receives its branded Finder icon.
+    const icns = require("icns-lib");
+    const representations = {
+      icp4: "icon_16x16.png",
+      icp5: "icon_32x32.png",
+      icp6: "icon_32x32@2x.png",
+      ic07: "icon_128x128.png",
+      ic08: "icon_256x256.png",
+      ic09: "icon_512x512.png",
+      ic10: "icon_512x512@2x.png"
+    };
+    const icons = Object.fromEntries(Object.entries(representations).map(([type, file]) => [type, readFileSync(join(iconset, file))]));
+    writeFileSync(destination, icns.format(icons));
+  }
   rmSync(iconset, { force: true, recursive: true });
   rmSync(renderedIconRoot, { force: true, recursive: true });
 }
