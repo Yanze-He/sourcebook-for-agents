@@ -73,6 +73,7 @@ if (signingIdentity) {
 const dmgPath = join(outputRoot, "Sourcebook-Desktop.dmg");
 await createDmg(installerVolumeIcon);
 setDmgFileIcon(installerVolumeIcon, dmgPath);
+signDmg();
 rmSync(installerVolumeIcon, { force: true });
 console.log(`Created ${dmgPath}`);
 
@@ -140,6 +141,12 @@ function createIcon(source, destination, name) {
 function createMenuBarHost(destination) {
   execFileSync("xcrun", ["clang", "-fobjc-arc", "-framework", "Cocoa", menuBarHostSource, "-o", destination], { stdio: "inherit" });
   chmodSync(destination, 0o755);
+}
+
+function signDmg() {
+  if (!signingIdentity) return;
+  execFileSync("codesign", ["--force", "--timestamp", "--sign", signingIdentity, dmgPath], { stdio: "inherit" });
+  execFileSync("codesign", ["--verify", "--verbose=2", dmgPath], { stdio: "inherit" });
 }
 
 function setDmgFileIcon(icon, target) {
