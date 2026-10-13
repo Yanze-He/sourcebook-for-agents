@@ -34,6 +34,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.3"
       - run: npm ci && npm ci --prefix apps/picker && npm ci --prefix apps/sources && npm ci --prefix apps/desktop
       - run: npm run build && npm --prefix apps/desktop run package:macos
       - uses: actions/upload-artifact@v4
