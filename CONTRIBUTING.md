@@ -1,12 +1,12 @@
 # Contributing to Sourcebook for Agents
 
-每个 PR 尽量只涉及一个贡献区域：
+Keep each PR focused on one contribution area:
 
 | Area | Start here | Owns |
 | --- | --- | --- |
 | Pick | `apps/picker` | Browser extension, Pick logic, pending queue, and Picker UX |
 | Sources | `apps/sources/src` | Sources list, selection, previews, and local Sources UX |
-| Pack | `apps/sources/server` | Pack API, prompts, and local file preparation |
+| Pack | `apps/service-go` and `apps/sources/src` | Pack API, prompts, and local file preparation |
 | Desktop | `apps/desktop` | Local startup, browser launch, user data directories, and installers |
 
 ## Local Development

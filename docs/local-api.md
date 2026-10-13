@@ -1,6 +1,6 @@
 # Local API
 
-The local service is intentionally loopback-only. Future MCP integrations should call the same Sources API rather than writing SQLite files directly.
+The local service is intentionally loopback-only and is not a general-purpose local integration API. It accepts requests from the local Sources page and the bundled Picker extension; other websites and browser extensions are rejected. Do not write SQLite files directly. A future third-party integration needs its own authenticated pairing design before using these routes.
 
 ## Create a Source
 

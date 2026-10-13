@@ -19,6 +19,7 @@ func TestPromptSettingsPersistOutsideLibraryData(t *testing.T) {
 	server := NewServer(library, "").(*Server)
 
 	put := httptest.NewRequest(http.MethodPut, "/api/settings/prompt", bytes.NewBufferString(`{"template":"Use {{#each files}}{{file_name}}{{/each}}"}`))
+	put.Host = "127.0.0.1:4177"
 	put.Header.Set("content-type", "application/json")
 	putResult := httptest.NewRecorder()
 	server.ServeHTTP(putResult, put)
@@ -30,7 +31,9 @@ func TestPromptSettingsPersistOutsideLibraryData(t *testing.T) {
 		t.Fatal(err)
 	}
 	getResult := httptest.NewRecorder()
-	server.ServeHTTP(getResult, httptest.NewRequest(http.MethodGet, "/api/settings/prompt", nil))
+	get := httptest.NewRequest(http.MethodGet, "/api/settings/prompt", nil)
+	get.Host = "127.0.0.1:4177"
+	server.ServeHTTP(getResult, get)
 	if getResult.Code != http.StatusOK {
 		t.Fatalf("reading prompt settings returned %d: %s", getResult.Code, getResult.Body.String())
 	}
@@ -54,6 +57,7 @@ func TestPromptSettingsCanReturnToDefault(t *testing.T) {
 	server := NewServer(library, "").(*Server)
 
 	request := httptest.NewRequest(http.MethodPut, "/api/settings/prompt", bytes.NewBufferString(`{"template":""}`))
+	request.Host = "127.0.0.1:4177"
 	request.Header.Set("content-type", "application/json")
 	result := httptest.NewRecorder()
 	server.ServeHTTP(result, request)

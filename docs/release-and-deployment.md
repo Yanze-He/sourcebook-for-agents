@@ -6,7 +6,7 @@ Sourcebook for Agents can be developed in public without exposing release creden
 
 The public P1 is limited to **Pick -> Sources -> Pack**. It is a local-first product: the Desktop, SQLite database, media copies, and exported Packs remain on the user's computer.
 
-Cloud sync, accounts, billing, teams, and any future canvas product are separate products and are not release dependencies for this repository.
+Cloud sync, accounts, billing, and team workflows are not release dependencies for this repository.
 
 ## What CI produces
 
@@ -56,8 +56,8 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 1. Confirm `main` is green in CI.
 2. Test the extension and Desktop on clean macOS and Windows machines.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
-4. Choose a version tag such as `v0.1.0-alpha.1`.
-5. Create and push a protected version tag such as `v0.1.0-alpha.1`.
+4. Choose a version tag such as `v0.1.0-beta.2`.
+5. Create and push a protected version tag such as `v0.1.0-beta.2`.
 6. Let CI build and test its artifacts, then create the signed and notarized macOS artifact locally from that exact tag.
 7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before manually publishing a GitHub Release.
 
@@ -72,7 +72,7 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 
 - Publish the privacy policy at a stable public URL.
 - Complete Chrome Web Store data-use disclosures and permission explanations.
-- Ship and test the final extension-to-Desktop pairing flow.
+- Confirm the bundled extension ID remains `cehohknopnehbkiokoffhfjepaieapan` after packaging or store upload.
 - Confirm that only the minimum required extension permissions are requested.
 
 ## Do not do this

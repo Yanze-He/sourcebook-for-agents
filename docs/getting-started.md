@@ -8,7 +8,7 @@ To run Sourcebook from source, you need Node.js 22.18+, npm, and Go 1.24+. Node 
 
 ### Release install
 
-Download the macOS DMG or Windows installer and the Chromium Picker ZIP from the repository Release page. The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. On macOS, Sourcebook runs from the menu bar: use its icon to open Sources, restart the local service, or quit the app.
+Download the macOS DMG and Chromium Picker ZIP from the repository Release page. A Windows installer will appear only in a release where it has been separately verified. The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. On macOS, Sourcebook runs from the menu bar: use its icon to open Sources, restart the local service, or quit the app.
 
 Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 
@@ -55,7 +55,7 @@ Return to the local Sources tab. Each new entry contains the essential context f
 - A thumbnail for locally saved images, or a centered site favicon for links and chat entries.
 - The original URL and available metadata.
 
-Use Books to keep unrelated research separate. The active Book in Sources is where new Picks are saved.
+Use Books to keep unrelated research separate. Choose the destination Book in Picker before making a Pick.
 
 ## Prepare a Context Pack
 

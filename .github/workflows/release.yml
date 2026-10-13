@@ -22,6 +22,7 @@ jobs:
       - run: |
           mkdir -p release/extension
           find apps/picker/.output -name '*.zip' -exec cp {} release/extension/sourcebook-picker-chromium.zip \;
+          shasum -a 256 release/extension/sourcebook-picker-chromium.zip > release/extension/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-picker-chromium
@@ -39,6 +40,7 @@ jobs:
           go-version: "1.24.3"
       - run: npm ci && npm ci --prefix apps/picker && npm ci --prefix apps/sources && npm ci --prefix apps/desktop
       - run: npm run build && npm --prefix apps/desktop run package:macos
+      - run: shasum -a 256 release/macos/Sourcebook-Desktop.dmg > release/macos/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-desktop-macos-arm64
@@ -51,8 +53,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci; npm ci --prefix apps/picker; npm ci --prefix apps/sources
-      - run: npm run build; npm --prefix apps/desktop run package:windows
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.3"
+      - run: npm ci
+      - run: npm ci --prefix apps/picker
+      - run: npm ci --prefix apps/sources
+      - run: npm ci --prefix apps/desktop
+      - run: npm run build
+      - run: npm --prefix apps/desktop run package:windows
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build installer
@@ -61,7 +70,14 @@ jobs:
           $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Desktop"
           $env:SOURCEBOOK_WINDOWS_OUTPUT = "${{ github.workspace }}\release\windows\installer"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\desktop\installer\sourcebook.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Write Windows checksum
+        shell: pwsh
+        run: |
+          $installer = "release\windows\installer\Sourcebook-for-Agents-Setup.exe"
+          $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLower()
+          "$hash  Sourcebook-for-Agents-Setup.exe" | Set-Content -NoNewline "release\windows\installer\SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: sourcebook-desktop-windows-x64
-          path: release/windows/installer/Sourcebook-for-Agents-Setup.exe
+          path: release/windows/installer/

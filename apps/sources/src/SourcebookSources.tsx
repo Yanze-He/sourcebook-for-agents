@@ -500,7 +500,13 @@ export default function SourcebookSources() {
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function importBackup(file: File) {
-    const mode = window.confirm("Import as new Books? Choose Cancel to replace the entire library.") ? "append" : "replace";
+    let mode: "append" | "replace" = "append";
+    const addAsNewBooks = window.confirm("Add this backup as new Books? Choose Cancel to keep your current library unchanged or review the replacement option.");
+    if (!addAsNewBooks) {
+      const replaceLibrary = window.confirm("Replace the entire library with this backup? Your current Books and local files will be moved aside for recovery. Choose Cancel to leave everything unchanged.");
+      if (!replaceLibrary) return;
+      mode = "replace";
+    }
     try {
       const restored = await requestBackupRestore(file, mode);
       const firstImportedBookId = restored.imported?.[0]?.id || restored.activeBookId;

@@ -48,15 +48,15 @@ Customise the prompt in **Settings → Prompt settings**, using source titles, n
 Your Books and files stay on your computer. No accounts, cloud sync or hidden uploads.
 
 - **Export:** choose one, several or all Books for a `.sourcebook-backup` archive.
-- **Import:** add backed-up Books or replace the library. Back up the current library before replacing it.
+- **Import:** add backed-up Books or explicitly replace the library. Cancelling either choice leaves the current library unchanged.
 
 Both are available in **Settings**. Backups contain Book data and local files, not Desktop settings. You decide what to share with an agent.
 
 ## Get Started
 
-Early alpha for Chrome and Chromium browsers, including Edge. Firefox and Safari are not supported.
+Beta for Chrome and Chromium browsers, including Edge. Firefox and Safari are not supported.
 
-1. Download and install Desktop, and unzip Picker from the [latest release](https://github.com/Yanze-He/sourcebook-for-agents/releases/latest).
+1. Download and install Desktop, and unzip Picker from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases).
 2. In your browser's extension manager, enable **Developer mode**, select **Load unpacked**, and choose the extracted Picker folder.
 3. Start Desktop, open Picker on a webpage, turn it on and choose a Book.
 

@@ -18,6 +18,6 @@ Sourcebook for Agents does not transmit picked content to a Sourcebook-operated 
 
 ## Security and retention
 
-The local service binds to `127.0.0.1` only. Users control retention by deleting Sources, clearing extension storage, or removing the local data directory. Removing the Desktop does not automatically remove the data directory.
+The local service binds to `127.0.0.1` only. Users control retention by deleting Sources, clearing extension storage, or removing the local data directory. Replacing a library from a backup moves the previous library aside first so it can be recovered if replacement is interrupted. Removing the Desktop does not automatically remove the data directory.
 
-Before Chrome Web Store publication, this policy will be published at a stable public URL and updated to cover the final extension identifier and Desktop pairing mechanism.
+The Desktop accepts local Picker requests only from the bundled Chromium extension (`cehohknopnehbkiokoffhfjepaieapan`) and from the local Desktop page. It does not grant access to other browser extensions or websites.

@@ -100,6 +100,19 @@ func TestLibraryResetRemovesBooksAndStoredFiles(t *testing.T) {
 	if _, err := os.Stat(storedFile); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stored file remains after reset: %v", err)
 	}
+	restoreHistory := filepath.Join(filepath.Dir(root), "Restore History", "library.previous-test")
+	if err := os.MkdirAll(restoreHistory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(restoreHistory, "old-source.txt"), []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := library.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "Restore History")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("restore history remains after clearing local data: %v", err)
+	}
 	if _, err := library.Context("sourcebook"); err != nil {
 		t.Fatalf("default Book was not re-created: %v", err)
 	}
@@ -145,6 +158,10 @@ func TestStreamingBackupRestoresWithoutBase64Payload(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(destinationRoot, "books", "sourcebook", "assets", "large-library-test.txt")); err != nil {
 		t.Fatalf("streamed backup did not restore local media: %v", err)
+	}
+	history, err := os.ReadDir(filepath.Join(filepath.Dir(destinationRoot), "Restore History"))
+	if err != nil || len(history) != 1 {
+		t.Fatalf("replaced library was not kept for recovery: entries=%v err=%v", history, err)
 	}
 }
 

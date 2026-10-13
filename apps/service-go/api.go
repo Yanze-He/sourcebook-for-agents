@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,11 @@ const (
 	maxPageLimit     = 200
 	maxMediaBytes    = 20 * 1024 * 1024
 )
+
+// PickerExtensionID is derived from the public key in apps/picker/wxt.config.ts.
+// It deliberately contains no secret material: browsers enforce the extension
+// origin, letting the local service reject requests from unrelated extensions.
+const PickerExtensionID = "cehohknopnehbkiokoffhfjepaieapan"
 
 var sourceBookPattern = regexp.MustCompile(`^[\w-]+$`)
 
@@ -69,8 +75,12 @@ func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Requ
 }
 
 func (server *Server) serveRequest(response http.ResponseWriter, request *http.Request) {
+	if !allowedHost(request.Host) {
+		writeJSON(response, http.StatusBadRequest, map[string]any{"error": "Host not allowed"})
+		return
+	}
 	origin := request.Header.Get("Origin")
-	if !allowedOrigin(origin) {
+	if !allowedOrigin(origin, request.Host) {
 		writeJSON(response, http.StatusForbidden, map[string]any{"error": "Origin not allowed"})
 		return
 	}
@@ -1599,11 +1609,20 @@ func validateSourceLink(ctx *BookContext, sourceItemID string) (map[string]any, 
 	return result, nil
 }
 
-func allowedOrigin(value string) bool {
+func allowedHost(value string) bool {
+	host, port, err := net.SplitHostPort(value)
+	if err != nil || (host != "127.0.0.1" && host != "localhost") {
+		return false
+	}
+	parsedPort, err := strconv.Atoi(port)
+	return err == nil && parsedPort > 0 && parsedPort <= 65535
+}
+
+func allowedOrigin(value, host string) bool {
 	if value == "" {
 		return true
 	}
-	return regexp.MustCompile(`^https?://(127\.0\.0\.1|localhost):\d+$`).MatchString(value) || regexp.MustCompile(`^chrome-extension://[a-p]{32}$`).MatchString(value)
+	return value == "http://"+host || value == "chrome-extension://"+PickerExtensionID
 }
 
 func validModality(value string) bool {

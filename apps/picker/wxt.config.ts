@@ -5,6 +5,10 @@ export default defineConfig({
     name: "Picker for Agent",
     description: "Pick web context and save it to Sourcebook for agents.",
     version: "0.1.0",
+    // A public key gives unpacked builds the same stable Chrome extension ID as
+    // release builds. The Desktop uses that ID to distinguish this Picker from
+    // other local extensions; no private key is stored in this repository.
+    key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjqCkqLDFC1uYPz2bE7ChFTX8PQwRnibxwjIxrOO9U1pdQRAv+xGZ1OWc512+VnmusG+sN5uJizh4Aq5V9SXQQFph8nuL4nCsGbzVFzUcMGUbdQ+ObJKPlP3BOQxKCZ07zipe+iy/UXs8AH5V7PC3iOZBBUX8DRB1wqqa4ZcCxJAHzhJbvHd9jn2WTmp2l+DtqxM9fgbp79gWrqYeOzkeLrMS1tAQam+9CQqtA7HxRr+4lgvxMvXt0npijGLz/xmUgHquqRet7HcGvMkBCYKdibCuaUjgVdTolgsclBO9XBSmTYWUXZJ/YeOlbPYiHUoA5T5EVh9lqFCbUw3zwdhh/QIDAQAB",
     permissions: ["activeTab", "alarms", "contextMenus", "storage"],
     host_permissions: [
       "https://*/*",

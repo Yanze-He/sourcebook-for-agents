@@ -393,6 +393,9 @@ func (library *Library) Reset() (Manifest, error) {
 	if err := os.RemoveAll(previous); err != nil {
 		return Manifest{}, err
 	}
+	if err := os.RemoveAll(filepath.Join(filepath.Dir(library.root), "Restore History")); err != nil {
+		return Manifest{}, err
+	}
 	return manifest, nil
 }
 
@@ -590,9 +593,10 @@ func (library *Library) restoreLegacyPayload(payload BackupPayload, mode string)
 			return Manifest{}, nil, err
 		}
 		if err := os.Rename(staging, library.root); err != nil {
+			_ = os.Rename(old, library.root)
 			return Manifest{}, nil, err
 		}
-		_ = os.RemoveAll(old)
+		library.preserveReplacedLibrary(old)
 		manifest, err := library.List()
 		if err != nil {
 			return Manifest{}, nil, err
@@ -742,7 +746,7 @@ func (library *Library) installBackupArchive(staging string, archive BackupArchi
 			_ = os.Rename(previous, library.root)
 			return Manifest{}, nil, err
 		}
-		_ = os.RemoveAll(previous)
+		library.preserveReplacedLibrary(previous)
 		manifest, err := library.List()
 		if err != nil {
 			return Manifest{}, nil, err
@@ -780,6 +784,17 @@ func (library *Library) installBackupArchive(staging string, archive BackupArchi
 		return Manifest{}, nil, err
 	}
 	return manifest, imported, nil
+}
+
+// preserveReplacedLibrary keeps one recoverable copy outside the active library
+// after an explicit backup replacement. If the move cannot complete, leaving the
+// sibling directory in place is still safer than deleting the user's old data.
+func (library *Library) preserveReplacedLibrary(previous string) {
+	history := filepath.Join(filepath.Dir(library.root), "Restore History")
+	if err := os.MkdirAll(history, 0o700); err != nil {
+		return
+	}
+	_ = os.Rename(previous, filepath.Join(history, filepath.Base(previous)))
 }
 
 func rewriteCachedAssetURIs(bookRoot, bookID string) error {
