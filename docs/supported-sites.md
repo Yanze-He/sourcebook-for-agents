@@ -8,7 +8,7 @@ Sourcebook for Agents currently supports Chrome and Chromium browsers. Firefox a
 
 On ordinary webpages, Picker can Pick selected text, links, images, video or audio references, and a lightweight webpage card. A webpage card stores the page URL, canonical URL when available, title, site name, favicon, Open Graph thumbnail, and a short metadata description. It does not save the full webpage body.
 
-For images, Picker attempts to save a local copy up to 20 MB when the image is PNG, JPEG, GIF, or WebP. Some sites prevent this through access controls or expiring URLs; when that happens, Sourcebook keeps the source reference and reports that no local copy is available. Video and audio are retained as links; Sourcebook does not download their media files.
+For images, Picker automatically attempts to save a local copy up to 20 MB when the image is PNG, JPEG, GIF, or WebP. Some sites prevent this through access controls or expiring URLs; when that happens, Sourcebook keeps the source reference and reports that no local copy is available. Video and audio are retained as links; Sourcebook does not download their media files.
 
 ## Agent conversations
 
@@ -24,6 +24,12 @@ Picker recognizes the following web chat providers:
 On recognized pages, Picker can Pick one message, selected messages, or messages already loaded in the current page DOM. It does not automatically load earlier history, send content back to a provider, or Pick messages hidden behind pagination.
 
 Chat pages change often. If a provider changes its page structure, use generic text Pick as a fallback and file a reproducible issue with the provider URL, browser version, and an anonymized description of the page structure. Other AI chat products are not supported in this release.
+
+## Social posts
+
+Picker recognizes post-detail pages on X / Twitter and Xiaohongshu. The page action becomes **Pick post** and saves the post text, author, available title, publication time, tags, cover, and original URL. Available metadata depends on the page; this is not an archive of comments or every attached media file.
+
+If a post is not recognized, use a generic text or page Pick as a fallback.
 
 ## Intentional limitations
 

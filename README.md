@@ -1,66 +1,74 @@
+<p align="center">
+  <img src="docs/images/brand/sourcebook-flat.svg" alt="Sourcebook for Agents" width="96" />
+</p>
+
 # Sourcebook for Agents
 
-<p align="center">
-  <img src="docs/images/sourcebook-logo.svg" alt="Sourcebook for Agents" width="112" />
-</p>
+Sourcebook keeps web material, AI conversations and local files together, ready to reuse with the agent you choose.
 
-> A local-first context library for the work you want to carry from the web into your next agent task.
+For researchers, designers, creators and people working across AI tools:
 
-<p align="center">
-  <img src="docs/images/sourcebook-product-mockup.png" alt="Sourcebook product mockup showing browser Pick, Sources, and a context pack" width="100%" />
-</p>
-
-Sourcebook for Agents keeps useful web context together without turning it into another chat product. Pick the references that matter while you browse, review them in a local library, and prepare a deliberate context pack for the next agent.
-
-There are no accounts, cloud sync, or hidden uploads in the core product. Your library lives on your computer, and you decide what leaves it.
-
-## The Product Loop
+- **Research & planning:** Bring references and useful AI answers together for the next analysis or brief.
+- **Design & creation:** Keep visual references, posts and project files in one Book.
+- **Switching agents:** Carry selected context into the next task without repeating the whole backstory.
 
 <p align="center">
-  <img src="docs/images/product-loop.svg" alt="Pick web material, review it in Sources, and prepare a context pack" width="100%" />
+  <img src="docs/images/sourcebook-hero-value-v6.png" alt="From your sources to any agent: pick web material, pack selected context, and continue with the agent you choose." width="100%" />
 </p>
 
-| Step | What happens | Why it matters |
+## Pick
+
+Save useful material from webpages and supported AI chats into a Book, with its original source attached.
+
+<p align="center">
+  <img src="docs/images/sourcebook-picker-features-v3.png" alt="Picker: choose a Book, pick chats, media and pages, and revisit recent Picks." width="100%" />
+</p>
+
+| Type | Sources | Saved content |
 | --- | --- | --- |
-| **1. Pick** | Collect selected text, links, images, page details, and supported chat messages from the page you are already viewing. | Keep research in its original context rather than rebuilding it from memory. |
-| **2. Sources** | Review every reference in a local, book-based library with its title, source URL, timestamp, and available media. | See what you have, remove noise, and retain provenance. |
-| **3. Pack** | Select the Sources and notes needed for one task. | Give another agent concise, traceable context instead of a long, unstructured prompt. |
+| Text | Webpages | Selected passages and source links |
+| Images | Webpages | PNG, JPEG, GIF, WebP and source links |
+| AI conversations | ChatGPT, Gemini, DeepSeek, Grok | Selected or currently loaded messages and their roles |
+| Posts | X / Twitter, Xiaohongshu | Post text, author, available metadata and cover |
+| Pages & links | Webpages | URL, title and available page metadata |
+| Video & audio | Webpages | Media links and available previews |
 
-## What It Is, and Is Not
+Picker automatically tries to save images locally; blocked downloads remain source links. Web video and audio stay as references, and page Picks are not full-page archives. [Supported sites and limits](docs/supported-sites.md).
 
-**Sourcebook is a context layer.** It helps you collect and prepare material for ChatGPT, Gemini, DeepSeek, Grok, or another agent you already use.
+## Organise & Pack
 
-It is **not** a new AI chat surface, an automatic web scraper, cloud storage, a team workspace, or a full-page archive. You pick content intentionally; Sourcebook records where it came from and keeps it ready for later use.
+Keep materials in Books, add notes, search and filter. Import local documents and media, or write your own records.
 
-## What You Can Pick
+Select the material for one task, then copy its files and prompt into your chosen agent. Sources without copyable files are included as links.
 
-- Selected web text, links, lightweight page cards, and individual images.
-- Image files in PNG, JPEG, GIF, and WebP when the browser or source allows a local copy.
-- Video and audio as source links rather than downloaded media files.
-- Individual, selected, or currently loaded messages from **ChatGPT, Gemini, DeepSeek, and Grok**.
-
-Every Pick retains useful provenance: its title, source URL, timestamp, and a locator or metadata record. Chat and link entries use the site favicon in the Sources list; locally saved images can be previewed from the same place.
-
-Read the full [supported-sites guide](docs/supported-sites.md) before relying on a site-specific flow.
-
-## Local-First by Design
+Customise the prompt in **Settings → Prompt settings**, using source titles, notes, file names and links. Preview the result or restore the default template.
 
 <p align="center">
-  <img src="docs/images/local-first.svg" alt="Browser picks flow to a local Sourcebook library, then to a user-controlled context pack" width="100%" />
+  <img src="docs/images/sourcebook-desktop-features-v7.png" alt="Desktop: organise by Book, find sources, select materials for a Pack, and continue in your agent." width="100%" />
 </p>
 
-- The Desktop app runs a service on `127.0.0.1` only.
-- Books are isolated local SQLite databases with their own asset folders.
-- Sourcebook does not operate a cloud API for your picked content.
-- A context pack is assembled only when you choose its Sources and notes; sending or pasting it into an AI product remains your action.
+## Local-First
 
-For the data model and runtime boundary, read the [architecture guide](docs/architecture.md). For data handling details, read the [privacy policy](docs/privacy.md).
+Your Books and files stay on your computer. No accounts, cloud sync or hidden uploads.
 
-## Quick Start
+- **Export:** choose one, several or all Books for a `.sourcebook-backup` archive.
+- **Import:** add backed-up Books or replace the library. Back up the current library before replacing it.
 
-### 1. Run Sourcebook from source
+Both are available in **Settings**. Backups contain Book data and local files, not Desktop settings. You decide what to share with an agent.
 
-**Requirements:** Node.js 22.18+, npm, and Go 1.24+.
+## Get Started
+
+Early alpha for Chrome and Chromium browsers, including Edge. Firefox and Safari are not supported.
+
+1. Download and install Desktop, and unzip Picker from the [latest release](https://github.com/Yanze-He/sourcebook-for-agents/releases/latest).
+2. In your browser's extension manager, enable **Developer mode**, select **Load unpacked**, and choose the extracted Picker folder.
+3. Start Desktop, open Picker on a webpage, turn it on and choose a Book.
+
+Keep Desktop running while using Picker. See [Getting Started](docs/getting-started.md) for installation, release verification and troubleshooting.
+
+### From Source
+
+Requires Node.js 22.18+, npm and Go 1.24.3+.
 
 ```bash
 git clone https://github.com/Yanze-He/sourcebook-for-agents.git
@@ -70,70 +78,16 @@ npm run build
 npm run dev:desktop
 ```
 
-The Desktop starts the local Sources app in your default browser. It stores data on your computer:
+When running from source, load `apps/picker/.output/chrome-mv3` as the unpacked extension.
 
-- macOS: `~/Library/Application Support/Sourcebook for Agents`
-- Windows: `%APPDATA%\\Sourcebook for Agents`
+## Contribute
 
-### 2. Load the Picker extension
+- **[Pick](docs/contribution/pick.md):** more websites, AI chats and material formats; better extraction and source retention.
+- **[Sourcebook](docs/contribution/sources.md):** better information on cards and in details; improved organisation, search, filtering and batch management.
+- **[Pack](docs/contribution/pack.md):** test and adapt handoffs to more agents; explore prompt templates for research, design and creation tasks.
 
-1. Open Chromium's extension management page.
-2. Enable **Developer mode**.
-3. Select **Load unpacked**.
-4. Choose `apps/picker/.output/chrome-mv3`.
-5. Open a webpage, open the extension, and turn **Picker** on.
+Run `npm test` and `npm run build` for development checks. See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and module boundaries.
 
-Keep the Desktop running while you use Picker. If the extension cannot reach the local application, it shows an explicit reconnect state instead of silently creating a separate cloud or account workflow.
+## Docs
 
-## Release Security
-
-Release automation builds and tests artifacts only. macOS signing and Apple notarization happen on a maintainer-controlled Mac, then the completed DMG and its checksum are uploaded manually to GitHub Releases. The Developer ID private key and notarization credentials never enter this repository or GitHub Actions.
-
-For the first end-to-end session and common checks, see [Getting Started](docs/getting-started.md).
-
-## Current Scope
-
-Sourcebook for Agents is an early local-first P1 focused on **Pick -> Sources -> Pack**.
-
-Included today:
-
-- Chrome and Chromium browser support.
-- Local SQLite storage, local image caching, Books, and Pack preparation.
-- macOS and Windows Desktop packaging scripts.
-- Pick support for ChatGPT, Gemini, DeepSeek, and Grok.
-
-Not included today:
-
-- Cloud sync, accounts, teams, billing, or a hosted Sources app.
-- Full-page snapshots, OCR, ASR, or video downloads.
-- Firefox and Safari support.
-
-## Documentation
-
-| Need | Read |
-| --- | --- |
-| Install and use the product | [Getting Started](docs/getting-started.md) |
-| Understand supported sites and media behavior | [Supported Sites and Limitations](docs/supported-sites.md) |
-| Understand the local runtime and storage model | [Architecture](docs/architecture.md) |
-| Integrate with the local API | [Local API Contract](docs/local-api.md) |
-| Review data handling | [Privacy Policy](docs/privacy.md) |
-| Build or extend a module | [Contribution guides](docs/contribution/) |
-| Package a release | [Release and Deployment](docs/release-and-deployment.md) |
-
-## Repository Map
-
-| Area | Path | Responsibility |
-| --- | --- | --- |
-| Pick | `apps/picker` | Chromium extension, page and chat Pick logic, Picker UX |
-| Sources | `apps/sources/src` | Source list, previews, selection, and local Sources UX |
-| Pack | `apps/service-go` | Local API, media cache, Book operations, and Pack preparation |
-| Desktop | `apps/desktop` | Local startup, browser launch, data directories, and installers |
-
-## Development
-
-```bash
-npm test
-npm run build
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for repository-wide conventions and the focused guides in `docs/contribution/` for module boundaries.
+[Use Cases](docs/use-cases.md) · [Supported Sites](docs/supported-sites.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md) · [Release & Deployment](docs/release-and-deployment.md)

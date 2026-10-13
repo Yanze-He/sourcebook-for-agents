@@ -35,7 +35,7 @@ This directory contains the Sourcebook for Agents Chrome/Chromium extension and 
 ## MVP Scope
 
 - Pick selected web text.
-- Pick visible images (PNG, JPEG, GIF, WebP). New image Picks are copied into the current Book automatically; when the browser cannot read an image directly, Sourcebook downloads it from its source link.
+- Pick visible images (PNG, JPEG, GIF, WebP). Picker automatically attempts to copy each image into the current Book; when the browser cannot read an image directly, Sourcebook tries the original source link. If the site blocks the request, the Pick remains available as a source link.
 - Pick links.
 - Pick lightweight webpage metadata.
 - Save all picks to Sources.

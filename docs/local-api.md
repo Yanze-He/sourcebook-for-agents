@@ -43,7 +43,7 @@ Remote image Sources keep two independent states:
 - `linkState`: `linked`, `invalid`, or `none`, describing the original source URL.
 - `assetCacheState`: `pending`, `downloading`, `cached`, `missing`, or `failed`, describing the managed local copy.
 
-Creating or picking an image URL does not download the file automatically. This makes the initial Source lightweight while preserving the source URL for viewing, validation, and later download.
+Creating or picking a supported public image URL automatically starts an attempt to save a managed local copy in the selected Book. The original source URL remains attached for viewing and validation. If a site blocks the request, uses an expired URL, or returns an unsupported response, Sourcebook keeps the source reference and reports that no local copy is available.
 
 `POST /api/sources/:sourceItemId/download?bookId=:bookId` starts an asynchronous image download into the Book's managed files. It returns `202` with `{ "status": "downloading" }`. Poll `GET /api/sources?bookId=:bookId` until the item's `assetCacheState` becomes `cached` or `failed`.
 

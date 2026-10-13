@@ -4,15 +4,15 @@
 
 ## Platform
 
-Chrome/Chromium browser extension with an optional local Sourcebook Desktop connection.
+Chrome/Chromium browser extension connected to the local Sourcebook Desktop application.
 
 ## Stack
 
-WXT browser extension, Node local service, SQLite metadata store.
+WXT browser extension, Go local service, SQLite metadata store.
 
 ## Users
 
-Non-code creative workers, heavy AI users, and small creative teams who collect references, prompts, agent outputs, and web materials while working across browser-based tools.
+Independent researchers, product and design practitioners, content creators, and agent-workflow builders who collect references, prompts, agent outputs, and web materials while working across browser-based tools.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ Non-code creative workers, heavy AI users, and small creative teams who collect 
 
 ## Positioning
 
-The product does not compete with AIGC generation tools. It focuses on collecting, preserving, and preparing cross-tool context with durable source information.
+The product does not compete with AIGC generation tools or replace a user’s preferred agent. It focuses on collecting, preserving, and preparing cross-tool context with durable source information, so a task can move to any agent the user chooses.
 
 ## Operating Context
 
