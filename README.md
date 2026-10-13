@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/sourcebook-hero-value-v7.png" alt="From your sources to any agent: pick web material, pack selected context, and continue with the agent you choose." width="100%" />
+  <img src="docs/images/sourcebook-hero-value-v8.png" alt="From your sources to any agent: pick web material, pack selected context, and continue with the agent you choose." width="100%" />
 </p>
 
 # Sourcebook for Agents
