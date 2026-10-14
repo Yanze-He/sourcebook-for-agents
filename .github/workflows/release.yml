@@ -59,7 +59,6 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix apps/picker
       - run: npm ci --prefix apps/sources
-      - run: npm ci --prefix apps/desktop
       - run: npm run build
       - run: npm --prefix apps/desktop run package:windows
       - name: Install Inno Setup
