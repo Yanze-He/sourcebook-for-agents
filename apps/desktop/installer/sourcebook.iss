@@ -25,4 +25,6 @@ Name: "{autodesktop}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\Sourcebook Desktop.vbs"; Description: "Open Sourcebook for Agents"; Flags: nowait postinstall skipifsilent
+; A .vbs file must be launched through the Windows Script Host. Executing it
+; directly makes Inno Setup call CreateProcess on a non-executable file.
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\Sourcebook Desktop.vbs"""; Description: "Open Sourcebook for Agents"; Flags: nowait postinstall skipifsilent
