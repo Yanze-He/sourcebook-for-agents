@@ -17,7 +17,7 @@ For researchers, designers, creators and people working across AI tools:
 Save useful material from webpages and supported AI chats into a Book, with its original source attached.
 
 <p align="center">
-  <img src="docs/images/sourcebook-picker-features-v4.png" alt="Picker: choose a Book, pick chats, media and pages, and revisit recent Picks." width="100%" />
+  <img src="docs/images/sourcebook-picker-features-v6.png" alt="Picker: choose a Book, pick chats, media and pages, and revisit recent Picks." width="100%" />
 </p>
 
 | Type | Sources | Saved content |
