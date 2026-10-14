@@ -6,6 +6,9 @@
 
 Sourcebook keeps web material, AI conversations and local files together, ready to reuse with the agent you choose.
 
+> [!IMPORTANT]
+> **Current beta: macOS (Apple silicon) only.** Use it with Chrome or another Chromium browser, including Edge. Windows, Firefox and Safari are not supported yet.
+
 For researchers, designers, creators and people working across AI tools:
 
 - **Research & planning:** Bring references and useful AI answers together for the next analysis or brief.
@@ -54,7 +57,7 @@ Both are available in **Settings**. Backups contain Book data and local files, n
 
 ## Get Started
 
-Beta for Chrome and Chromium browsers, including Edge. Firefox and Safari are not supported.
+The current beta needs macOS (Apple silicon) and Chrome or another Chromium browser, including Edge.
 
 1. Download and install Desktop, and unzip Picker from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases).
 2. In your browser's extension manager, enable **Developer mode**, select **Load unpacked**, and choose the extracted Picker folder.
