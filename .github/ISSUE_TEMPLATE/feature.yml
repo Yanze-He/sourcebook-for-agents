@@ -1,12 +1,12 @@
 name: Feature request
-description: Propose an improvement to the public Pick, Sources, Pack, or Desktop loop.
+description: Propose an improvement to Picker, Books & Library, Pack, or the Desktop App.
 labels: [enhancement]
 body:
   - type: dropdown
     id: area
     attributes:
       label: Area
-      options: [Pick, Sources, Pack, Desktop, Documentation]
+      options: [Picker, Books & Library, Pack, Desktop App, Documentation]
     validations:
       required: true
   - type: textarea

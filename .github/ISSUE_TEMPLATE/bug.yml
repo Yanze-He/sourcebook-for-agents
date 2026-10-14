@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in Pick, Sources, Pack, or Desktop.
+description: Report a reproducible problem in Picker, Books & Library, Pack, or the Desktop App.
 labels: [bug]
 body:
   - type: markdown
@@ -9,7 +9,7 @@ body:
     id: area
     attributes:
       label: Area
-      options: [Pick, Sources, Pack, Desktop, Documentation]
+      options: [Picker, Books & Library, Pack, Desktop App, Documentation]
     validations:
       required: true
   - type: textarea

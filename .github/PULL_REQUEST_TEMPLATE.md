@@ -1,6 +1,6 @@
 ## Summary
 
-Describe the user-visible change and its contribution area: Pick, Sources, Pack, Desktop, or documentation.
+Describe the user-visible change and its contribution area: Picker, Books & Library, Pack, Desktop App, or Documentation.
 
 ## Validation
 
