@@ -6,9 +6,6 @@
 
 Sourcebook keeps web material, AI conversations and local files together, ready to reuse with the agent you choose.
 
-> [!IMPORTANT]
-> **Current beta: macOS (Apple silicon) only.** Use it with Chrome or another Chromium browser, including Edge. Windows, Firefox and Safari are not supported yet.
-
 For researchers, designers, creators and people working across AI tools:
 
 - **Research & planning:** Bring references and useful AI answers together for the next analysis or brief.
