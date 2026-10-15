@@ -35,7 +35,6 @@ const (
 	trayIconID         = 1
 	openCommandID      = 0x5001
 	quitCommandID      = 0x5002
-	uninstallCommandID = 0x5003
 )
 
 var (
@@ -164,11 +163,6 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 		case quitCommandID:
 			procDestroyWindow.Call(uintptr(window))
 			return 0
-		case uninstallCommandID:
-			if launchUninstaller() {
-				procDestroyWindow.Call(uintptr(window))
-			}
-			return 0
 		}
 	case trayCallback:
 		switch uint32(lParam) {
@@ -224,18 +218,6 @@ func openSourcebook() {
 	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "http://127.0.0.1:4177/").Start()
 }
 
-func launchUninstaller() bool {
-	executable, err := os.Executable()
-	if err != nil {
-		return false
-	}
-	uninstaller := filepath.Join(filepath.Dir(executable), "unins000.exe")
-	if _, err := os.Stat(uninstaller); err != nil {
-		return false
-	}
-	return exec.Command(uninstaller).Start() == nil
-}
-
 func loadTrayIcon() syscall.Handle {
 	executable, err := os.Executable()
 	if err != nil {
@@ -282,7 +264,6 @@ func showTrayMenu(window syscall.Handle) {
 	procAppendMenu.Call(menu, mfString, openCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Open Sourcebook"))))
 	procAppendMenu.Call(menu, mfSeparator, 0, 0)
 	procAppendMenu.Call(menu, mfString, quitCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Quit Sourcebook Desktop"))))
-	procAppendMenu.Call(menu, mfString, uninstallCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Uninstall Sourcebook Desktop"))))
 
 	var position point
 	if result, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&position))); result == 0 {
