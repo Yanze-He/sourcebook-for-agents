@@ -8,11 +8,15 @@ To run Sourcebook from source, you need Node.js 22.18+, npm, and Go 1.24+. Node 
 
 ### Release install
 
-Download the macOS DMG and Chromium Picker ZIP from the repository Release page. A Windows installer will appear only in a release where it has been separately verified. The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. On macOS, Sourcebook runs from the menu bar: use its icon to open Sources, restart the local service, or quit the app.
+Download the macOS DMG and Chromium Picker ZIP from the repository Release page. A Windows installer will appear only in a release where it has been separately verified. The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. Sourcebook appears in the Dock; use its application menu to open Sources, restart the local service, or quit.
 
 Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 
 To install Picker, unzip `sourcebook-picker-chromium.zip`, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked** and select the extracted extension folder.
+
+### Updates
+
+Sourcebook checks GitHub Releases quietly after launch, at most once every 24 hours. When a newer version is available, open **Settings → Version & updates** to read the notes and open its Release page. Download and install the DMG or Windows installer yourself; Sourcebook never downloads or runs an installer automatically.
 
 ### Run from source
 

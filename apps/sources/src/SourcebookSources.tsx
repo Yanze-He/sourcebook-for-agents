@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Square, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
+import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import TurndownService from "turndown";
 
@@ -9,6 +9,9 @@ type LocalCopyState = "pending" | "cached" | "downloading" | "failed" | "missing
 type LinkState = "linked" | "invalid" | "none";
 type SourceItem = { id: string; bookId: string; resourceId: string; itemTitle: string; userNote: string; status: string; pickedAt: string; favorite: boolean; modality: Modality; pickType: string; resourceSummary: string; contentText: string | null; contentUrl: string | null; thumbnailUrl: string | null; sourceUrl: string; sourceTitle: string; sourceOrigin: string; faviconUrl: string | null; assetId: string | null; mimeType: string | null; fileName: string | null; localPath: string | null; fileSize: number | null; assetCacheState: LocalCopyState; linkState: LinkState; metadata: { description?: string; pageTitle?: string; ogTitle?: string; siteName?: string; canonicalUrl?: string; ogImage?: string; mediaPreviewUrl?: string; videoPreviewUrl?: string; mediaDurationSeconds?: number; conversation?: { provider?: string }; post?: { title?: string; bodyText?: string; author?: { displayName?: string; handle?: string }; publishedAt?: string; tags?: string[] } } };
 type SourcePack = { id: string; warnings: string[] };
+type CardDensity = "compact" | "standard" | "spacious";
+type LibrarySettingsResponse = { libraryRoot: string; defaultRoot: string; configured: boolean; requiresSetup: boolean; isEmpty: boolean };
+type UpdateSettingsResponse = { version: string; autoCheck: boolean; lastCheckedAt?: string; release?: { version: string; publishedAt: string; name: string; notes: string; url: string } | null; status?: "idle" | "upToDate" | "available" | "error"; error?: string };
 type SourcePage = { items: SourceItem[]; total: number; nextCursor: string | null; limit: number };
 const sourcePageSize = 60;
 const bookSourceLimit = 200;
@@ -148,6 +151,9 @@ export default function SourcebookSources() {
   const [deleteBookTarget, setDeleteBookTarget] = useState<Book | null>(null);
   const [transferItem, setTransferItem] = useState<SourceItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [lastSelectedIdsByBook, setLastSelectedIdsByBook] = useState<Record<string, string[]>>({});
+  const [isBatchSelecting, setIsBatchSelecting] = useState(false);
+  const [density, setDensity] = useState<CardDensity>(() => (window.localStorage.getItem("sourcebook-card-density") as CardDensity) || "standard");
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [kind, setKind] = useState<Modality[]>([]);
@@ -161,6 +167,10 @@ export default function SourcebookSources() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPromptSettingsOpen, setIsPromptSettingsOpen] = useState(false);
+  const [isLibrarySettingsOpen, setIsLibrarySettingsOpen] = useState(false);
+  const [isUpdateSettingsOpen, setIsUpdateSettingsOpen] = useState(false);
+  const [librarySettings, setLibrarySettings] = useState<LibrarySettingsResponse | null>(null);
+  const [updateSettings, setUpdateSettings] = useState<UpdateSettingsResponse | null>(null);
   const [promptTemplate, setPromptTemplate] = useState("");
   const [isClearDataOpen, setIsClearDataOpen] = useState(false);
   const [isClearingData, setIsClearingData] = useState(false);
@@ -246,10 +256,18 @@ export default function SourcebookSources() {
     setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId);
   }
   useEffect(() => { void loadBooks(); }, []);
+  useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
   useEffect(() => {
     void request<PromptSettingsResponse>("/api/settings/prompt")
       .then((response) => setPromptTemplate(response.template || ""))
       .catch((error) => setMessage(errorMessage(error)));
+  }, []);
+  useEffect(() => {
+    void request<LibrarySettingsResponse>("/api/settings/library").then((response) => {
+      setLibrarySettings(response);
+      if (response.requiresSetup) setIsLibrarySettingsOpen(true);
+    }).catch((error) => setMessage(errorMessage(error)));
+    void request<UpdateSettingsResponse>("/api/settings/update").then(setUpdateSettings).catch(() => undefined);
   }, []);
   useEffect(() => { if (activeBookId) void loadItems(); }, [activeBookId]);
   useEffect(() => { if (activeBookId && (query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites)) void loadItems({ limit: bookSourceLimit }); }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, source]);
@@ -287,14 +305,52 @@ export default function SourcebookSources() {
 
   const visibleItems = useMemo(() => items.filter((item) => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    const matchesQuery = !normalizedQuery || [item.itemTitle, item.sourceTitle, item.sourceOrigin, item.contentText, item.metadata.description].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery));
+    const post = item.metadata.post;
+    const matchesQuery = !normalizedQuery || [item.itemTitle, item.sourceTitle, item.sourceOrigin, item.sourceUrl, item.contentUrl, item.userNote, item.contentText, item.resourceSummary, item.metadata.description, item.metadata.pageTitle, item.metadata.ogTitle, item.metadata.siteName, item.metadata.canonicalUrl, item.metadata.conversation?.provider, post?.title, post?.bodyText, post?.author?.displayName, post?.author?.handle, ...(post?.tags ?? [])].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery));
     return matchesQuery && matchesDate(item.pickedAt, dateFilter, dateStart, dateEnd) && (!kind.length || kind.includes(item.modality)) && (!source.length || source.includes(sourceLabel(item))) && (!linkFilter.length || linkFilter.includes(item.linkState as Exclude<LinkFilter, "all">)) && (!localFilter.length || localFilter.includes(localState(item) as Exclude<LocalFilter, "all">)) && (!onlyFavorites || item.favorite);
   }), [dateEnd, dateFilter, items, kind, linkFilter, localFilter, onlyFavorites, query, source]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
+  const reusableSelectionIds = useMemo(() => (lastSelectedIdsByBook[activeBookId] || []).filter((id) => items.some((item) => item.id === id)), [activeBookId, items, lastSelectedIdsByBook]);
+  const hasReusableSelection = reusableSelectionIds.length > 0;
   const sourceOptions = useMemo(() => [...new Set(items.map(sourceLabel))].sort((a, b) => a.localeCompare(b)), [items]);
   const toggleSelected = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   const selectVisibleItems = () => setSelectedIds(visibleItems.map((item) => item.id));
-  const selectFromDetail = (id: string) => { toggleSelected(id); setDetailItem(null); };
+  const rememberSelection = (bookId: string, ids: string[]) => {
+    if (!bookId || !ids.length) return;
+    setLastSelectedIdsByBook((current) => ({ ...current, [bookId]: [...new Set(ids)] }));
+  };
+  const removeFromReusableSelection = (bookId: string, ids: string[]) => {
+    if (!ids.length) return;
+    const removed = new Set(ids);
+    setLastSelectedIdsByBook((current) => {
+      const previous = current[bookId];
+      if (!previous) return current;
+      const next = previous.filter((id) => !removed.has(id));
+      if (next.length === previous.length) return current;
+      const updated = { ...current };
+      if (next.length) updated[bookId] = next;
+      else delete updated[bookId];
+      return updated;
+    });
+  };
+  const resetSourceFilters = () => {
+    setQuery(""); setKind([]); setSource([]); setLinkFilter([]); setLocalFilter([]); setDateFilter("all"); setDateStart(""); setDateEnd(""); setOnlyFavorites(false); setIsFiltersOpen(false);
+  };
+  const restoreLastSelection = () => {
+    const previous = lastSelectedIdsByBook[activeBookId] || [];
+    const available = previous.filter((id) => items.some((item) => item.id === id));
+    if (!available.length) {
+      removeFromReusableSelection(activeBookId, previous);
+      showSourcesMessage(language === "zh" ? "上一次选择中的素材已不存在。" : "The sources from the previous selection are no longer available.", 3600, "error");
+      return;
+    }
+    resetSourceFilters();
+    setSelectedIds(available);
+    if (available.length !== previous.length) removeFromReusableSelection(activeBookId, previous.filter((id) => !available.includes(id)));
+    const skipped = previous.length - available.length;
+    showSourcesMessage(language === "zh" ? `已恢复 ${available.length} 个上一次选择的素材${skipped ? `，跳过 ${skipped} 个已不存在的素材。` : "。"}` : `Restored ${available.length} source${available.length === 1 ? "" : "s"}${skipped ? `; skipped ${skipped} unavailable source${skipped === 1 ? "" : "s"}.` : "."}`, 3600, "success");
+  };
+  const exitBatchSelection = () => { rememberSelection(activeBookId, selectedIds); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); };
   async function copySource(item: SourceItem) {
     try {
       if (hasCopyablePackFile(item)) {
@@ -342,7 +398,9 @@ export default function SourcebookSources() {
   async function removeSelected() {
     if (!selectedIds.length) return;
     try {
-      await request(bookPath("/api/sources", activeBookId), { method: "DELETE", body: JSON.stringify({ sourceItemIds: selectedIds }) });
+      const deletedIds = [...selectedIds];
+      await request(bookPath("/api/sources", activeBookId), { method: "DELETE", body: JSON.stringify({ sourceItemIds: deletedIds }) });
+      removeFromReusableSelection(activeBookId, deletedIds);
       setIsDeleteOpen(false); setDetailItem(null); await loadItems();
     } catch (error) { setMessage(errorMessage(error)); }
   }
@@ -378,6 +436,7 @@ export default function SourcebookSources() {
   async function removeItem(id: string) {
     try {
       await request(bookPath("/api/sources", activeBookId), { method: "DELETE", body: JSON.stringify({ sourceItemIds: [id] }) });
+      removeFromReusableSelection(activeBookId, [id]);
       setDetailItem(null); setPreviewItem(null); await loadItems();
     } catch (error) { setMessage(errorMessage(error)); }
   }
@@ -412,7 +471,8 @@ export default function SourcebookSources() {
   async function selectBook(bookId: string) {
     try {
       const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
-      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setDetailItem(null); setIsBookOpen(false);
+      if (isBatchSelecting) rememberSelection(activeBookId, selectedIds);
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null); setIsBookOpen(false);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function createBook(name: string) {
@@ -451,7 +511,8 @@ export default function SourcebookSources() {
   async function removeBook(bookId: string) {
     try {
       const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}`, { method: "DELETE" });
-      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setDetailItem(null); setDeleteBookTarget(null);
+      setLastSelectedIdsByBook((current) => { const next = { ...current }; delete next[bookId]; return next; });
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setDetailItem(null); setDeleteBookTarget(null);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function transferSource(targetBookId: string, mode: "copy" | "move") {
@@ -471,6 +532,8 @@ export default function SourcebookSources() {
       }
       setIsBookTransferOpen(false);
       setSelectedIds([]);
+      if (mode === "copy") rememberSelection(activeBookId, sourceItemIds);
+      else removeFromReusableSelection(activeBookId, sourceItemIds);
       await loadItems({ background: true });
       const count = sourceItemIds.length;
       showSourcesMessage(language === "zh" ? `已${mode === "move" ? "移动" : "复制"} ${count} 个素材到目标 Book。` : `${mode === "move" ? "Moved" : "Copied"} ${count} source${count === 1 ? "" : "s"} to the selected Book.`, 3600, "success");
@@ -512,7 +575,7 @@ export default function SourcebookSources() {
       const firstImportedBookId = restored.imported?.[0]?.id || restored.activeBookId;
       const manifest = await request<BookManifest>(`/api/books/${encodeURIComponent(firstImportedBookId)}/activate`, { method: "POST" });
       setBooks(manifest.books); setUnreadBookIds(manifest.unreadBookIds || []); setActiveBookId(manifest.activeBookId);
-      setItems([]); setSelectedIds([]); setDetailItem(null); setPreviewItem(null);
+      setItems([]); setSelectedIds([]); setLastSelectedIdsByBook({}); setDetailItem(null); setPreviewItem(null);
       await loadItems({ bookId: firstImportedBookId });
       showSourcesMessage(mode === "replace" ? "Library restored from backup." : "Backup imported as new Books.");
     } catch (error) { setMessage(errorMessage(error)); }
@@ -524,7 +587,7 @@ export default function SourcebookSources() {
       setBooks(response.books);
       setUnreadBookIds(response.unreadBookIds || []);
       setActiveBookId(response.activeBookId);
-      setItems([]); setSelectedIds([]); setDetailItem(null); setPreviewItem(null); setIsClearDataOpen(false);
+      setItems([]); setSelectedIds([]); setLastSelectedIdsByBook({}); setIsBatchSelecting(false); setDetailItem(null); setPreviewItem(null); setIsClearDataOpen(false);
       await loadItems({ bookId: response.activeBookId });
       showSourcesMessage(language === "zh" ? "本地数据已清空。" : "Local data cleared.", 3600, "success");
     } catch (error) { showSourcesMessage(errorMessage(error), 6000, "error"); }
@@ -581,13 +644,12 @@ export default function SourcebookSources() {
               <button aria-label={copy.addText} className="secondary-button header-action-button local-import-button" data-tooltip={copy.addText} onClick={() => setIsCreateTextOpen(true)} title={copy.addText} type="button"><FilePlus2 size={16} /><span className="header-action-label">{copy.addText}</span></button>
               <button aria-label={copy.importLocalFiles} className="secondary-button header-action-button local-import-button" data-tooltip={copy.importLocalFiles} onClick={() => localImportInputRef.current?.click()} title={copy.importLocalFiles} type="button"><FileUp size={16} /><span className="header-action-label">{copy.importLocalFiles}</span></button>
               <div className="settings-menu" ref={settingsRef}>
-                <button aria-label={copy.settings} aria-expanded={isSettingsOpen} className="icon-button" data-tooltip={copy.settings} onClick={() => setIsSettingsOpen((open) => !open)} title={copy.settings} type="button"><Settings size={16} /></button>
+                <button aria-label={copy.settings} aria-expanded={isSettingsOpen} className={`icon-button settings-trigger ${updateSettings?.status === "available" ? "has-update" : ""}`} data-tooltip={copy.settings} onClick={() => setIsSettingsOpen((open) => !open)} title={copy.settings} type="button"><Settings size={16} /></button>
                 {isSettingsOpen ? <div className="settings-popover" role="menu">
                   <button className="settings-picker-install" onClick={() => { openPickerInstall(); setIsSettingsOpen(false); }} role="menuitem" type="button"><Puzzle size={15} /><span>{copy.installPicker}</span></button>
                   <button onClick={() => { setIsSettingsOpen(false); setIsPromptSettingsOpen(true); }} role="menuitem" type="button"><Sparkles size={15} /><span>{copy.promptSettings}</span></button>
-                  <button onClick={openBackupExport} role="menuitem" type="button"><Download size={15} /><span>{copy.exportBackup}</span></button>
-                  <button onClick={() => backupInputRef.current?.click()} role="menuitem" type="button"><Upload size={15} /><span>{copy.importBackup}</span></button>
-                  <button className="settings-danger-action" onClick={() => { setIsSettingsOpen(false); setIsClearDataOpen(true); }} role="menuitem" type="button"><Trash2 size={15} /><span>{copy.clearLocalData}</span></button>
+                  <button onClick={() => { setIsSettingsOpen(false); setIsLibrarySettingsOpen(true); }} role="menuitem" type="button"><HardDrive size={15} /><span>{language === "zh" ? "管理本地数据" : "Manage local data"}</span></button>
+                  <button className={updateSettings?.status === "available" ? "settings-update-available" : ""} onClick={() => { setIsSettingsOpen(false); setIsUpdateSettingsOpen(true); }} role="menuitem" type="button"><RefreshCw size={15} /><span>{language === "zh" ? "版本与更新" : "Version & updates"}</span>{updateSettings?.status === "available" ? <i aria-label={language === "zh" ? "有新版本可用" : "Update available"} /> : null}</button>
                   <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents#readme", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><CircleHelp size={15} /><span>{copy.help}</span></button>
                   <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents/issues/new/choose", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><MessageSquare size={15} /><span>{copy.feedback}</span></button>
                   <button onClick={() => { setLanguage(language === "en" ? "zh" : "en"); setIsSettingsOpen(false); }} role="menuitem" type="button"><Languages size={15} /><span>{copy.switchLanguage}</span></button>
@@ -604,16 +666,19 @@ export default function SourcebookSources() {
           <label className={`search-box sources-search source-item-search ${query || isSearchFocused ? "is-active" : ""}`}><Search size={15} strokeWidth={1.8} /><input placeholder={copy.search} value={query} onBlur={() => setIsSearchFocused(false)} onChange={(event) => setQuery(event.target.value)} onFocus={() => setIsSearchFocused(true)} />{query ? <button aria-label={copy.clearSearch} className="search-clear-button" data-tooltip={copy.clearSearch} onMouseDown={(event) => event.preventDefault()} onClick={() => setQuery("")} title={copy.clearSearch} type="button"><X size={13} /></button> : null}</label>
           <div className="filter-menu" ref={filterRef}><button aria-label={copy.filter} className="filter-menu-button icon-only" aria-expanded={isFiltersOpen} aria-pressed={Boolean(kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all")} data-tooltip={copy.filter} onClick={() => setIsFiltersOpen((open) => !open)} title={copy.filter} type="button"><Funnel size={15} /></button>{isFiltersOpen ? <FilterPopover copy={copy} dateEnd={dateEnd} dateFilter={dateFilter} dateStart={dateStart} kind={kind} linkFilter={linkFilter} localFilter={localFilter} source={source} sourceOptions={sourceOptions} onDateEndChange={setDateEnd} onDateFilterChange={(value) => setDateFilter((current) => current === value ? "all" : value)} onDateStartChange={setDateStart} onKindChange={(value) => setKind((current) => toggleFilterValue(current, value))} onLinkFilterChange={(value) => setLinkFilter((current) => toggleFilterValue(current, value))} onLocalFilterChange={(value) => setLocalFilter((current) => toggleFilterValue(current, value))} onReset={() => { setKind([]); setSource([]); setLinkFilter([]); setLocalFilter([]); setDateFilter("all"); setDateStart(""); setDateEnd(""); }} onSourceChange={(value) => setSource((current) => toggleFilterValue(current, value))} /> : null}</div>
           <button aria-label={copy.favorites} className="favorite-filter-button icon-only" aria-pressed={onlyFavorites} data-tooltip={copy.favorites} onClick={() => setOnlyFavorites((active) => !active)} title={copy.favorites} type="button"><Star size={15} fill={onlyFavorites ? "currentColor" : "none"} /></button>
+          <div aria-label={language === "zh" ? "卡片密度" : "Card density"} className="density-control" role="group">
+            {(["compact", "standard", "spacious"] as CardDensity[]).map((entry) => <button aria-label={entry} aria-pressed={density === entry} className={`density-button is-${entry}`} key={entry} onClick={() => setDensity(entry)} type="button"><span /></button>)}
+          </div>
           <input accept={localImportAccept} className="visually-hidden" multiple onChange={(event) => { if (event.target.files?.length) void importLocalFiles(Array.from(event.target.files)); event.currentTarget.value = ""; }} ref={localImportInputRef} type="file" /><input accept=".sourcebook-backup" className="visually-hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importBackup(file); event.currentTarget.value = ""; }} ref={backupInputRef} type="file" />
         </div>
       </div>
       {loading ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
       {!loading && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
-      {!loading && visibleItems.length > 0 ? <SourceMasonry items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onToggle={toggleSelected} /> : null}
-      {selectedIds.length > 0 ? <footer className="sources-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button></div><div className="sources-footer-actions"><button className="secondary-button sources-delete-button" onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button" onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><div className="sources-pack-wrap" ref={bookTransferRef}><button aria-expanded={isBookTransferOpen} className={`secondary-button sources-transfer-button ${isBookTransferOpen ? "is-open" : ""}`} onClick={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={selectedIds.length} isTransferring={isTransferringSelected} onClose={() => setIsBookTransferOpen(false)} onTransfer={transferSelectedSources} /> : null}</div><div className="sources-pack-wrap" ref={packRef}><button aria-expanded={isPackOpen} className={`primary-button sources-pack-button ${isPackOpen ? "is-open" : ""}`} onClick={() => { setIsBookTransferOpen(false); setIsPackOpen((open) => !open); }} type="button"><Package size={15} />{copy.packForAgent}</button>{isPackOpen ? <PackPopover items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} /> : null}</div><button aria-label={copy.clear} className="secondary-button sources-cancel-button" data-tooltip={copy.clear} onClick={() => setSelectedIds([])} type="button"><X size={17} /></button></div></footer> : null}
+      {!loading && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onToggle={toggleSelected} /> : null}
+      {isBatchSelecting ? <footer className="sources-footer sources-batch-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={!visibleItems.length || selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button>{hasReusableSelection ? <button className="text-button sources-select-all-button" onClick={restoreLastSelection} type="button">{language === "zh" ? "使用上一次选择" : "Use previous selection"}</button> : null}</div><div className="sources-footer-actions"><button className="secondary-button sources-delete-button" disabled={!selectedIds.length} onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button" disabled={!selectedIds.length} onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><div className="sources-pack-wrap" ref={bookTransferRef}><button aria-expanded={isBookTransferOpen} className={`secondary-button sources-transfer-button ${isBookTransferOpen ? "is-open" : ""}`} disabled={!selectedIds.length} onClick={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={selectedIds.length} isTransferring={isTransferringSelected} onClose={() => setIsBookTransferOpen(false)} onTransfer={transferSelectedSources} /> : null}</div><div className="sources-pack-wrap" ref={packRef}><button aria-expanded={isPackOpen} className={`primary-button sources-pack-button ${isPackOpen ? "is-open" : ""}`} disabled={!selectedIds.length} onClick={() => { setIsBookTransferOpen(false); setIsPackOpen((open) => !open); }} type="button"><Package size={15} />{copy.packForAgent}</button>{isPackOpen ? <PackPopover items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} /> : null}</div><button aria-label={copy.clear} className="secondary-button sources-cancel-button" data-tooltip={copy.clear} onClick={exitBatchSelection} type="button"><X size={17} /></button></div></footer> : !loading && visibleItems.length > 0 ? <button className="batch-actions-fab" onClick={() => setIsBatchSelecting(true)} type="button"><ListChecks size={16} />{language === "zh" ? "批量操作" : "Batch actions"}</button> : null}
       {message ? <p className={`sources-message is-${messageTone}`} role="status">{isRefreshing || isImporting ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
-    <SourceDetailModal focusNote={focusDetailNote} item={detailItem} isSelected={Boolean(detailItem && selectedIds.includes(detailItem.id))} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onSelect={selectFromDetail} onTitleSave={saveTitle} />
+    <SourceDetailModal focusNote={focusDetailNote} item={detailItem} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onTitleSave={saveTitle} />
     <DeleteModal count={selectedIds.length} isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={() => void removeSelected()} />
     <CreateBookModal isOpen={isCreateBookOpen} onClose={() => setIsCreateBookOpen(false)} onCreate={createBook} />
     <CreateTextModal isOpen={isCreateTextOpen} onClose={() => setIsCreateTextOpen(false)} onCreate={createTextSource} />
@@ -626,20 +691,21 @@ export default function SourcebookSources() {
     <ClearLocalDataModal isClearing={isClearingData} isOpen={isClearDataOpen} onClose={() => !isClearingData && setIsClearDataOpen(false)} onConfirm={() => void clearLocalData()} />
     <BackupExportModal books={books} isOpen={isBackupExportOpen} onClose={() => setIsBackupExportOpen(false)} onExport={exportBackup} onSelectionChange={setBackupBookIds} selectedBookIds={backupBookIds} />
     <PromptSettingsModal isOpen={isPromptSettingsOpen} language={language} savedTemplate={promptTemplate} onClose={() => setIsPromptSettingsOpen(false)} onSave={savePromptTemplate} />
+    <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
+    <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
   </main></LanguageContext.Provider>;
 }
 
-function SourceMasonry({ items, selectedIds, hasMore, isLoadingMore, onLoadMore, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { items: SourceItem[]; selectedIds: string[]; hasMore: boolean; isLoadingMore: boolean; onLoadMore: () => void; onFavorite: (id: string, favorite: boolean) => void; onOpen: (item: SourceItem) => void; onEditNote: (item: SourceItem) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onToggle: (id: string) => void }) {
+function SourceMasonry({ density, isBatchSelecting, items, selectedIds, hasMore, isLoadingMore, onLoadMore, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { density: CardDensity; isBatchSelecting: boolean; items: SourceItem[]; selectedIds: string[]; hasMore: boolean; isLoadingMore: boolean; onLoadMore: () => void; onCopy: (item: SourceItem) => Promise<void>; onFavorite: (id: string, favorite: boolean) => void; onOpen: (item: SourceItem) => void; onEditNote: (item: SourceItem) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onToggle: (id: string) => void }) {
   const copy = interfaceCopy[useLanguage()];
   const ref = useRef<HTMLDivElement | null>(null); const [columnCount, setColumnCount] = useState(4);
-  useEffect(() => { const element = ref.current; if (!element) return; const update = () => setColumnCount(element.clientWidth < 500 ? 1 : Math.max(2, Math.min(5, Math.floor((element.clientWidth + 12) / 252)))); update(); const observer = new ResizeObserver(update); observer.observe(element); return () => observer.disconnect(); }, []);
+  useEffect(() => { const element = ref.current; if (!element) return; const minWidth = density === "compact" ? 198 : density === "spacious" ? 340 : 258; const update = () => setColumnCount(element.clientWidth < 500 ? 1 : Math.max(2, Math.min(8, Math.floor((element.clientWidth + 16) / (minWidth + 16))))); update(); const observer = new ResizeObserver(update); observer.observe(element); return () => observer.disconnect(); }, [density]);
   const columns = Array.from({ length: columnCount }, () => [] as SourceItem[]); items.forEach((item, index) => columns[index % columnCount].push(item));
-  return <div className={`source-masonry ${selectedIds.length ? "is-selecting" : ""}`} ref={ref}><div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard item={item} key={item.id} selected={selectedIds.includes(item.id)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
+  return <div className={`source-masonry density-${density} ${isBatchSelecting ? "is-selecting" : ""}`} ref={ref}><div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard isBatchSelecting={isBatchSelecting} item={item} key={item.id} selected={selectedIds.includes(item.id)} onCopy={() => void onCopy(item)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
 }
 
-function SourceCard({ item, selected, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { item: SourceItem; selected: boolean; onFavorite: () => void; onOpen: () => void; onEditNote: () => void; onOpenLocal: () => void; onPreview: () => void; onRequestDownload: () => void; onRetryDownload: () => void; onToggle: () => void }) {
+function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { isBatchSelecting: boolean; item: SourceItem; selected: boolean; onCopy: () => void; onFavorite: () => void; onOpen: () => void; onEditNote: () => void; onOpenLocal: () => void; onPreview: () => void; onRequestDownload: () => void; onRetryDownload: () => void; onToggle: () => void }) {
   const language = useLanguage(); const copy = interfaceCopy[language];
-  const [isDeselecting, setIsDeselecting] = useState(false);
   const excerpt = descriptionFor(item);
   const isWebLink = item.modality === "link" && item.pickType !== "local_import";
   const isPost = item.modality === "post";
@@ -656,17 +722,17 @@ function SourceCard({ item, selected, onFavorite, onOpen, onEditNote, onOpenLoca
   const duration = useMediaDuration(item);
   const previewLabel = item.modality === "audio" ? copy.play + " " + copy.audio : item.modality === "video" ? copy.play + " " + copy.video : copy.view + " " + copy.image;
   const usesFallbackArtwork = hasVisual && !hasTextArtwork && !hasRenderableThumbnail(item);
-  return <article className={`source-masonry-card kind-${item.modality} ${usesCardSourceMark ? "has-card-source-mark" : ""} ${usesFallbackArtwork ? "has-fallback-artwork" : ""} ${selected ? "selected" : ""} ${item.favorite ? "favorited" : ""} ${isDeselecting ? "is-deselecting" : ""}`} onClick={onOpen} onMouseLeave={() => setIsDeselecting(false)}>
+  return <article aria-pressed={isBatchSelecting ? selected : undefined} className={`source-masonry-card kind-${item.modality} ${usesCardSourceMark ? "has-card-source-mark" : ""} ${usesFallbackArtwork ? "has-fallback-artwork" : ""} ${selected ? "selected" : ""} ${item.favorite ? "favorited" : ""} ${isBatchSelecting ? "is-batch-selecting" : ""}`} onClick={isBatchSelecting ? onToggle : onOpen}>
     <div className="source-card-hover-actions">
       {previewable ? <button aria-label={previewLabel} className="source-card-quick-action" data-tooltip={previewLabel} onClick={(event) => { event.stopPropagation(); onPreview(); }} type="button">{isPlayable ? <Play fill="currentColor" size={15} /> : <Maximize2 size={15} />}</button> : null}
       {(isWebLink || isPost || isWebVideo) ? <button aria-label={copy.visit} className="source-card-quick-action" data-tooltip={copy.visit} onClick={(event) => { event.stopPropagation(); openWebLink(item); }} type="button"><ExternalLink size={15} /></button> : null}
       {openableLocalFile ? <button aria-label={copy.open} className="source-card-quick-action" data-tooltip={copy.open} onClick={(event) => { event.stopPropagation(); onOpenLocal(); }} type="button"><ExternalLink size={15} /></button> : null}
       <button aria-label={item.favorite ? copy.removeFavorite : copy.addFavorite} aria-pressed={item.favorite} className={`favorite-star source-card-favorite ${item.favorite ? "active" : ""}`} data-tooltip={item.favorite ? copy.removeFavorite : copy.addFavorite} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); onFavorite(); }} type="button"><Star size={13} fill={item.favorite ? "currentColor" : "none"} /></button>
-      <button aria-label={selected ? copy.unselect : copy.select} className="source-select-button" aria-pressed={selected} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); setIsDeselecting(selected && !item.favorite); onToggle(); }} type="button">{selected ? <><Check size={14} /><span className="source-select-label">{copy.unselect}</span></> : <><Square size={14} />{copy.select}</>}</button>
+      <button aria-label={isBatchSelecting ? copy.openDetail : copy.copy} className="source-select-button" data-tooltip={isBatchSelecting ? copy.openDetail : copy.copy} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); if (isBatchSelecting) onOpen(); else onCopy(); }} type="button">{isBatchSelecting ? <><Eye size={14} /><span className="source-select-label">{copy.view}</span></> : <><Copy size={14} /><span className="source-select-label">{copy.copy}</span></>}</button>
     </div>
     {item.favorite ? <button aria-label={copy.removeFavorite} className="source-card-favorite-pinned" data-tooltip={copy.removeFavorite} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); onFavorite(); }} type="button"><Star fill="currentColor" size={13} /></button> : null}
     {usesCardSourceMark ? <CardSourceMark item={item} /> : null}
-    {hasVisual ? <div className="source-masonry-media preserve-media-ratio">{item.modality === "conversation" || item.modality === "text" ? <CardSourceMark item={item} /> : null}{previewable ? <button aria-label={copy.openDetail} className="source-masonry-media-button" data-tooltip={copy.openDetail} onClick={(event) => { event.stopPropagation(); onOpen(); }} type="button"><SourceThumbnail item={item} /></button> : <SourceThumbnail item={item} />}{showVideoCover ? <span className="video-cover-label">{copy.cover}</span> : null}{(item.modality === "video" || item.modality === "audio") && duration !== null ? <span className="media-duration">{formatDuration(duration)}</span> : null}</div> : null}
+    {hasVisual ? <div className="source-masonry-media preserve-media-ratio">{item.modality === "conversation" || item.modality === "text" ? <CardSourceMark item={item} /> : null}{previewable ? <button aria-label={copy.openDetail} className="source-masonry-media-button" data-tooltip={copy.openDetail} onClick={(event) => { event.stopPropagation(); if (isBatchSelecting) onToggle(); else onOpen(); }} type="button"><SourceThumbnail item={item} /></button> : <SourceThumbnail item={item} />}{showVideoCover ? <span className="video-cover-label">{copy.cover}</span> : null}{(item.modality === "video" || item.modality === "audio") && duration !== null ? <span className="media-duration">{formatDuration(duration)}</span> : null}</div> : null}
     <div className="source-masonry-body"><h2 title={item.itemTitle}>{item.itemTitle}</h2><div className="source-masonry-meta"><DataStatus item={item} onRequestDownload={onRequestDownload} onRetryDownload={onRetryDownload} /><div className="source-masonry-origin"><span>{sourceLabel(item)}</span><time>{formatDate(item.pickedAt)}</time></div></div>{post ? <PostByline className="post-card-meta" post={post} /> : null}{!hasTextArtwork && excerpt ? <p className="source-masonry-excerpt">{excerpt}</p> : null}{!hasVisual && !usesCardSourceMark && !excerpt ? <div className="source-masonry-abstract"><SourceThumbnail item={item} /></div> : null}<div className="source-card-actions"><button className={`source-note-summary ${item.userNote ? "has-note" : "is-empty"}`} onClick={(event) => { event.stopPropagation(); onEditNote(); }} title={item.userNote || `${copy.addNote}…`} type="button"><MessageSquare aria-hidden="true" size={12} /><span>{item.userNote || `${copy.addNote}…`}</span></button></div></div>
   </article>;
 }
@@ -810,7 +876,7 @@ function FilterPopover({ copy, dateEnd, dateFilter, dateStart, kind, linkFilter,
   return <div className="source-item-filter-popover"><div className="filter-popover-head"><strong>{copy.filter}</strong><button disabled={!filtered} onClick={onReset} type="button">{labels.reset}</button></div><section className="filter-section"><h2>{labels.time}</h2><div className="filter-row">{dates.map((entry) => <button aria-pressed={dateFilter === entry.id} className="filter-chip" key={entry.id} onClick={() => onDateFilterChange(entry.id)} type="button">{entry.label}</button>)}</div>{dateFilter === "custom" ? <div className="date-range-row"><input aria-label={labels.start} type="date" value={dateStart} onChange={(event) => onDateStartChange(event.target.value)} /><input aria-label={labels.end} type="date" value={dateEnd} onChange={(event) => onDateEndChange(event.target.value)} /></div> : null}</section><section className="filter-section"><h2>{labels.type}</h2><div className="filter-row">{(["image", "text", "video", "audio", "file", "link", "post", "conversation"] as const).map((entry) => <button aria-pressed={kind.includes(entry)} className="filter-chip" key={entry} onClick={() => onKindChange(entry)} type="button">{kindLabel(entry, language)}</button>)}</div></section><section className="filter-section"><h2>{labels.link}</h2><div className="filter-row">{links.map((entry) => <button aria-pressed={linkFilter.includes(entry.id)} className="filter-chip" key={entry.id} onClick={() => onLinkFilterChange(entry.id)} type="button">{entry.label}</button>)}</div></section><section className="filter-section"><h2>{labels.local}</h2><div className="filter-row">{locals.map((entry) => <button aria-pressed={localFilter.includes(entry.id)} className="filter-chip" key={entry.id} onClick={() => onLocalFilterChange(entry.id)} type="button">{entry.label}</button>)}</div></section><section className="filter-section source-filter-section"><h2>{labels.source}</h2><div className="filter-row">{sourceOptions.map((entry) => <button aria-pressed={source.includes(entry)} className="filter-chip" key={entry} onClick={() => onSourceChange(entry)} type="button">{entry}</button>)}</div></section></div>;
 }
 
-function SourceDetailModal({ focusNote, item, isSelected, onClose, onContentSave, onCopy, onDelete, onFavorite, onNoteSave, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onRevealLocal, onSelect, onTitleSave }: { focusNote: boolean; item: SourceItem | null; isSelected: boolean; onClose: () => void; onContentSave: (id: string, value: string) => void; onCopy: (item: SourceItem) => Promise<void>; onDelete: (id: string) => void; onFavorite: (id: string, favorite: boolean) => void; onNoteSave: (id: string, value: string) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onRevealLocal: (item: SourceItem) => void; onSelect: (id: string) => void; onTitleSave: (id: string, value: string) => Promise<boolean> }) {
+function SourceDetailModal({ focusNote, item, onClose, onContentSave, onCopy, onDelete, onFavorite, onNoteSave, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onRevealLocal, onTitleSave }: { focusNote: boolean; item: SourceItem | null; onClose: () => void; onContentSave: (id: string, value: string) => void; onCopy: (item: SourceItem) => Promise<void>; onDelete: (id: string) => void; onFavorite: (id: string, favorite: boolean) => void; onNoteSave: (id: string, value: string) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onRevealLocal: (item: SourceItem) => void; onTitleSave: (id: string, value: string) => Promise<boolean> }) {
   const language = useLanguage(); const copy = interfaceCopy[language];
   const [draftTitle, setDraftTitle] = useState(item?.itemTitle ?? "");
   const [draftNote, setDraftNote] = useState(item?.userNote ?? "");
@@ -858,7 +924,7 @@ function SourceDetailModal({ focusNote, item, isSelected, onClose, onContentSave
           {item.modality === "image" && Boolean(item.contentUrl) && localState(item) === "pending" ? <div className="detail-source-actions"><button className="secondary-button" onClick={() => onRequestDownload(item)} type="button"><Download size={14} />{copy.downloadLocalFile}</button></div> : null}
         </section>
       </div>
-      <footer className="inspector-footer"><div className="inspector-footer-actions">{confirmDelete ? <div className="inspector-footer-utility"><button className="text-button" onClick={() => setConfirmDelete(false)} type="button">{copy.cancel}</button><button className="danger-button" onClick={() => onDelete(item.id)} type="button"><Trash2 size={15} />{copy.confirmDelete}</button></div> : <><div className="inspector-footer-utility"><button className="danger-outline-button inspector-delete" onClick={() => setConfirmDelete(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button inspector-copy-button" onClick={() => void onCopy(item)} type="button"><Copy size={15} />{copyAction}</button></div><div className="inspector-footer-selection-actions"><button className={`detail-footer-favorite ${item.favorite ? "active" : ""}`} aria-label={item.favorite ? copy.removeFavorite : copy.addFavorite} aria-pressed={item.favorite} onClick={() => void onFavorite(item.id, !item.favorite)} type="button"><Star size={15} fill={item.favorite ? "currentColor" : "none"} /></button><button className="primary-button inspector-select-button" onClick={() => onSelect(item.id)} type="button">{isSelected ? <Check size={15} /> : <Square size={15} />}{isSelected ? copy.unselect : copy.select}</button></div></>}</div></footer>
+      <footer className="inspector-footer"><div className="inspector-footer-actions">{confirmDelete ? <div className="inspector-footer-utility"><button className="text-button" onClick={() => setConfirmDelete(false)} type="button">{copy.cancel}</button><button className="danger-button" onClick={() => onDelete(item.id)} type="button"><Trash2 size={15} />{copy.confirmDelete}</button></div> : <><div className="inspector-footer-utility"><button className="danger-outline-button inspector-delete" onClick={() => setConfirmDelete(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button inspector-copy-button" onClick={() => void onCopy(item)} type="button"><Copy size={15} />{copyAction}</button></div><button className={`detail-footer-favorite ${item.favorite ? "active" : ""}`} aria-label={item.favorite ? copy.removeFavorite : copy.addFavorite} aria-pressed={item.favorite} onClick={() => void onFavorite(item.id, !item.favorite)} type="button"><Star size={15} fill={item.favorite ? "currentColor" : "none"} /></button></>}</div></footer>
     </aside>
   </div>;
 }
@@ -944,6 +1010,32 @@ function BackupExportModal({ books, isOpen, onClose, onExport, onSelectionChange
   const allSelected = books.length > 0 && selectedBookIds.length === books.length;
   const toggleBook = (bookId: string) => onSelectionChange(selected.has(bookId) ? selectedBookIds.filter((id) => id !== bookId) : [...selectedBookIds, bookId]);
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal backup-export-modal" role="dialog" aria-modal="true" aria-label={copy.selectBooksToExport}><header className="modal-head"><div><h2>{copy.selectBooksToExport}</h2><p>{selectedBookIds.length} {copy.selectedBooks}</p></div><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="backup-export-body"><button className="text-button backup-select-all" onClick={() => onSelectionChange(allSelected ? [] : books.map((book) => book.id))} type="button">{allSelected ? copy.clearSelection : copy.selectAll}</button><div className="backup-book-list">{books.map((book) => <label className="backup-book-option" key={book.id}><input checked={selected.has(book.id)} onChange={() => toggleBook(book.id)} type="checkbox" /><span>{book.name}</span></label>)}</div></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!selectedBookIds.length} onClick={() => onExport(selectedBookIds)} type="button"><Download size={15} />{copy.exportSelectedBooks}</button></footer></section></div>;
+}
+
+function LocalDataManagerModal({ isOpen, language, onClear, onClose, onExport, onImport, onLoad, onMigrated, settings }: { isOpen: boolean; language: Language; onClear: () => void; onClose: () => void; onExport: () => void; onImport: () => void; onLoad: (value: LibrarySettingsResponse) => void; onMigrated: () => void; settings: LibrarySettingsResponse | null }) {
+  const [current, setCurrent] = useState<LibrarySettingsResponse | null>(settings);
+  const [destination, setDestination] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const zh = language === "zh";
+  useEffect(() => { if (!isOpen) return; void request<LibrarySettingsResponse>("/api/settings/library").then((value) => { setCurrent(value); onLoad(value); setDestination(value.libraryRoot); setError(""); }).catch((reason) => setError(errorMessage(reason))); }, [isOpen]);
+  if (!isOpen) return null;
+  const applyDestination = async (nextDestination: string) => { const previousRoot = current?.libraryRoot; const hasData = !current?.isEmpty; const value = await request<LibrarySettingsResponse>("/api/settings/library", { method: "PUT", body: JSON.stringify({ destination: nextDestination }) }); setCurrent(value); onLoad(value); setDestination(value.libraryRoot); if (hasData && previousRoot && previousRoot !== value.libraryRoot) onMigrated(); if (!value.requiresSetup) onClose(); };
+  const choose = async () => { setBusy(true); setError(""); try { const value = await request<{ destination: string | null }>("/api/settings/library/choose", { method: "POST" }); if (!value.destination) return; setDestination(value.destination); await applyDestination(value.destination); } catch (reason) { setError(errorMessage(reason)); } finally { setBusy(false); } };
+  const reveal = async () => { try { await request("/api/settings/library/reveal", { method: "POST" }); } catch (reason) { setError(errorMessage(reason)); } };
+  const isFirstRun = current?.isEmpty ?? false;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="local-data-manager-title"><section className="export-modal local-data-manager-modal"><header className="modal-head"><div><h2 id="local-data-manager-title">{isFirstRun ? (zh ? "选择素材库位置" : "Choose a library location") : (zh ? "管理本地数据" : "Manage local data")}</h2><p>{isFirstRun ? (zh ? "选择一个位置，开始保存你的 Book 和素材。" : "Choose where to save your Books and sources.") : (zh ? "数据只保存在你的设备上。" : "Your data stays on this device.")}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header><div className="local-data-manager-body"><section className="local-data-section"><div><h3>{isFirstRun ? (zh ? "保存位置" : "Save location") : (zh ? "素材库位置" : "Library location")}</h3><p>{isFirstRun ? (zh ? "之后可随时在设置中更换。" : "You can change this later in Settings.") : (zh ? "选择新位置后会自动迁移现有内容。" : "Choosing a new location moves your existing content.")}</p></div><div className="library-location-field"><input aria-label={zh ? "素材库位置" : "Library location"} readOnly value={destination} /><button className="secondary-button" disabled={busy} onClick={() => void choose()} type="button">{busy ? <LoaderCircle className="spin" size={15} /> : null}{zh ? "选择…" : "Choose…"}</button></div>{current?.configured ? <button className="text-button library-reveal-button" onClick={() => void reveal()} type="button"><ExternalLink size={14} />{zh ? "在文件夹中显示" : "Show in folder"}</button> : null}</section>{isFirstRun ? <section className="local-data-section"><div><h3>{zh ? "已有备份？" : "Already have a backup?"}</h3><p>{zh ? "从已有的 Sourcebook 备份继续。" : "Continue from an existing Sourcebook backup."}</p></div><div className="local-data-actions"><button className="secondary-button" onClick={onImport} type="button"><Upload size={15} />{zh ? "导入备份" : "Import backup"}</button></div></section> : <><section className="local-data-section"><div><h3>{zh ? "备份" : "Backup"}</h3><p>{zh ? "导出备份，或导入已有备份。" : "Export a backup or import an existing one."}</p></div><div className="local-data-actions"><button className="secondary-button" onClick={onExport} type="button"><Download size={15} />{zh ? "导出备份" : "Export backup"}</button><button className="secondary-button" onClick={onImport} type="button"><Upload size={15} />{zh ? "导入备份" : "Import backup"}</button></div></section><section className="local-data-section local-data-clear"><div><h3>{zh ? "删除本地数据" : "Clear local data"}</h3><p>{zh ? "永久删除所有本地 Book 和素材。" : "Permanently delete all local Books and sources."}</p></div><button className="secondary-button" onClick={onClear} type="button"><Trash2 size={15} />{zh ? "删除本地数据" : "Clear local data"}</button></section></>}{error ? <p className="settings-inline-error" role="alert">{error}</p> : null}</div></section></div>;
+}
+
+function UpdateSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isOpen: boolean; language: Language; onClose: () => void; onLoad: (value: UpdateSettingsResponse) => void; settings: UpdateSettingsResponse | null }) {
+  const [current, setCurrent] = useState<UpdateSettingsResponse | null>(settings);
+  const [checking, setChecking] = useState(false);
+  const zh = language === "zh";
+  const refresh = async (force = false) => { setChecking(true); try { const value = await request<UpdateSettingsResponse>(`/api/settings/update${force ? "?check=1" : ""}`); setCurrent(value); onLoad(value); } finally { setChecking(false); } };
+  useEffect(() => { if (isOpen) void refresh(false); }, [isOpen]);
+  if (!isOpen) return null;
+  const release = current?.release;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="update-settings-title"><section className="export-modal update-settings-modal"><header className="modal-head"><div><h2 id="update-settings-title">{zh ? "版本与更新" : "Version & updates"}</h2><p>{zh ? `当前版本 ${current?.version ?? "—"}` : `Installed version ${current?.version ?? "—"}`}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header><div className="update-settings-body"><label className="update-toggle"><span><strong>{zh ? "自动检查更新" : "Check for updates automatically"}</strong><small>{zh ? "启动后静默检查，最多每 24 小时一次。" : "Check quietly after launch, at most once every 24 hours."}</small></span><input checked={current?.autoCheck ?? true} onChange={async (event) => { const value = await request<UpdateSettingsResponse>("/api/settings/update", { method: "PUT", body: JSON.stringify({ autoCheck: event.target.checked }) }); setCurrent(value); onLoad(value); }} type="checkbox" /></label>{release ? <section className="available-update"><span className="available-update-label">{zh ? "有新版本可用" : "Update available"}</span><h3>{release.name || release.version}</h3><p>{release.notes || (zh ? "查看 Release 页面了解此版本的更新内容。" : "See the Release page for what changed.")}</p><a className="primary-button" href={release.url} rel="noreferrer" target="_blank"><Download size={15} />{zh ? "下载更新" : "Download update"}</a></section> : <p className={current?.status === "error" ? "settings-inline-error" : "settings-muted"}>{current?.status === "error" ? current.error : (zh ? "已是最新版本。" : "You’re up to date.")}</p>}<p className="update-last-check">{current?.lastCheckedAt ? `${zh ? "上次检查" : "Last checked"}: ${formatDateTime(current.lastCheckedAt)}` : (zh ? "尚未检查更新。" : "No update check yet.")}</p></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{zh ? "关闭" : "Close"}</button><button className="secondary-button" disabled={checking} onClick={() => void refresh(true)} type="button">{checking ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "立即检查" : "Check now"}</button></footer></section></div>;
 }
 
 function PromptSettingsModal({ isOpen, language, savedTemplate, onClose, onSave }: { isOpen: boolean; language: Language; savedTemplate: string; onClose: () => void; onSave: (template: string) => void }) {

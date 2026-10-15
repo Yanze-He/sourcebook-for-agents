@@ -56,7 +56,14 @@ type apiError struct {
 func (err *apiError) Error() string { return err.message }
 
 func NewServer(library *Library, webRoot string) http.Handler {
-	return &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(filepath.Dir(library.root), "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
+	settingsRoot := filepath.Dir(library.root)
+	if library.locationConfigPath != "" {
+		// Keep desktop preferences beside the location configuration, rather than
+		// inside a movable library. This keeps update preferences intact after a
+		// successful library migration.
+		settingsRoot = filepath.Dir(library.locationConfigPath)
+	}
+	return &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
 }
 
 func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -108,7 +115,8 @@ func (server *Server) serveRequest(response http.ResponseWriter, request *http.R
 func isExclusiveLibraryOperation(request *http.Request) bool {
 	return request.URL.Path == "/api/library" && request.Method == http.MethodDelete ||
 		request.URL.Path == "/api/library/restore" && request.Method == http.MethodPost ||
-		request.URL.Path == "/api/library/migrate" && request.Method == http.MethodPost
+		request.URL.Path == "/api/library/migrate" && request.Method == http.MethodPost ||
+		request.URL.Path == "/api/settings/library" && request.Method == http.MethodPut
 }
 
 func (server *Server) route(response http.ResponseWriter, request *http.Request) error {
@@ -137,6 +145,24 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 	if request.Method == http.MethodPut && path == "/api/settings/prompt" {
 		return server.updatePromptSettings(response, request)
+	}
+	if request.Method == http.MethodGet && path == "/api/settings/library" {
+		return server.getLibrarySettings(response)
+	}
+	if request.Method == http.MethodPut && path == "/api/settings/library" {
+		return server.updateLibrarySettings(response, request)
+	}
+	if request.Method == http.MethodPost && path == "/api/settings/library/choose" {
+		return server.chooseLibraryLocation(response)
+	}
+	if request.Method == http.MethodPost && path == "/api/settings/library/reveal" {
+		return server.revealLibraryLocation(response)
+	}
+	if request.Method == http.MethodGet && path == "/api/settings/update" {
+		return server.getUpdateSettings(response, request)
+	}
+	if request.Method == http.MethodPut && path == "/api/settings/update" {
+		return server.updateUpdateSettings(response, request)
 	}
 	if request.Method == http.MethodPost && path == "/api/books" {
 		return server.createBook(response, request)
@@ -228,7 +254,11 @@ func (server *Server) listBooks(response http.ResponseWriter) error {
 }
 
 type desktopSettings struct {
-	PromptTemplate string `json:"promptTemplate,omitempty"`
+	PromptTemplate   string       `json:"promptTemplate,omitempty"`
+	AutoUpdateCheck  *bool        `json:"autoUpdateCheck,omitempty"`
+	LastUpdateCheck  string       `json:"lastUpdateCheck,omitempty"`
+	UpdateError      string       `json:"updateError,omitempty"`
+	AvailableRelease *releaseInfo `json:"availableRelease,omitempty"`
 }
 
 func (server *Server) getPromptSettings(response http.ResponseWriter) error {
@@ -249,7 +279,12 @@ func (server *Server) updatePromptSettings(response http.ResponseWriter, request
 	if len([]byte(template)) > 64*1024 {
 		return &apiError{status: http.StatusBadRequest, code: "PROMPT_TEMPLATE_TOO_LARGE", message: "提示词模板不能超过 64 KB。"}
 	}
-	settings, err := server.writeDesktopSettings(desktopSettings{PromptTemplate: template})
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		return err
+	}
+	settings.PromptTemplate = template
+	settings, err = server.writeDesktopSettings(settings)
 	if err != nil {
 		return err
 	}
@@ -266,7 +301,7 @@ func (server *Server) readDesktopSettings() (desktopSettings, error) {
 func (server *Server) writeDesktopSettings(settings desktopSettings) (desktopSettings, error) {
 	server.settingsMu.Lock()
 	defer server.settingsMu.Unlock()
-	if settings.PromptTemplate == "" {
+	if settings.PromptTemplate == "" && settings.AutoUpdateCheck == nil && settings.LastUpdateCheck == "" && settings.UpdateError == "" && settings.AvailableRelease == nil {
 		if err := os.Remove(server.settingsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return desktopSettings{}, err
 		}

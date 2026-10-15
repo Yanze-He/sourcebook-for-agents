@@ -30,6 +30,8 @@ jobs:
 
   macos:
     runs-on: macos-14
+    env:
+      SOURCEBOOK_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,6 +50,8 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    env:
+      SOURCEBOOK_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,6 +72,8 @@ jobs:
         run: |
           $env:SOURCEBOOK_WINDOWS_SOURCE = "${{ github.workspace }}\release\windows\Sourcebook Desktop"
           $env:SOURCEBOOK_WINDOWS_OUTPUT = "${{ github.workspace }}\release\windows\installer"
+          if (-not $env:SOURCEBOOK_VERSION) { $env:SOURCEBOOK_VERSION = node -p "require('./package.json').version" }
+          $env:SOURCEBOOK_VERSION = $env:SOURCEBOOK_VERSION.TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" apps\desktop\installer\sourcebook.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Write Windows checksum

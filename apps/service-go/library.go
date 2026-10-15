@@ -47,6 +47,13 @@ type Library struct {
 	dbs                map[string]*sql.DB
 }
 
+type libraryLocationConfig struct {
+	LibraryRoot string `json:"libraryRoot"`
+	Confirmed   bool   `json:"confirmed"`
+	CleanupRoot string `json:"cleanupRoot,omitempty"`
+	MigratedAt  string `json:"migratedAt,omitempty"`
+}
+
 type BookContext struct {
 	Book      Book
 	DB        *sql.DB
@@ -97,6 +104,11 @@ func OpenLibrary(root, legacyDBPath, locationConfigPath string) (*Library, error
 	}
 	if _, err := library.readManifest(); err != nil {
 		return nil, err
+	}
+	if err := library.finishPendingCleanup(); err != nil {
+		// A failed cleanup must never make an otherwise healthy library unavailable.
+		// It remains recorded and is retried on the next launch.
+		_ = err
 	}
 	return library, nil
 }
@@ -191,6 +203,50 @@ func (library *Library) List() (Manifest, error) {
 	library.mu.Lock()
 	defer library.mu.Unlock()
 	return library.readManifest()
+}
+
+// IsEmpty reports whether the library contains only the untouched Default Book.
+// The Default Book and its SQLite file are created by Sourcebook itself, so they
+// do not count as user data for first-run onboarding.
+func (library *Library) IsEmpty() (bool, error) {
+	library.mu.Lock()
+	defer library.mu.Unlock()
+
+	manifest, err := library.readManifest()
+	if err != nil {
+		return false, err
+	}
+	if len(manifest.Books) != 1 || manifest.Books[0].ID != "sourcebook" || manifest.Books[0].Name != "Default Book" {
+		return false, nil
+	}
+
+	databasePath := filepath.Join(library.bookRoot(manifest.Books[0]), "book.sqlite")
+	if _, err := os.Stat(databasePath); errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+	database, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		return false, err
+	}
+	defer database.Close()
+	if err := schema(database); err != nil {
+		return false, err
+	}
+	var records int
+	err = database.QueryRow(`SELECT
+		(SELECT COUNT(*) FROM sources) +
+		(SELECT COUNT(*) FROM resources) +
+		(SELECT COUNT(*) FROM text_contents) +
+		(SELECT COUNT(*) FROM assets) +
+		(SELECT COUNT(*) FROM source_items) +
+		(SELECT COUNT(*) FROM picks) +
+		(SELECT COUNT(*) FROM source_packs)`).Scan(&records)
+	if err != nil {
+		return false, err
+	}
+	return records == 0, nil
 }
 
 func (library *Library) Context(bookID string) (*BookContext, error) {
@@ -859,38 +915,135 @@ func writeManifestAt(root string, manifest Manifest) error {
 }
 
 func (library *Library) Migrate(destination string) (string, error) {
-	target, err := filepath.Abs(strings.TrimSpace(destination))
-	if err != nil || target == "" || target == library.root {
+	targetRoot, err := filepath.Abs(strings.TrimSpace(destination))
+	if err != nil || targetRoot == "" || targetRoot == library.root {
 		return "", errors.New("请选择不同的素材库位置")
 	}
-	targetRoot := filepath.Join(target, filepath.Base(library.root))
 	if _, err := os.Stat(targetRoot); err == nil {
 		return "", errors.New("目标位置已存在同名素材库")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
+	sourceRoot := library.root
 	library.Close()
-	if err := copyDirectory(library.root, targetRoot); err != nil {
+	if err := copyDirectory(sourceRoot, targetRoot); err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(filepath.Join(targetRoot, "library.json")); err != nil {
+	if err := verifyLibraryRoot(targetRoot); err != nil {
 		_ = os.RemoveAll(targetRoot)
-		return "", errors.New("素材库校验失败")
+		return "", fmt.Errorf("素材库校验失败: %w", err)
+	}
+	// Switch only after the candidate can be opened. Existing requests are held by
+	// the server's exclusive migration lock, so they cannot observe this boundary.
+	library.root = targetRoot
+	if _, err := library.readManifest(); err != nil {
+		library.root = sourceRoot
+		_, _ = library.readManifest()
+		_ = os.RemoveAll(targetRoot)
+		return "", err
 	}
 	if library.locationConfigPath != "" {
-		if err := os.MkdirAll(filepath.Dir(library.locationConfigPath), 0o755); err != nil {
-			return "", err
-		}
-		config := map[string]any{"libraryRoot": targetRoot, "previousRoot": library.root, "migratedAt": now()}
-		bytes, err := json.MarshalIndent(config, "", "  ")
-		if err != nil {
-			return "", err
-		}
-		if err := os.WriteFile(library.locationConfigPath, bytes, 0o644); err != nil {
+		if err := writeLibraryLocationConfig(library.locationConfigPath, libraryLocationConfig{LibraryRoot: targetRoot, Confirmed: true, CleanupRoot: sourceRoot, MigratedAt: now()}); err != nil {
+			library.root = sourceRoot
+			_, _ = library.readManifest()
+			_ = os.RemoveAll(targetRoot)
 			return "", err
 		}
 	}
+	if err := os.RemoveAll(sourceRoot); err == nil && library.locationConfigPath != "" {
+		_ = writeLibraryLocationConfig(library.locationConfigPath, libraryLocationConfig{LibraryRoot: targetRoot, Confirmed: true, MigratedAt: now()})
+	}
 	return targetRoot, nil
+}
+
+func (library *Library) ConfirmLocation() error {
+	if library.locationConfigPath == "" {
+		return nil
+	}
+	return writeLibraryLocationConfig(library.locationConfigPath, libraryLocationConfig{LibraryRoot: library.root, Confirmed: true})
+}
+
+func (library *Library) Location() (root string, defaultRoot string, configured bool) {
+	root = library.root
+	if library.locationConfigPath == "" {
+		return root, root, true
+	}
+	defaultRoot = filepath.Join(filepath.Dir(library.locationConfigPath), "Sourcebook Library")
+	config, err := readLibraryLocationConfig(library.locationConfigPath)
+	return root, defaultRoot, err == nil && config.Confirmed
+}
+
+func (library *Library) finishPendingCleanup() error {
+	if library.locationConfigPath == "" {
+		return nil
+	}
+	config, err := readLibraryLocationConfig(library.locationConfigPath)
+	if err != nil || config.CleanupRoot == "" || config.LibraryRoot != library.root || config.CleanupRoot == library.root {
+		return err
+	}
+	if err := os.RemoveAll(config.CleanupRoot); err != nil {
+		return err
+	}
+	config.CleanupRoot = ""
+	return writeLibraryLocationConfig(library.locationConfigPath, config)
+}
+
+func verifyLibraryRoot(root string) error {
+	candidate, err := OpenLibrary(root, "", "")
+	if err != nil {
+		return err
+	}
+	defer candidate.Close()
+	manifest, err := candidate.List()
+	if err != nil {
+		return err
+	}
+	for _, book := range manifest.Books {
+		if _, err := candidate.Context(book.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readLibraryLocationConfig(path string) (libraryLocationConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return libraryLocationConfig{}, err
+	}
+	config := libraryLocationConfig{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return libraryLocationConfig{}, err
+	}
+	return config, nil
+}
+
+func writeLibraryLocationConfig(path string, config libraryLocationConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".library-location-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func schema(db *sql.DB) error {

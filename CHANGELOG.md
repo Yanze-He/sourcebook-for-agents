@@ -4,6 +4,16 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+## v0.1.0
+
+- Add explicit batch mode, per-Book reusable selections, three card densities, and broader search across source metadata, notes, posts, chats, and text content.
+- Let users choose a local library location on first use, migrate an existing library safely, back up or restore Books, and reveal the library in Finder or Explorer.
+- Add Settings → Version & updates for quiet GitHub Release checks and manual installer downloads.
+- Refresh the macOS Dock icon, remove the menu-bar helper, and add branded Windows shortcut icons.
+- Keep the local library local: migration validates the destination before switching and cleans the previous location only after success.
+- Improve first-run setup with an optional backup import when the library is empty.
+- Fix Picker and Desktop packaging so released apps carry the matching version number.
+
 - Restrict the local API to the bundled Picker and the local Desktop page.
 - Picker needs to be reloaded from the updated release ZIP once so Chromium adopts its stable extension ID.
 - Make backup replacement explicit; cancelling backup import now leaves the current library unchanged.

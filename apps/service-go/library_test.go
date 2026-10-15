@@ -205,6 +205,44 @@ func TestStreamingBackupCanBeLimitedToSelectedBooks(t *testing.T) {
 	}
 }
 
+func TestMigrateVerifiesSwitchesAndRemovesOriginalLibrary(t *testing.T) {
+	dataRoot := t.TempDir()
+	sourceRoot := filepath.Join(dataRoot, "Sourcebook Library")
+	configPath := filepath.Join(dataRoot, "library-location.json")
+	library, err := OpenLibrary(sourceRoot, "", configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := library.Context("sourcebook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ctx.MediaRoot, "migration-proof.txt"), []byte("local material"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	targetRoot := filepath.Join(t.TempDir(), "Sourcebook Library")
+	if _, err := library.Migrate(targetRoot); err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	if library.root != targetRoot {
+		t.Fatalf("library root = %q, want %q", library.root, targetRoot)
+	}
+	if _, err := os.Stat(filepath.Join(targetRoot, "books", "sourcebook", "assets", "migration-proof.txt")); err != nil {
+		t.Fatalf("migrated asset missing: %v", err)
+	}
+	if _, err := os.Stat(sourceRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("original library remains after verified migration: %v", err)
+	}
+	config, err := readLibraryLocationConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.LibraryRoot != targetRoot || !config.Confirmed || config.CleanupRoot != "" {
+		t.Fatalf("unexpected migration config: %+v", config)
+	}
+}
+
 func TestSourceItemsExposeCachedFileName(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
 	if err != nil {

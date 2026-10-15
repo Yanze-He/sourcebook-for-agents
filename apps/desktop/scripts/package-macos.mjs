@@ -13,6 +13,7 @@ const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
+const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
 const outputRoot = join(repositoryRoot, "release", "macos");
 const appRoot = join(outputRoot, "Sourcebook Desktop.app");
 const contents = join(appRoot, "Contents");
@@ -61,7 +62,8 @@ writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8
   <key>CFBundleName</key><string>Sourcebook Desktop</string>
   <key>CFBundleIconFile</key><string>SourcebookDesktop.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>${appVersion}</string>
+  <key>CFBundleVersion</key><string>${appVersion}</string>
   <key>NSAppleEventsUsageDescription</key><string>Sourcebook uses your browser only to return to an existing local Sourcebook page.</string>
 </dict></plist>`);
 
@@ -79,7 +81,7 @@ console.log(`Created ${dmgPath}`);
 
 function buildService(destination) {
   console.log(`Building the native Go service for macOS ${process.arch}…`);
-  execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w", "-o", destination, "."], {
+  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -X main.appVersion=${appVersion}`, "-o", destination, "."], {
     cwd: serviceRoot,
     env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",

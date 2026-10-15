@@ -57,13 +57,13 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 2. Test the extension and Desktop on clean macOS and Windows machines.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
 4. Choose a version tag such as `v0.1.0-beta.2`.
-5. Create and push a protected version tag such as `v0.1.0-beta.2`.
+5. Create and push a protected version tag such as `v0.1.0-beta.2`. The release workflow uses this tag as the Desktop and installer version.
 6. Let CI build and test its artifacts, then create the signed and notarized macOS artifact locally from that exact tag.
-7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before manually publishing a GitHub Release.
+7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before manually publishing a GitHub Release. Settings reads published, non-draft Releases, so include clear release notes and the matching Desktop installer before publishing.
 
 ## Installation notes
 
-- The macOS DMG presents **Sourcebook Desktop** beside an **Applications** shortcut. Drag the app onto Applications, eject the disk image, then open it from Applications. The desktop helper appears in the macOS menu bar; its menu opens Sources, restarts the local service, or quits the helper.
+- The macOS DMG presents **Sourcebook Desktop** beside an **Applications** shortcut. Drag the app onto Applications, eject the disk image, then open it from Applications. Sourcebook appears in the Dock; its application menu opens Sources, restarts the local service, or quits the app.
 - Public macOS releases must be Developer ID signed and Apple notarized. Do not distribute an unsigned or unnotarized DMG as a public release.
 - Windows artifacts remain unsigned until a separate Windows code-signing certificate is configured.
 - The Chromium extension ZIP must be unzipped and loaded through `chrome://extensions` with Developer mode enabled.

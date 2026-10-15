@@ -1,10 +1,15 @@
 #define SourceDir GetEnv('SOURCEBOOK_WINDOWS_SOURCE')
 #define OutputDir GetEnv('SOURCEBOOK_WINDOWS_OUTPUT')
+#define AppVersion GetEnv('SOURCEBOOK_VERSION')
+
+#if AppVersion == ""
+  #define AppVersion "0.1.0"
+#endif
 
 [Setup]
 AppId={{C9270882-4FC0-495D-BC0D-CB54C780B3E4}
 AppName=Sourcebook for Agents
-AppVersion=0.1.0
+AppVersion={#AppVersion}
 DefaultDirName={autopf}\Sourcebook for Agents
 DefaultGroupName=Sourcebook for Agents
 DisableProgramGroupPage=yes
@@ -18,8 +23,8 @@ WizardStyle=modern
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"
-Name: "{autodesktop}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"; Tasks: desktopicon
+Name: "{autoprograms}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"; IconFilename: "{app}\SourcebookDesktop.ico"
+Name: "{autodesktop}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"; IconFilename: "{app}\SourcebookDesktop.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked

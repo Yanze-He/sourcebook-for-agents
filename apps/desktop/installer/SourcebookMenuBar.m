@@ -1,7 +1,6 @@
 #import <Cocoa/Cocoa.h>
 
 @interface SourcebookMenuBar : NSObject <NSApplicationDelegate>
-@property(nonatomic, strong) NSStatusItem *statusItem;
 @property(nonatomic, strong) NSTask *sourcebookTask;
 @end
 
@@ -9,7 +8,7 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  [self configureStatusItem];
+  [self configureApplicationMenu];
   [self startServiceOpeningBrowser:YES];
 }
 
@@ -22,21 +21,18 @@
   [self stopService];
 }
 
-- (void)configureStatusItem {
-  self.statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
-  NSStatusBarButton *button = self.statusItem.button;
-  button.image = [[NSImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"SourcebookDesktop" ofType:@"icns"]];
-  button.image.size = NSMakeSize(18, 18);
-  button.image.template = NO;
-  button.toolTip = @"Sourcebook Desktop";
-
-  NSMenu *menu = [[NSMenu alloc] init];
-  [menu addItemWithTitle:@"Open Sourcebook" action:@selector(openSourcebook:) keyEquivalent:@""];
-  [menu addItemWithTitle:@"Restart local service" action:@selector(restartService:) keyEquivalent:@""];
+- (void)configureApplicationMenu {
+  NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"Sourcebook Desktop"];
+  NSMenuItem *applicationItem = [[NSMenuItem alloc] initWithTitle:@"Sourcebook Desktop" action:nil keyEquivalent:@""];
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Sourcebook Desktop"];
+  [menu addItemWithTitle:@"Open Sourcebook" action:@selector(openSourcebook:) keyEquivalent:@"o"];
+  [menu addItemWithTitle:@"Restart local service" action:@selector(restartService:) keyEquivalent:@"r"];
   [menu addItem:[NSMenuItem separatorItem]];
   [menu addItemWithTitle:@"Quit Sourcebook Desktop" action:@selector(quit:) keyEquivalent:@"q"];
   for (NSMenuItem *item in menu.itemArray) item.target = self;
-  self.statusItem.menu = menu;
+  applicationItem.submenu = menu;
+  [mainMenu addItem:applicationItem];
+  [NSApp setMainMenu:mainMenu];
 }
 
 - (void)openSourcebook:(id)sender {
