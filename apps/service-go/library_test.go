@@ -260,7 +260,11 @@ func TestStreamingBackupCanBeLimitedToSelectedBooks(t *testing.T) {
 	if len(manifest.Books) != 1 || len(imported) != 1 || manifest.Books[0].ID != archiveBook.ID || manifest.ActiveBookID != archiveBook.ID {
 		t.Fatalf("backup did not retain only the selected Book: manifest=%+v imported=%+v", manifest, imported)
 	}
-	if _, err := os.Stat(filepath.Join(destination.root, "books", archiveBook.ID, "assets", "selected.txt")); err != nil {
+	restoredContext, err := destination.Context(archiveBook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(restoredContext.MediaRoot, "selected.txt")); err != nil {
 		t.Fatalf("selected Book media was not restored: %v", err)
 	}
 }
