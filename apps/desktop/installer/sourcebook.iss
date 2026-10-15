@@ -23,13 +23,11 @@ WizardStyle=modern
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"; IconFilename: "{app}\SourcebookDesktop.ico"
-Name: "{autodesktop}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.vbs"; IconFilename: "{app}\SourcebookDesktop.ico"; Tasks: desktopicon
+Name: "{autoprograms}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.exe"; IconFilename: "{app}\SourcebookDesktop.ico"
+Name: "{autodesktop}\Sourcebook for Agents"; Filename: "{app}\Sourcebook Desktop.exe"; IconFilename: "{app}\SourcebookDesktop.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-; A .vbs file must be launched through the Windows Script Host. Executing it
-; directly makes Inno Setup call CreateProcess on a non-executable file.
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\Sourcebook Desktop.vbs"""; Description: "Open Sourcebook for Agents"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Sourcebook Desktop.exe"; Description: "Open Sourcebook for Agents"; Flags: nowait postinstall skipifsilent

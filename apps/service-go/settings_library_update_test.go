@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -94,5 +95,14 @@ func TestVersionComparisonIncludesPreReleases(t *testing.T) {
 	}
 	if compareVersions("0.2.0-beta.2", "0.2.0-beta.10") >= 0 {
 		t.Fatal("pre-release labels should retain a deterministic ascending order")
+	}
+}
+
+func TestWindowsFolderChooserUsesUTF8Output(t *testing.T) {
+	script := windowsFolderChooserScript(`C:\Users\测试\Documents`)
+	for _, expected := range []string{"UTF8Encoding", "[Console]::OutputEncoding=$utf8", "C:\\Users\\测试\\Documents", "[Console]::Out.Write($dialog.SelectedPath)"} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("Windows folder chooser script is missing %q: %s", expected, script)
+		}
 	}
 }

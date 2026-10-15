@@ -27,8 +27,12 @@ import (
 const libraryVersion = 1
 
 type Book struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Directory is the Book's local folder name. It is intentionally separate
+	// from ID: extensions and API URLs keep using the stable ID when a user
+	// renames a Book, while the folder remains understandable in Finder/Explorer.
+	Directory string `json:"directory,omitempty"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -124,7 +128,7 @@ func (library *Library) Close() {
 
 func (library *Library) manifestPath() string { return filepath.Join(library.root, "library.json") }
 func (library *Library) bookRoot(book Book) string {
-	return filepath.Join(library.root, "books", book.ID)
+	return filepath.Join(library.root, "books", bookDirectory(book))
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
@@ -133,7 +137,7 @@ func (library *Library) readManifest() (Manifest, error) {
 	path := library.manifestPath()
 	bytes, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		manifest := Manifest{Version: libraryVersion, ActiveBookID: "sourcebook", Books: []Book{{ID: "sourcebook", Name: "Default Book", CreatedAt: now()}}}
+		manifest := Manifest{Version: libraryVersion, ActiveBookID: "sourcebook", Books: []Book{{ID: "sourcebook", Name: "Default Book", Directory: "sourcebook", CreatedAt: now()}}}
 		if err := library.writeManifest(manifest); err != nil {
 			return Manifest{}, err
 		}
@@ -150,19 +154,21 @@ func (library *Library) readManifest() (Manifest, error) {
 		return Manifest{}, fmt.Errorf("read Sourcebook library manifest: %w", err)
 	}
 	if len(manifest.Books) == 0 {
-		manifest.Books = []Book{{ID: "sourcebook", Name: "Default Book", CreatedAt: now()}}
+		manifest.Books = []Book{{ID: "sourcebook", Name: "Default Book", Directory: "sourcebook", CreatedAt: now()}}
 		manifest.ActiveBookID = "sourcebook"
 	}
 	if manifest.ActiveBookID == "" {
 		manifest.ActiveBookID = manifest.Books[0].ID
 	}
 	manifest.Version = libraryVersion
+	normalizeBookDirectories(&manifest)
 	normalizeUnreadBookIDs(&manifest)
 	return manifest, library.writeManifest(manifest)
 }
 
 func (library *Library) writeManifest(manifest Manifest) error {
 	manifest.Version = libraryVersion
+	normalizeBookDirectories(&manifest)
 	normalizeUnreadBookIDs(&manifest)
 	if err := os.MkdirAll(library.root, 0o755); err != nil {
 		return err
@@ -302,11 +308,14 @@ func (library *Library) CreateBook(name string) (Book, error) {
 		return Book{}, err
 	}
 	base := slug(clean)
+	if base == "" {
+		base = "book"
+	}
 	id := base
 	for suffix := 2; containsBook(manifest.Books, id); suffix++ {
 		id = fmt.Sprintf("%s-%d", base, suffix)
 	}
-	book := Book{ID: id, Name: clean, CreatedAt: now()}
+	book := Book{ID: id, Name: clean, Directory: nextBookDirectory(clean, manifest.Books, ""), CreatedAt: now()}
 	manifest.Books = append(manifest.Books, book)
 	if err := library.writeManifest(manifest); err != nil {
 		return Book{}, err
@@ -326,13 +335,45 @@ func (library *Library) RenameBook(bookID, name string) (Book, error) {
 		return Book{}, err
 	}
 	for index := range manifest.Books {
-		if manifest.Books[index].ID == bookID {
-			manifest.Books[index].Name = clean
-			if err := library.writeManifest(manifest); err != nil {
+		if manifest.Books[index].ID != bookID {
+			continue
+		}
+
+		book := &manifest.Books[index]
+		previousDirectory := bookDirectory(*book)
+		nextDirectory := nextBookDirectory(clean, manifest.Books, book.ID)
+		previousRoot := library.bookRoot(*book)
+		nextRoot := filepath.Join(library.root, "books", nextDirectory)
+
+		if previousDirectory != nextDirectory {
+			if _, err := os.Stat(nextRoot); err == nil {
+				return Book{}, errors.New("已有同名 Book 文件夹，请使用其他名称")
+			} else if !errors.Is(err, os.ErrNotExist) {
 				return Book{}, err
 			}
-			return manifest.Books[index], nil
+			if db := library.dbs[bookID]; db != nil {
+				_, _ = db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+				_ = db.Close()
+				delete(library.dbs, bookID)
+			}
+			if _, err := os.Stat(previousRoot); err == nil {
+				if err := os.Rename(previousRoot, nextRoot); err != nil {
+					return Book{}, err
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return Book{}, err
+			}
 		}
+
+		book.Name = clean
+		book.Directory = nextDirectory
+		if err := library.writeManifest(manifest); err != nil {
+			if previousDirectory != nextDirectory {
+				_ = os.Rename(nextRoot, previousRoot)
+			}
+			return Book{}, err
+		}
+		return *book, nil
 	}
 	return Book{}, errors.New("Book 不存在或已被删除，请重新选择。")
 }
@@ -423,7 +464,7 @@ func (library *Library) Reset() (Manifest, error) {
 	manifest := Manifest{
 		Version:      libraryVersion,
 		ActiveBookID: "sourcebook",
-		Books:        []Book{{ID: "sourcebook", Name: "Default Book", CreatedAt: now()}},
+		Books:        []Book{{ID: "sourcebook", Name: "Default Book", Directory: "sourcebook", CreatedAt: now()}},
 	}
 	staging := fmt.Sprintf("%s.reset-%d", library.root, time.Now().UnixMilli())
 	if err := os.MkdirAll(filepath.Join(staging, "books"), 0o755); err != nil {
@@ -675,6 +716,7 @@ func (library *Library) restoreLegacyPayload(payload BackupPayload, mode string)
 		for suffix := 2; containsBook(manifest.Books, book.ID); suffix++ {
 			book.ID = fmt.Sprintf("%s-%d", originalID, suffix)
 		}
+		book.Directory = nextBookDirectory(book.Name, manifest.Books, "")
 		book.CreatedAt = now()
 		if err := writeBackupBook(library.root, book, backup.Files); err != nil {
 			return Manifest{}, nil, err
@@ -791,6 +833,10 @@ func (library *Library) installBackupArchive(staging string, archive BackupArchi
 	library.Close()
 	if mode == "replace" {
 		manifest := Manifest{Version: libraryVersion, ActiveBookID: archive.Library.ActiveBookID, Books: archive.Books}
+		normalizeBookDirectories(&manifest)
+		if err := alignStagedBookDirectories(staging, manifest.Books); err != nil {
+			return Manifest{}, nil, err
+		}
 		if err := writeManifestAt(staging, manifest); err != nil {
 			return Manifest{}, nil, err
 		}
@@ -825,6 +871,7 @@ func (library *Library) installBackupArchive(staging string, archive BackupArchi
 		for suffix := 2; containsBook(manifest.Books, book.ID); suffix++ {
 			book.ID = fmt.Sprintf("%s-%d", originalID, suffix)
 		}
+		book.Directory = nextBookDirectory(book.Name, manifest.Books, "")
 		book.CreatedAt = now()
 		if err := os.Rename(filepath.Join(staging, "books", backup.ID), library.bookRoot(book)); err != nil {
 			return Manifest{}, nil, err
@@ -907,6 +954,7 @@ func containsString(values []string, value string) bool {
 
 func writeManifestAt(root string, manifest Manifest) error {
 	manifest.Version = libraryVersion
+	normalizeBookDirectories(&manifest)
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
@@ -1129,7 +1177,7 @@ func writeBackupLibrary(root string, payload BackupPayload) error {
 }
 
 func writeBackupBook(root string, book Book, files []BackupFile) error {
-	destination := filepath.Join(root, "books", book.ID)
+	destination := filepath.Join(root, "books", bookDirectory(book))
 	for _, file := range files {
 		if filepath.IsAbs(file.Path) || strings.Contains(filepath.Clean(file.Path), "..") {
 			return errors.New("备份包含非法路径")
@@ -1219,6 +1267,114 @@ func slug(value string) string {
 		}
 	}
 	return strings.Trim(builder.String(), "-")
+}
+
+func bookDirectory(book Book) string {
+	if isSafeBookDirectory(book.Directory) {
+		return book.Directory
+	}
+	return book.ID
+}
+
+func normalizeBookDirectories(manifest *Manifest) {
+	for index := range manifest.Books {
+		book := &manifest.Books[index]
+		if !isSafeBookDirectory(book.Directory) {
+			// Existing libraries used the stable ID as their folder name. Preserve
+			// that location during this schema addition rather than moving data on
+			// application startup.
+			book.Directory = book.ID
+		}
+	}
+}
+
+func nextBookDirectory(name string, books []Book, excludeID string) string {
+	base := safeBookDirectory(name)
+	if base == "" {
+		base = "Book"
+	}
+	candidate := base
+	for suffix := 2; ; suffix++ {
+		conflict := false
+		for _, book := range books {
+			if book.ID != excludeID && strings.EqualFold(bookDirectory(book), candidate) {
+				conflict = true
+				break
+			}
+		}
+		if !conflict {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, suffix)
+	}
+}
+
+func safeBookDirectory(value string) string {
+	value = strings.TrimSpace(value)
+	var builder strings.Builder
+	for _, character := range value {
+		if character < 32 || strings.ContainsRune(`<>:"/\\|?*`, character) {
+			continue
+		}
+		builder.WriteRune(character)
+	}
+	result := strings.TrimRight(strings.TrimSpace(builder.String()), ". ")
+	if result == "." || result == ".." {
+		return ""
+	}
+	if isWindowsReservedDirectory(result) {
+		result += " Book"
+	}
+	return truncate(result, 80)
+}
+
+func isSafeBookDirectory(value string) bool {
+	return value != "" && value == safeBookDirectory(value) && filepath.Base(value) == value
+}
+
+func isWindowsReservedDirectory(value string) bool {
+	stem := strings.ToUpper(strings.Split(value, ".")[0])
+	if stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" {
+		return true
+	}
+	for _, prefix := range []string{"COM", "LPT"} {
+		if len(stem) == 4 && strings.HasPrefix(stem, prefix) && stem[3] >= '1' && stem[3] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+func alignStagedBookDirectories(staging string, books []Book) error {
+	for _, book := range books {
+		current := filepath.Join(staging, "books", book.ID)
+		destination := filepath.Join(staging, "books", bookDirectory(book))
+		if current == destination {
+			continue
+		}
+		if strings.EqualFold(book.ID, bookDirectory(book)) {
+			// Case-only renames need an intermediate name on the usual
+			// case-insensitive macOS and Windows filesystems.
+			temporary := current + ".sourcebook-rename"
+			if err := os.Rename(current, temporary); err != nil {
+				return err
+			}
+			if err := os.Rename(temporary, destination); err != nil {
+				_ = os.Rename(temporary, current)
+				return err
+			}
+			continue
+		}
+		if _, err := os.Stat(destination); err == nil {
+			return errors.New("备份中的 Book 文件夹名称重复")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := os.Rename(current, destination); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func truncate(value string, maximum int) string {

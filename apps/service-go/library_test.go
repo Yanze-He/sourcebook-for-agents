@@ -118,6 +118,66 @@ func TestLibraryResetRemovesBooksAndStoredFiles(t *testing.T) {
 	}
 }
 
+func TestRenameBookMovesItsLocalFolderAndKeepsStableID(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+
+	book, err := library.CreateBook("Research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	context, err := library.Context(book.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(context.MediaRoot, "note.txt"), []byte("kept"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := library.RenameBook(book.ID, "研究资料")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.ID != book.ID || renamed.Directory != "研究资料" {
+		t.Fatalf("rename changed the stable identity or folder unexpectedly: %+v", renamed)
+	}
+	if _, err := os.Stat(filepath.Join(library.root, "books", "研究资料", "assets", "note.txt")); err != nil {
+		t.Fatalf("renamed Book did not keep its local files: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(library.root, "books", "Research")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old Book folder remains after rename: %v", err)
+	}
+	if _, err := library.Context(book.ID); err != nil {
+		t.Fatalf("stable Book ID no longer opens after rename: %v", err)
+	}
+}
+
+func TestCreateBookUsesSafeUnicodeFolderName(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+
+	book, err := library.CreateBook("中文项目")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if book.ID != "book" || book.Directory != "中文项目" {
+		t.Fatalf("unexpected Book identity for Unicode name: %+v", book)
+	}
+	context, err := library.Context(book.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(context.Root) != "中文项目" {
+		t.Fatalf("Book stored in %q, want Chinese folder name", context.Root)
+	}
+}
+
 func TestStreamingBackupRestoresWithoutBase64Payload(t *testing.T) {
 	source, err := OpenLibrary(filepath.Join(t.TempDir(), "source"), "", "")
 	if err != nil {

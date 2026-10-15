@@ -86,7 +86,7 @@ func chooseDirectory(defaultPath string) (string, error) {
 	case "darwin":
 		command = exec.Command("osascript", "-e", "POSIX path of (choose folder with prompt \"Choose a folder for Sourcebook Library\" default location POSIX file "+appleScriptString(defaultPath)+")")
 	case "windows":
-		command = exec.Command("powershell.exe", "-NoProfile", "-STA", "-Command", "Add-Type -AssemblyName System.Windows.Forms; $dialog=New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.Description='Choose a folder for Sourcebook Library'; $dialog.SelectedPath='"+powerShellSingleQuoted(defaultPath)+"'; if($dialog.ShowDialog() -eq 'OK'){[Console]::Write($dialog.SelectedPath)}")
+		command = exec.Command("powershell.exe", "-NoProfile", "-STA", "-Command", windowsFolderChooserScript(defaultPath))
 	default:
 		return "", &apiError{status: http.StatusNotImplemented, code: "FOLDER_CHOOSER_UNSUPPORTED", message: "当前系统暂不支持选择本地文件夹。"}
 	}
@@ -99,6 +99,13 @@ func chooseDirectory(defaultPath string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func windowsFolderChooserScript(defaultPath string) string {
+	// PowerShell otherwise writes redirected paths using a legacy Windows code
+	// page. Explicit UTF-8 keeps Chinese and other non-ASCII folder names intact
+	// when Go reads the selected path from stdout.
+	return "Add-Type -AssemblyName System.Windows.Forms; $utf8=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$utf8; $OutputEncoding=$utf8; $dialog=New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.Description='Choose a folder for Sourcebook Library'; $dialog.SelectedPath='" + powerShellSingleQuoted(defaultPath) + "'; if($dialog.ShowDialog() -eq 'OK'){[Console]::Out.Write($dialog.SelectedPath)}"
 }
 
 func appleScriptString(value string) string {
@@ -115,7 +122,10 @@ func revealLibraryInFileManager(path string) error {
 	case "darwin":
 		command = exec.Command("open", "-R", path)
 	case "windows":
-		command = exec.Command("explorer.exe", "/select,"+path)
+		// Open the storage folder itself. /select, is parsed by Explorer as a
+		// legacy comma-delimited argument and can fall back to Documents for
+		// non-ASCII paths.
+		command = exec.Command("explorer.exe", path)
 	default:
 		command = exec.Command("xdg-open", filepath.Dir(path))
 	}
