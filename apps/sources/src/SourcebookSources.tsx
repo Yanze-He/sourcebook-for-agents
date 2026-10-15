@@ -132,7 +132,9 @@ function kindLabel(modality: Modality, language: Language) { if (modality === "p
 const kindIcon = { text: FileText, image: Image, video: Video, audio: Music2, file: FileText, link: Link2, post: MessageSquare, conversation: Workflow } satisfies Record<Modality, typeof FileText>;
 const localImportExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md", ".rtf", ".json", ".html", ".htm"];
 const localImportAccept = localImportExtensions.join(",");
-const pickerInstallUrl = "https://github.com/Yanze-He/sourcebook-for-agents/tree/main/apps/picker#readme";
+// Send users to the Releases overview, where the current Picker package is
+// always available instead of sending them to the extension source folder.
+const pickerInstallUrl = "https://github.com/Yanze-He/sourcebook-for-agents/releases";
 const markdownSerializer = new TurndownService({ bulletListMarker: "-", codeBlockStyle: "fenced", linkStyle: "inlined" });
 function toggleFilterValue<T>(values: T[], value: T) { return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value]; }
 
