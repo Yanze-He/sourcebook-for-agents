@@ -4,7 +4,7 @@ export default defineConfig({
   manifest: {
     name: "Picker for Agent",
     description: "Pick web context and save it to Sourcebook for agents.",
-    version: "0.1.0",
+    version: "0.1.1",
     // A public key gives unpacked builds the same stable Chrome extension ID as
     // release builds. The Desktop uses that ID to distinguish this Picker from
     // other local extensions; no private key is stored in this repository.
