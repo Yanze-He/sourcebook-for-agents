@@ -54,10 +54,10 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 ## Release checklist
 
 1. Confirm `main` is green in CI.
-2. Test the extension and Desktop on clean macOS and Windows machines.
+2. Test the extension and Desktop on clean macOS and Windows machines. For each Desktop installer, also test an upgrade over the prior release: open the app, click **Install Picker**, and confirm the browser opens the GitHub Releases overview rather than a cached local page or source directory.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
-4. Choose a version tag such as `v0.1.0-beta.2`.
-5. Create and push a protected version tag such as `v0.1.0-beta.2`. The release workflow uses this tag as the Desktop and installer version.
+4. Choose a version tag such as `v0.1.0-beta.3`.
+5. Create and push a protected version tag such as `v0.1.0-beta.3`. The release workflow uses this tag as the Desktop and installer version.
 6. Let CI build and test its artifacts, then create the signed and notarized macOS artifact locally from that exact tag.
 7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before manually publishing a GitHub Release. Settings reads published, non-draft Releases, so include clear release notes and the matching Desktop installer before publishing.
 

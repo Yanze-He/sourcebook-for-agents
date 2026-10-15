@@ -14,7 +14,9 @@ const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
-const outputRoot = join(repositoryRoot, "release", "macos");
+// Release packaging uses release/macos. A separate output is useful for a
+// candidate build so it never overwrites an already published DMG.
+const outputRoot = process.env.SOURCEBOOK_MACOS_OUTPUT_DIR || join(repositoryRoot, "release", "macos");
 const appRoot = join(outputRoot, "Sourcebook Desktop.app");
 const contents = join(appRoot, "Contents");
 const resources = join(contents, "Resources");
@@ -141,7 +143,7 @@ function createIcon(source, destination, name) {
 }
 
 function createMenuBarHost(destination) {
-  execFileSync("xcrun", ["clang", "-fobjc-arc", "-framework", "Cocoa", menuBarHostSource, "-o", destination], { stdio: "inherit" });
+  execFileSync("xcrun", ["clang", "-fobjc-arc", "-framework", "Cocoa", `-DSOURCEBOOK_DESKTOP_VERSION=\"${appVersion}\"`, menuBarHostSource, "-o", destination], { stdio: "inherit" });
   chmodSync(destination, 0o755);
 }
 

@@ -2,7 +2,13 @@
 
 All notable user-facing changes are documented here.
 
-## Unreleased
+## v0.1.0-beta.3
+
+- Desktop now identifies an older local Sourcebook service after an update, restarts it before opening the new app, and reloads the existing browser tab with the newly bundled Sources page.
+- Windows and macOS Desktop builds carry their own version through startup, so the correct local service is used after an upgrade.
+- The Windows installer requests that a running Sourcebook Desktop close before replacing it, avoiding an upgrade that leaves the old tray process active.
+
+## v0.1.0-beta.2
 
 - Desktop's **Install Picker** entry now opens the GitHub Releases overview, so users can find the current Picker download instead of landing in its source folder.
 

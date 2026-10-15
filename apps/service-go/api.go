@@ -127,7 +127,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 			return err
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
-			"ok": true, "app": "sourcebook-for-agents", "apiVersion": "3",
+			"ok": true, "app": "sourcebook-for-agents", "version": appVersion, "apiVersion": "3",
 			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync", "prompt-settings"},
 			"connection":   map[string]any{"protocolVersion": 1, "origin": "http://" + request.Host},
 			"library":      manifest,

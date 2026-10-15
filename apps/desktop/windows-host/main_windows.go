@@ -3,9 +3,13 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -61,7 +65,16 @@ var (
 
 	serviceMu sync.Mutex
 	service   *exec.Cmd
+	// desktopBuild is injected by the Windows package script. It lets the host
+	// distinguish the bundled service from an older Sourcebook still listening
+	// on the shared Picker port after an update.
+	desktopBuild = "0.1.0"
 )
+
+type serviceHealth struct {
+	App     string `json:"app"`
+	Version string `json:"version"`
+}
 
 type point struct{ X, Y int32 }
 
@@ -138,8 +151,9 @@ func main() {
 		return
 	}
 	defer removeTrayIcon(syscall.Handle(window))
-	startService()
-	time.AfterFunc(700*time.Millisecond, openSourcebook)
+	if startService() {
+		openSourcebookWhenReady(0)
+	}
 
 	var current message
 	for {
@@ -158,7 +172,7 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 	case wmCommand:
 		switch wParam & 0xffff {
 		case openCommandID:
-			openSourcebook()
+			openSourcebookWhenReady(0)
 			return 0
 		case quitCommandID:
 			procDestroyWindow.Call(uintptr(window))
@@ -167,7 +181,7 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 	case trayCallback:
 		switch uint32(lParam) {
 		case wmLeftButtonUp, wmLeftButtonDblClk:
-			openSourcebook()
+			openSourcebookWhenReady(0)
 			return 0
 		case wmRightButtonUp:
 			showTrayMenu(window)
@@ -184,15 +198,23 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 	return result
 }
 
-func startService() {
+func startService() bool {
 	serviceMu.Lock()
 	defer serviceMu.Unlock()
 	if service != nil && service.Process != nil {
-		return
+		return true
+	}
+	if health, running := runningSourcebookService(); running {
+		if health.Version == desktopBuild {
+			return true
+		}
+		if !stopOlderSourcebookService() {
+			return false
+		}
 	}
 	executable, err := os.Executable()
 	if err != nil {
-		return
+		return false
 	}
 	root := filepath.Dir(executable)
 	command := exec.Command(filepath.Join(root, "sourcebook-service.exe"))
@@ -200,7 +222,9 @@ func startService() {
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if command.Start() == nil {
 		service = command
+		return true
 	}
+	return false
 }
 
 func stopService() {
@@ -213,9 +237,67 @@ func stopService() {
 	service = nil
 }
 
+func runningSourcebookService() (serviceHealth, bool) {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	response, err := client.Get("http://127.0.0.1:4177/api/health")
+	if err != nil {
+		return serviceHealth{}, false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return serviceHealth{}, false
+	}
+	var health serviceHealth
+	if err := json.NewDecoder(response.Body).Decode(&health); err != nil || health.App != "sourcebook-for-agents" {
+		return serviceHealth{}, false
+	}
+	return health, true
+}
+
+func stopOlderSourcebookService() bool {
+	output, err := exec.Command("netstat", "-ano", "-p", "tcp").Output()
+	if err != nil {
+		return false
+	}
+	var pid string
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 || !strings.EqualFold(fields[3], "LISTENING") {
+			continue
+		}
+		if fields[1] == "127.0.0.1:4177" || fields[1] == "[::1]:4177" {
+			pid = fields[len(fields)-1]
+			break
+		}
+	}
+	if pid == "" || exec.Command("taskkill", "/PID", pid, "/T", "/F").Run() != nil {
+		return false
+	}
+	for attempt := 0; attempt < 12; attempt++ {
+		if _, running := runningSourcebookService(); !running {
+			return true
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return false
+}
+
+func openSourcebookWhenReady(attempt int) {
+	if health, running := runningSourcebookService(); running && health.Version == desktopBuild {
+		openSourcebook()
+		return
+	}
+	if attempt < 40 {
+		time.AfterFunc(150*time.Millisecond, func() { openSourcebookWhenReady(attempt + 1) })
+	}
+}
+
 func openSourcebook() {
+	// A fresh query string forces an existing browser tab to reload the newly
+	// bundled web app rather than showing an in-memory page from before update.
+	target := "http://127.0.0.1:4177/?desktop=" + desktopBuild + "&openedAt=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
 	// rundll32 opens the user's default browser without showing a command shell.
-	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "http://127.0.0.1:4177/").Start()
+	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", target).Start()
 }
 
 func loadTrayIcon() syscall.Handle {

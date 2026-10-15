@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -42,5 +43,35 @@ func TestLocalAPIAcceptsOnlyDesktopAndBundledPicker(t *testing.T) {
 				t.Fatalf("CORS origin = %q, want %q", response.Header().Get("Access-Control-Allow-Origin"), test.origin)
 			}
 		})
+	}
+}
+
+func TestHealthReportsTheBundledDesktopVersion(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/health", nil)
+	request.Host = "127.0.0.1:4177"
+	response := httptest.NewRecorder()
+	NewServer(library, "").ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+
+	var health struct {
+		App     string `json:"app"`
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	if health.App != "sourcebook-for-agents" {
+		t.Fatalf("app = %q", health.App)
+	}
+	if health.Version != appVersion {
+		t.Fatalf("version = %q, want %q", health.Version, appVersion)
 	}
 }

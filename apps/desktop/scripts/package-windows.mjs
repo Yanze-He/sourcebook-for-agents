@@ -37,7 +37,7 @@ function buildService(destination) {
 
 function buildDesktopHost(destination) {
   console.log("Building the Windows taskbar host…");
-  execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w -H=windowsgui", "-o", destination, "."], {
+  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -H=windowsgui -X main.desktopBuild=${appVersion}`, "-o", destination, "."], {
     cwd: windowsHostRoot,
     env: { ...process.env, GOOS: "windows", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",
