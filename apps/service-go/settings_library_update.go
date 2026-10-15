@@ -137,9 +137,16 @@ func (server *Server) getUpdateSettings(response http.ResponseWriter, request *h
 	if err != nil {
 		return err
 	}
+	// A release found by an older installation is stored locally. Once that
+	// release is installed, it must stop surfacing immediately instead of
+	// waiting for the next scheduled network check (which may be up to a day).
+	settings, shouldPersist := clearInstalledRelease(settings)
 	force := request.URL.Query().Get("check") == "1"
 	if force || (automaticUpdateChecks(settings) && updateCheckDue(settings.LastUpdateCheck)) {
 		settings = server.checkForUpdates(settings)
+		shouldPersist = true
+	}
+	if shouldPersist {
 		if saved, saveErr := server.writeDesktopSettings(settings); saveErr == nil {
 			settings = saved
 		}
@@ -170,6 +177,18 @@ func (server *Server) updateUpdateSettings(response http.ResponseWriter, request
 
 func automaticUpdateChecks(settings desktopSettings) bool {
 	return settings.AutoUpdateCheck == nil || *settings.AutoUpdateCheck
+}
+
+func clearInstalledRelease(settings desktopSettings) (desktopSettings, bool) {
+	if settings.AvailableRelease == nil {
+		return settings, false
+	}
+	version := settings.AvailableRelease.Version
+	if !isSemanticVersion(version) || compareVersions(version, appVersion) <= 0 {
+		settings.AvailableRelease = nil
+		return settings, true
+	}
+	return settings, false
 }
 
 func updateCheckDue(last string) bool {

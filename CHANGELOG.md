@@ -7,6 +7,8 @@ All notable user-facing changes are documented here.
 - Desktop now identifies an older local Sourcebook service after an update, restarts it before opening the new app, and reloads the existing browser tab with the newly bundled Sources page.
 - Windows and macOS Desktop builds carry their own version through startup, so the correct local service is used after an upgrade.
 - The Windows installer requests that a running Sourcebook Desktop close before replacing it, avoiding an upgrade that leaves the old tray process active.
+- Update notices now clear as soon as the reported release is the installed version, rather than waiting for the next scheduled check.
+- The Settings control keeps an available-update label visible, uses a round corner badge, and shows an explicit update state in its menu.
 
 ## v0.1.0-beta.2
 

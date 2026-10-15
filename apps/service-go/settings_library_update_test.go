@@ -98,6 +98,22 @@ func TestVersionComparisonIncludesPreReleases(t *testing.T) {
 	}
 }
 
+func TestInstalledReleaseClearsSavedUpdateNotice(t *testing.T) {
+	originalVersion := appVersion
+	appVersion = "0.1.0-beta.3"
+	t.Cleanup(func() { appVersion = originalVersion })
+
+	settings, cleared := clearInstalledRelease(desktopSettings{AvailableRelease: &releaseInfo{Version: "0.1.0-beta.3"}})
+	if !cleared || settings.AvailableRelease != nil {
+		t.Fatal("the notice for the installed version should be cleared")
+	}
+
+	settings, cleared = clearInstalledRelease(desktopSettings{AvailableRelease: &releaseInfo{Version: "0.1.0-beta.4"}})
+	if cleared || settings.AvailableRelease == nil {
+		t.Fatal("a newer release should remain available")
+	}
+}
+
 func TestWindowsFolderChooserUsesUTF8Output(t *testing.T) {
 	script := windowsFolderChooserScript(`C:\Users\测试\Documents`)
 	for _, expected := range []string{"UTF8Encoding", "[Console]::OutputEncoding=$utf8", "C:\\Users\\测试\\Documents", "[Console]::Out.Write($dialog.SelectedPath)"} {
