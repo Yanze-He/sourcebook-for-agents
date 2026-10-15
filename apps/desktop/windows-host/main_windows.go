@@ -13,24 +13,29 @@ import (
 )
 
 const (
-	wmCreate       = 0x0001
-	wmDestroy      = 0x0002
-	wmClose        = 0x0010
-	wmSysCommand   = 0x0112
-	wmSetIcon      = 0x0080
-	wmActivate     = 0x0006
-	wmsCommand     = 0x0111
-	scRestore      = 0xF120
-	waInactive     = 0
-	swShowMinNoAct = 7
-	imageIcon      = 1
-	lrLoadFromFile = 0x0010
-	iconSmall      = 0
-	iconBig        = 1
-	mfString       = 0x0000
-	mfSeparator    = 0x0800
-	openCommandID  = 0x5001
-	quitCommandID  = 0x5002
+	wmDestroy          = 0x0002
+	wmClose            = 0x0010
+	wmCommand          = 0x0111
+	wmApp              = 0x8000
+	wmLeftButtonUp     = 0x0202
+	wmLeftButtonDblClk = 0x0203
+	wmRightButtonUp    = 0x0205
+	wsExToolWindow     = 0x00000080
+	imageIcon          = 1
+	lrLoadFromFile     = 0x0010
+	nimAdd             = 0x00000000
+	nimDelete          = 0x00000002
+	nifMessage         = 0x00000001
+	nifIcon            = 0x00000002
+	nifTip             = 0x00000004
+	mfString           = 0x0000
+	mfSeparator        = 0x0800
+	tpmRightButton     = 0x0002
+	trayCallback       = wmApp + 1
+	trayIconID         = 1
+	openCommandID      = 0x5001
+	quitCommandID      = 0x5002
+	uninstallCommandID = 0x5003
 )
 
 var (
@@ -44,11 +49,15 @@ var (
 	procGetMessage          = user32.NewProc("GetMessageW")
 	procTranslateMessage    = user32.NewProc("TranslateMessage")
 	procDispatchMessage     = user32.NewProc("DispatchMessageW")
-	procGetSystemMenu       = user32.NewProc("GetSystemMenu")
+	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
+	procDestroyMenu         = user32.NewProc("DestroyMenu")
 	procAppendMenu          = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
+	procGetCursorPos        = user32.NewProc("GetCursorPos")
+	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 	procLoadImage           = user32.NewProc("LoadImageW")
-	procSendMessage         = user32.NewProc("SendMessageW")
 	procGetModuleHandle     = syscall.NewLazyDLL("kernel32.dll").NewProc("GetModuleHandleW")
+	procShellNotifyIcon     = syscall.NewLazyDLL("shell32.dll").NewProc("Shell_NotifyIconW")
 	windowProcedureCallback = syscall.NewCallback(windowProcedure)
 
 	serviceMu sync.Mutex
@@ -82,6 +91,24 @@ type windowClassEx struct {
 	IconSmall   syscall.Handle
 }
 
+type notifyIconData struct {
+	Size             uint32
+	Window           syscall.Handle
+	ID               uint32
+	Flags            uint32
+	CallbackMessage  uint32
+	Icon             syscall.Handle
+	Tip              [128]uint16
+	State            uint32
+	StateMask        uint32
+	Info             [256]uint16
+	TimeoutOrVersion uint32
+	InfoTitle        [64]uint16
+	InfoFlags        uint32
+	GUID             [16]byte
+	BalloonIcon      syscall.Handle
+}
+
 func main() {
 	instance, _, _ := procGetModuleHandle.Call(0)
 	className := syscall.StringToUTF16Ptr("SourcebookDesktopWindow")
@@ -97,20 +124,23 @@ func main() {
 
 	title := syscall.StringToUTF16Ptr("Sourcebook Desktop")
 	window, _, _ := procCreateWindowEx.Call(
-		0,
+		wsExToolWindow,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(title)),
-		0x00CF0000, // WS_OVERLAPPEDWINDOW: gives the taskbar an app window.
+		0, // A hidden tool window owns the system-tray icon without showing in the taskbar.
 		0, 0, 0, 0,
 		0, 0, instance, 0,
 	)
 	if window == 0 {
 		return
 	}
-	setWindowIcon(syscall.Handle(window))
+	if !addTrayIcon(syscall.Handle(window)) {
+		procDestroyWindow.Call(window)
+		return
+	}
+	defer removeTrayIcon(syscall.Handle(window))
 	startService()
 	time.AfterFunc(700*time.Millisecond, openSourcebook)
-	procShowWindow.Call(window, swShowMinNoAct)
 
 	var current message
 	for {
@@ -126,14 +156,7 @@ func main() {
 
 func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uintptr) uintptr {
 	switch messageID {
-	case wmCreate:
-		menu, _, _ := procGetSystemMenu.Call(uintptr(window), 0)
-		if menu != 0 {
-			procAppendMenu.Call(menu, mfSeparator, 0, 0)
-			procAppendMenu.Call(menu, mfString, openCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Open Sourcebook"))))
-			procAppendMenu.Call(menu, mfString, quitCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Quit Sourcebook Desktop"))))
-		}
-	case wmsCommand:
+	case wmCommand:
 		switch wParam & 0xffff {
 		case openCommandID:
 			openSourcebook()
@@ -141,17 +164,20 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 		case quitCommandID:
 			procDestroyWindow.Call(uintptr(window))
 			return 0
-		}
-	case wmSysCommand:
-		if wParam&0xfff0 == scRestore {
-			openSourcebook()
-			procShowWindow.Call(uintptr(window), swShowMinNoAct)
+		case uninstallCommandID:
+			if launchUninstaller() {
+				procDestroyWindow.Call(uintptr(window))
+			}
 			return 0
 		}
-	case wmActivate:
-		if wParam&0xffff != waInactive {
+	case trayCallback:
+		switch uint32(lParam) {
+		case wmLeftButtonUp, wmLeftButtonDblClk:
 			openSourcebook()
-			procShowWindow.Call(uintptr(window), swShowMinNoAct)
+			return 0
+		case wmRightButtonUp:
+			showTrayMenu(window)
+			return 0
 		}
 	case wmClose:
 		procDestroyWindow.Call(uintptr(window))
@@ -198,16 +224,70 @@ func openSourcebook() {
 	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "http://127.0.0.1:4177/").Start()
 }
 
-func setWindowIcon(window syscall.Handle) {
+func launchUninstaller() bool {
 	executable, err := os.Executable()
 	if err != nil {
-		return
+		return false
+	}
+	uninstaller := filepath.Join(filepath.Dir(executable), "unins000.exe")
+	if _, err := os.Stat(uninstaller); err != nil {
+		return false
+	}
+	return exec.Command(uninstaller).Start() == nil
+}
+
+func loadTrayIcon() syscall.Handle {
+	executable, err := os.Executable()
+	if err != nil {
+		return 0
 	}
 	iconPath := syscall.StringToUTF16Ptr(filepath.Join(filepath.Dir(executable), "SourcebookDesktop.ico"))
 	icon, _, _ := procLoadImage.Call(0, uintptr(unsafe.Pointer(iconPath)), imageIcon, 0, 0, lrLoadFromFile)
+	return syscall.Handle(icon)
+}
+
+func addTrayIcon(window syscall.Handle) bool {
+	icon := loadTrayIcon()
 	if icon == 0 {
+		return false
+	}
+	data := notifyIconData{
+		Size:            uint32(unsafe.Sizeof(notifyIconData{})),
+		Window:          window,
+		ID:              trayIconID,
+		Flags:           nifMessage | nifIcon | nifTip,
+		CallbackMessage: trayCallback,
+		Icon:            icon,
+	}
+	copy(data.Tip[:], syscall.StringToUTF16("Sourcebook for Agents"))
+	result, _, _ := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&data)))
+	return result != 0
+}
+
+func removeTrayIcon(window syscall.Handle) {
+	data := notifyIconData{
+		Size:   uint32(unsafe.Sizeof(notifyIconData{})),
+		Window: window,
+		ID:     trayIconID,
+	}
+	procShellNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&data)))
+}
+
+func showTrayMenu(window syscall.Handle) {
+	menu, _, _ := procCreatePopupMenu.Call()
+	if menu == 0 {
 		return
 	}
-	procSendMessage.Call(uintptr(window), wmSetIcon, iconSmall, icon)
-	procSendMessage.Call(uintptr(window), wmSetIcon, iconBig, icon)
+	defer procDestroyMenu.Call(menu)
+	procAppendMenu.Call(menu, mfString, openCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Open Sourcebook"))))
+	procAppendMenu.Call(menu, mfSeparator, 0, 0)
+	procAppendMenu.Call(menu, mfString, quitCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Quit Sourcebook Desktop"))))
+	procAppendMenu.Call(menu, mfString, uninstallCommandID, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Uninstall Sourcebook Desktop"))))
+
+	var position point
+	if result, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&position))); result == 0 {
+		return
+	}
+	procSetForegroundWindow.Call(uintptr(window))
+	procTrackPopupMenu.Call(menu, tpmRightButton, uintptr(position.X), uintptr(position.Y), 0, uintptr(window), 0)
 }
