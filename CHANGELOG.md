@@ -2,7 +2,7 @@
 
 All notable user-facing changes are documented here.
 
-## v0.1.1-beta.1
+## v0.1.1-beta.4
 
 - Update notices clear as soon as the installed Desktop version catches up with the reported release, instead of waiting for a later scheduled check.
 - The Settings control keeps its available-update label visible, uses a round corner badge, and shows an explicit update state in its menu.
