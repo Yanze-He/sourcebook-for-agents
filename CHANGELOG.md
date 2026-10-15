@@ -2,6 +2,12 @@
 
 All notable user-facing changes are documented here.
 
+## v0.1.1-beta.1
+
+- Update notices clear as soon as the installed Desktop version catches up with the reported release, instead of waiting for a later scheduled check.
+- The Settings control keeps its available-update label visible, uses a round corner badge, and shows an explicit update state in its menu.
+- Settings and refresh tooltips stay above the sources toolbar when hovered.
+
 ## v0.1.0-beta.3
 
 - Desktop now identifies an older local Sourcebook service after an update, restarts it before opening the new app, and reloads the existing browser tab with the newly bundled Sources page.

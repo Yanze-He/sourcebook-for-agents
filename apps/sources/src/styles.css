@@ -776,6 +776,8 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
 }
 
 .panel-head {
+  position: relative;
+  z-index: 80;
   grid-template-columns: minmax(0, 1fr);
   min-height: 66px;
   padding: 14px 20px;
