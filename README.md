@@ -31,6 +31,22 @@ Save useful material from webpages and supported AI chats into a Book, with its 
 
 Picker automatically tries to save images locally; blocked downloads remain source links. Web video and audio stay as references, and page Picks are not full-page archives. [Supported sites and limits](docs/supported-sites.md).
 
+### Pick media in one pass
+
+Select the images that matter on a page, then save them to the chosen Book together.
+
+<p align="center">
+  <img src="docs/images/sourcebook-pick-media-multiselect.png" alt="Picker selecting six visual references on a webpage before saving them together." width="100%" />
+</p>
+
+### Pick the useful turns from a chat
+
+Select the messages worth keeping—across one or more exchanges—without saving the whole conversation.
+
+<p align="center">
+  <img src="docs/images/sourcebook-pick-chat-multiselect.png" alt="Picker selecting four ChatGPT messages before saving them together." width="100%" />
+</p>
+
 ## Organise & Pack
 
 Keep materials in Books, add notes, search and filter. Import local documents and media, or write your own records.
