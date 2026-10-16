@@ -12,6 +12,7 @@ const serviceRoot = join(repositoryRoot, "apps", "service-go");
 const windowsHostRoot = join(desktopRoot, "windows-host");
 const outputRoot = join(repositoryRoot, "release", "windows", "Sourcebook Desktop");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
+const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
 const shortcutIconSource = join(desktopRoot, "installer", "sourcebook-app-icon-256.png");
 
 for (const path of [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), join(windowsHostRoot, "go.mod"), shortcutIconSource]) {
@@ -28,7 +29,8 @@ console.log(`Created ${outputRoot}`);
 
 function buildService(destination) {
   console.log("Building the native Go service for Windows…");
-  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -X main.appVersion=${appVersion}`, "-o", destination, "."], {
+  const linkerFlags = ["-s", "-w", `-X main.appVersion=${appVersion}`, ...(appBuild ? [`-X main.appBuild=${appBuild}`] : [])].join(" ");
+  execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", destination, "."], {
     cwd: serviceRoot,
     env: { ...process.env, GOOS: "windows", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",

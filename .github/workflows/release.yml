@@ -5,12 +5,27 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      target_version:
+        description: "Desktop version for this candidate, such as 0.1.1-beta.4"
+        required: true
+        type: string
+      build_label:
+        description: "Candidate build label, such as build.003"
+        required: true
+        type: string
+      picker_changed:
+        description: "Build a new Picker ZIP because Picker code, manifest, or permissions changed"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   extension:
+    if: github.event_name == 'push' || inputs.picker_changed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +46,8 @@ jobs:
   macos:
     runs-on: macos-14
     env:
-      SOURCEBOOK_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      SOURCEBOOK_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.target_version || github.ref_type == 'tag' && github.ref_name || '' }}
+      SOURCEBOOK_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.build_label || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,15 +59,22 @@ jobs:
       - run: npm ci && npm ci --prefix apps/picker && npm ci --prefix apps/sources && npm ci --prefix apps/desktop
       - run: npm run build && npm --prefix apps/desktop run package:macos
       - run: shasum -a 256 release/macos/Sourcebook-Desktop.dmg > release/macos/SHA256SUMS.txt
+      - name: Prepare test candidate
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/prepare-candidate-artifact.mjs --platform macos --installer release/macos/Sourcebook-Desktop.dmg --app "release/macos/Sourcebook Desktop.app"
       - uses: actions/upload-artifact@v4
         with:
-          name: sourcebook-desktop-macos-arm64
-          path: release/macos/Sourcebook-Desktop.dmg
+          name: sourcebook-desktop-macos-${{ github.event_name == 'workflow_dispatch' && inputs.build_label || github.ref_name }}
+          path: |
+            release/macos/Sourcebook-Desktop.dmg
+            release/macos/SHA256SUMS.txt
+            release/macos/candidate/
 
   windows:
     runs-on: windows-latest
     env:
-      SOURCEBOOK_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      SOURCEBOOK_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.target_version || github.ref_type == 'tag' && github.ref_name || '' }}
+      SOURCEBOOK_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.build_label || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,7 +105,14 @@ jobs:
           $installer = "release\windows\installer\Sourcebook-for-Agents-Setup.exe"
           $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLower()
           "$hash  Sourcebook-for-Agents-Setup.exe" | Set-Content -NoNewline "release\windows\installer\SHA256SUMS.txt"
+      - name: Prepare test candidate
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: node scripts/prepare-candidate-artifact.mjs --platform windows --installer "release/windows/installer/Sourcebook-for-Agents-Setup.exe"
       - uses: actions/upload-artifact@v4
         with:
-          name: sourcebook-desktop-windows-x64
-          path: release/windows/installer/
+          name: sourcebook-desktop-windows-${{ github.event_name == 'workflow_dispatch' && inputs.build_label || github.ref_name }}
+          path: |
+            release/windows/installer/Sourcebook-for-Agents-Setup.exe
+            release/windows/installer/SHA256SUMS.txt
+            release/windows/installer/candidate/

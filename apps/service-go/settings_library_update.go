@@ -15,8 +15,11 @@ import (
 
 const updateRepository = "Yanze-He/sourcebook-for-agents"
 
-// appVersion is replaced by the desktop package scripts for release builds.
+// appVersion and appBuild are replaced by the desktop package scripts for
+// distributable builds. The build label identifies a tested artifact; it never
+// participates in semantic-version update comparisons.
 var appVersion = "0.1.0"
+var appBuild = ""
 
 type releaseInfo struct {
 	Version     string `json:"version"`
@@ -221,7 +224,7 @@ func updateSettingsPayload(settings desktopSettings) map[string]any {
 	} else if settings.LastUpdateCheck != "" {
 		status = "upToDate"
 	}
-	return map[string]any{"version": appVersion, "autoCheck": automaticUpdateChecks(settings), "lastCheckedAt": settings.LastUpdateCheck, "release": settings.AvailableRelease, "status": status, "error": settings.UpdateError}
+	return map[string]any{"version": appVersion, "build": appBuild, "autoCheck": automaticUpdateChecks(settings), "lastCheckedAt": settings.LastUpdateCheck, "release": settings.AvailableRelease, "status": status, "error": settings.UpdateError}
 }
 
 func fetchLatestRelease() (releaseInfo, error) {

@@ -114,6 +114,20 @@ func TestInstalledReleaseClearsSavedUpdateNotice(t *testing.T) {
 	}
 }
 
+func TestUpdateSettingsIncludesBuildLabelWithoutChangingVersion(t *testing.T) {
+	originalVersion, originalBuild := appVersion, appBuild
+	appVersion, appBuild = "0.1.1-beta.4", "build.003"
+	t.Cleanup(func() { appVersion, appBuild = originalVersion, originalBuild })
+
+	payload := updateSettingsPayload(desktopSettings{})
+	if payload["version"] != "0.1.1-beta.4" {
+		t.Fatalf("version = %q, want semantic release version", payload["version"])
+	}
+	if payload["build"] != "build.003" {
+		t.Fatalf("build = %q, want build.003", payload["build"])
+	}
+}
+
 func TestWindowsFolderChooserUsesUTF8Output(t *testing.T) {
 	script := windowsFolderChooserScript(`C:\Users\测试\Documents`)
 	for _, expected := range []string{"UTF8Encoding", "[Console]::OutputEncoding=$utf8", "C:\\Users\\测试\\Documents", "[Console]::Out.Write($dialog.SelectedPath)"} {

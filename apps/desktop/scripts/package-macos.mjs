@@ -14,6 +14,8 @@ const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
+const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
+const prebuiltApp = process.env.SOURCEBOOK_PREBUILT_APP?.trim() || "";
 // Release packaging uses release/macos. A separate output is useful for a
 // candidate build so it never overwrites an already published DMG.
 const outputRoot = process.env.SOURCEBOOK_MACOS_OUTPUT_DIR || join(repositoryRoot, "release", "macos");
@@ -26,7 +28,10 @@ const installerIconSource = join(desktopRoot, "installer", "sourcebook-installer
 const menuBarHostSource = join(desktopRoot, "installer", "SourcebookMenuBar.m");
 const fileIconSetterSource = join(desktopRoot, "installer", "SetFileIcon.m");
 
-for (const path of [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource]) {
+const packageInputs = prebuiltApp
+  ? [prebuiltApp, installerIconSource, fileIconSetterSource]
+  : [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource];
+for (const path of packageInputs) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
 }
 
@@ -45,17 +50,18 @@ for (const output of [
 ]) {
   rmSync(join(outputRoot, output), { force: true, recursive: true });
 }
-mkdirSync(join(contents, "MacOS"), { recursive: true });
-mkdirSync(resources, { recursive: true });
+if (prebuiltApp) {
+  console.log("Using the unsigned macOS app supplied by the verified GitHub candidate artifact…");
+  cpSync(prebuiltApp, appRoot, { recursive: true });
+} else {
+  mkdirSync(join(contents, "MacOS"), { recursive: true });
+  mkdirSync(resources, { recursive: true });
 
-cpSync(join(sourcesRoot, "dist"), join(resources, "sources"), { recursive: true });
-buildService(join(contents, "MacOS", "sourcebook-service"));
-createIcon(appIconSource, join(resources, "SourcebookDesktop.icns"), "SourcebookDesktop");
-const installerVolumeIcon = join(outputRoot, "SourcebookInstallerVolume.icns");
-createIcon(installerIconSource, installerVolumeIcon, "SourcebookInstallerVolume");
-
-createMenuBarHost(join(contents, "MacOS", "Sourcebook Desktop"));
-writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+  cpSync(join(sourcesRoot, "dist"), join(resources, "sources"), { recursive: true });
+  buildService(join(contents, "MacOS", "sourcebook-service"));
+  createIcon(appIconSource, join(resources, "SourcebookDesktop.icns"), "SourcebookDesktop");
+  createMenuBarHost(join(contents, "MacOS", "Sourcebook Desktop"));
+  writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleDisplayName</key><string>Sourcebook Desktop</string>
@@ -68,6 +74,10 @@ writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8
   <key>CFBundleVersion</key><string>${appVersion}</string>
   <key>NSAppleEventsUsageDescription</key><string>Sourcebook uses your browser only to return to an existing local Sourcebook page.</string>
 </dict></plist>`);
+}
+
+const installerVolumeIcon = join(outputRoot, "SourcebookInstallerVolume.icns");
+createIcon(installerIconSource, installerVolumeIcon, "SourcebookInstallerVolume");
 
 if (signingIdentity) {
   execFileSync("codesign", ["--force", "--deep", "--options", "runtime", "--timestamp", "--sign", signingIdentity, appRoot], { stdio: "inherit" });
@@ -83,7 +93,8 @@ console.log(`Created ${dmgPath}`);
 
 function buildService(destination) {
   console.log(`Building the native Go service for macOS ${process.arch}…`);
-  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -X main.appVersion=${appVersion}`, "-o", destination, "."], {
+  const linkerFlags = ["-s", "-w", `-X main.appVersion=${appVersion}`, ...(appBuild ? [`-X main.appBuild=${appBuild}`] : [])].join(" ");
+  execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", destination, "."], {
     cwd: serviceRoot,
     env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",
