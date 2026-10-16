@@ -12,7 +12,7 @@ Download the macOS DMG and Chromium Picker ZIP from the repository Release page.
 
 Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 
-To install Picker, unzip `sourcebook-picker-chromium.zip`, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked** and select the extracted extension folder.
+To install Picker, unzip the versioned `sourcebook-picker-chromium-v<version>.zip` download, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked** and select the extracted extension folder.
 
 ### Updates
 

@@ -49,7 +49,7 @@ npm run release:macos:local
 
 The command builds the platform-native Go service and application, applies a Developer ID signature with Hardened Runtime and timestamping, creates the DMG, submits it to Apple notarization, staples the resulting ticket, validates the result, and writes `release/macos/SHA256SUMS.txt`.
 
-Create or edit the matching GitHub Release manually, then upload the notarized `Sourcebook-Desktop.dmg`, its `SHA256SUMS.txt`, and any separately verified extension or Windows artifacts.
+Create or edit the matching GitHub Release manually, then upload the notarized `sourcebook-desktop-installer-v<version>.dmg`, its `SHA256SUMS.txt`, and any separately verified versioned Picker or Windows artifacts.
 
 ## Release checklist
 

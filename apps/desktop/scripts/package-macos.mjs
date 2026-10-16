@@ -15,6 +15,7 @@ const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
 const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
+const installerFileName = `sourcebook-desktop-installer-v${appVersion}.dmg`;
 const prebuiltApp = process.env.SOURCEBOOK_PREBUILT_APP?.trim() || "";
 // Release packaging uses release/macos. A separate output is useful for a
 // candidate build so it never overwrites an already published DMG.
@@ -41,6 +42,7 @@ for (const output of [
   "dmg-staging",
   "Sourcebook Desktop.dmg",
   "Sourcebook-Desktop.dmg",
+  installerFileName,
   "SourcebookDesktop.iconset",
   "SourcebookDesktop-icon-render",
   "SourcebookInstallerVolume.icns",
@@ -84,7 +86,7 @@ if (signingIdentity) {
   execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appRoot], { stdio: "inherit" });
 }
 
-const dmgPath = join(outputRoot, "Sourcebook-Desktop.dmg");
+const dmgPath = join(outputRoot, installerFileName);
 await createDmg(installerVolumeIcon);
 setDmgFileIcon(installerVolumeIcon, dmgPath);
 signDmg();

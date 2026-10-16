@@ -11,8 +11,9 @@ const notaryProfile = process.env.SOURCEBOOK_NOTARY_PROFILE?.trim() || "sourcebo
 const buildLabel = process.env.SOURCEBOOK_BUILD?.trim();
 const prebuiltApp = process.env.SOURCEBOOK_PREBUILT_APP?.trim();
 const candidateMetadata = process.env.SOURCEBOOK_CANDIDATE_METADATA?.trim();
+const appVersion = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version.replace(/^v/, "");
 const appPath = join(repositoryRoot, "release", "macos", "Sourcebook Desktop.app");
-const dmgPath = join(repositoryRoot, "release", "macos", "Sourcebook-Desktop.dmg");
+const dmgPath = join(repositoryRoot, "release", "macos", `sourcebook-desktop-installer-v${appVersion}.dmg`);
 
 if (!identity) throw new Error("Set MACOS_SIGNING_IDENTITY to a Developer ID Application identity before releasing.");
 if (!/^build\.\d{3,}$/.test(buildLabel || "")) throw new Error("Set SOURCEBOOK_BUILD to the approved build label, for example build.003.");
