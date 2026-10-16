@@ -4,7 +4,11 @@
 
 # Sourcebook for Agents
 
-Sourcebook keeps web material, AI conversations and local files together, ready to reuse with the agent you choose.
+Most knowledge bases I’ve come across are centered on text, but my work in product and creative projects involves all kinds of material: web pages, screenshots, images, posts, files, and AI conversations.
+
+So I started building **Sourcebook, an open-source, local-first desktop app** for collecting different kinds of project material in one place.
+
+The idea is to keep those materials available throughout a project, so I can reuse them as it develops and bring relevant context to different coding or creative agents.
 
 For researchers, designers, creators and people working across AI tools:
 
