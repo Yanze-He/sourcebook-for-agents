@@ -1,6 +1,6 @@
 {
   "name": "sourcebook-for-agents",
-  "version": "0.1.1-beta.4",
+  "version": "0.1.1-beta.5",
   "private": true,
   "engines": { "node": ">=22.18.0" },
   "scripts": {

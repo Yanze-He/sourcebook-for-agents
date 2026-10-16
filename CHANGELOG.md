@@ -2,6 +2,11 @@
 
 All notable user-facing changes are documented here.
 
+## v0.1.1-beta.5
+
+- Simplify update notices: Settings and the Version & updates menu use a compact round badge instead of an extra text label.
+- Give Desktop installers and Picker downloads versioned filenames, so files from different releases are easy to distinguish.
+
 ## v0.1.1-beta.4
 
 - Update notices clear as soon as the installed Desktop version catches up with the reported release, instead of waiting for a later scheduled check.
