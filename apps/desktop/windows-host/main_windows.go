@@ -65,15 +65,17 @@ var (
 
 	serviceMu sync.Mutex
 	service   *exec.Cmd
-	// desktopBuild is injected by the Windows package script. It lets the host
-	// distinguish the bundled service from an older Sourcebook still listening
-	// on the shared Picker port after an update.
-	desktopBuild = "0.1.0"
+	// desktopVersion and desktopArtifactBuild are injected by the package script.
+	// Together they distinguish a tested candidate from an older Sourcebook
+	// service still listening on the shared Picker port after an update.
+	desktopVersion       = "0.1.0"
+	desktopArtifactBuild = ""
 )
 
 type serviceHealth struct {
 	App     string `json:"app"`
 	Version string `json:"version"`
+	Build   string `json:"build"`
 }
 
 type point struct{ X, Y int32 }
@@ -122,6 +124,7 @@ type notifyIconData struct {
 }
 
 func main() {
+	writeDesktopInstallMarker()
 	instance, _, _ := procGetModuleHandle.Call(0)
 	className := syscall.StringToUTF16Ptr("SourcebookDesktopWindow")
 	windowClass := windowClassEx{
@@ -167,6 +170,26 @@ func main() {
 	stopService()
 }
 
+func writeDesktopInstallMarker() {
+	executable, err := os.Executable()
+	if err != nil {
+		return
+	}
+	config, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	folder := filepath.Join(config, "Sourcebook for Agents")
+	if os.MkdirAll(folder, 0o700) != nil {
+		return
+	}
+	contents, err := json.Marshal(map[string]string{"path": executable})
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(folder, "desktop-install.json"), contents, 0o600)
+}
+
 func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uintptr) uintptr {
 	switch messageID {
 	case wmCommand:
@@ -205,7 +228,7 @@ func startService() bool {
 		return true
 	}
 	if health, running := runningSourcebookService(); running {
-		if health.Version == desktopBuild {
+		if health.Version == desktopVersion && health.Build == desktopArtifactBuild {
 			return true
 		}
 		if !stopOlderSourcebookService() {
@@ -217,14 +240,101 @@ func startService() bool {
 		return false
 	}
 	root := filepath.Dir(executable)
+	agentPlugin, err := synchronizeAgentPlugin(root)
+	if err != nil {
+		agentPlugin = ""
+	}
 	command := exec.Command(filepath.Join(root, "sourcebook-service.exe"))
-	command.Env = append(os.Environ(), "SOURCEBOOK_SOURCES_WEB_DIR="+filepath.Join(root, "resources", "sources"))
+	environment := append(os.Environ(), "SOURCEBOOK_SOURCES_WEB_DIR="+filepath.Join(root, "resources", "sources"))
+	if agentPlugin != "" {
+		environment = append(environment, "SOURCEBOOK_AGENT_PLUGIN_DIR="+agentPlugin)
+	}
+	command.Env = environment
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if command.Start() == nil {
 		service = command
 		return true
 	}
 	return false
+}
+
+func synchronizeAgentPlugin(root string) (string, error) {
+	source := filepath.Join(root, "resources", "agent-plugin")
+	if info, err := os.Stat(source); err != nil || !info.IsDir() {
+		return "", os.ErrNotExist
+	}
+	config, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	parent := filepath.Join(config, "Sourcebook for Agents")
+	destination := filepath.Join(parent, "agent-plugin")
+	staging := destination + ".next"
+	backup := destination + ".previous"
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return "", err
+	}
+	_ = os.RemoveAll(staging)
+	_ = os.RemoveAll(backup)
+	if err := copyDirectory(source, staging); err != nil {
+		_ = os.RemoveAll(staging)
+		return "", err
+	}
+	for _, path := range []string{
+		filepath.Join(staging, ".agents", "plugins", "sourcebook", "bin", "sourcebook-mcp.exe"),
+		filepath.Join(staging, ".agents", "plugins", "marketplace.json"),
+		filepath.Join(staging, ".agents", "plugins", "sourcebook", "skills", "sourcebook", "SKILL.md"),
+		filepath.Join(staging, "INSTALL-CODEX.md"),
+		filepath.Join(staging, "INSTALL-WORKBUDDY.md"),
+		filepath.Join(staging, "INSTALL-MCP.md"),
+		filepath.Join(staging, "agent-version.json"),
+	} {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			_ = os.RemoveAll(staging)
+			return "", os.ErrNotExist
+		}
+	}
+	_, destinationErr := os.Stat(destination)
+	hadDestination := destinationErr == nil
+	if hadDestination {
+		if err := os.Rename(destination, backup); err != nil {
+			_ = os.RemoveAll(staging)
+			return "", err
+		}
+	}
+	if err := os.Rename(staging, destination); err != nil {
+		if hadDestination {
+			_ = os.Rename(backup, destination)
+		}
+		return "", err
+	}
+	_ = os.RemoveAll(backup)
+	return destination, nil
+}
+
+func copyDirectory(source, destination string) error {
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, relative)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, contents, info.Mode())
+	})
 }
 
 func stopService() {
@@ -283,7 +393,7 @@ func stopOlderSourcebookService() bool {
 }
 
 func openSourcebookWhenReady(attempt int) {
-	if health, running := runningSourcebookService(); running && health.Version == desktopBuild {
+	if health, running := runningSourcebookService(); running && health.Version == desktopVersion && health.Build == desktopArtifactBuild {
 		openSourcebook()
 		return
 	}
@@ -295,7 +405,7 @@ func openSourcebookWhenReady(attempt int) {
 func openSourcebook() {
 	// A fresh query string forces an existing browser tab to reload the newly
 	// bundled web app rather than showing an in-memory page from before update.
-	target := "http://127.0.0.1:4177/?desktop=" + desktopBuild + "&openedAt=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+	target := "http://127.0.0.1:4177/?desktop=" + desktopVersion + "&build=" + desktopArtifactBuild + "&openedAt=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
 	// rundll32 opens the user's default browser without showing a command shell.
 	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", target).Start()
 }

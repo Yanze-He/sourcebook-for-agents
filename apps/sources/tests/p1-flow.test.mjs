@@ -140,6 +140,8 @@ test("Conversation Picks deduplicate only matching content from the same source"
 
 test("Books isolate picks and transfer keeps the source portable", async () => {
   const created = await post("/api/books", { name: "Brand references" });
+  assert.match(created.book.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(created.book.directory, "Brand references");
   const books = await get("/api/books");
   assert.equal(books.books.length, 2);
   const renamed = await post(`/api/books/${created.book.id}`, { name: "Brand library" }, "PATCH");

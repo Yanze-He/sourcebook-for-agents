@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -307,13 +308,9 @@ func (library *Library) CreateBook(name string) (Book, error) {
 	if err != nil {
 		return Book{}, err
 	}
-	base := slug(clean)
-	if base == "" {
-		base = "book"
-	}
-	id := base
-	for suffix := 2; containsBook(manifest.Books, id); suffix++ {
-		id = fmt.Sprintf("%s-%d", base, suffix)
+	id, err := uniqueBookID(manifest.Books)
+	if err != nil {
+		return Book{}, err
 	}
 	book := Book{ID: id, Name: clean, Directory: nextBookDirectory(clean, manifest.Books, ""), CreatedAt: now()}
 	manifest.Books = append(manifest.Books, book)
@@ -712,9 +709,11 @@ func (library *Library) restoreLegacyPayload(payload BackupPayload, mode string)
 	imported := []Book{}
 	for _, backup := range payload.Books {
 		book := backup.Book
-		originalID := book.ID
-		for suffix := 2; containsBook(manifest.Books, book.ID); suffix++ {
-			book.ID = fmt.Sprintf("%s-%d", originalID, suffix)
+		if containsBook(manifest.Books, book.ID) {
+			book.ID, err = uniqueBookID(manifest.Books)
+			if err != nil {
+				return Manifest{}, nil, err
+			}
 		}
 		book.Directory = nextBookDirectory(book.Name, manifest.Books, "")
 		book.CreatedAt = now()
@@ -867,9 +866,11 @@ func (library *Library) installBackupArchive(staging string, archive BackupArchi
 	imported := []Book{}
 	for _, backup := range archive.Books {
 		book := backup
-		originalID := book.ID
-		for suffix := 2; containsBook(manifest.Books, book.ID); suffix++ {
-			book.ID = fmt.Sprintf("%s-%d", originalID, suffix)
+		if containsBook(manifest.Books, book.ID) {
+			book.ID, err = uniqueBookID(manifest.Books)
+			if err != nil {
+				return Manifest{}, nil, err
+			}
 		}
 		book.Directory = nextBookDirectory(book.Name, manifest.Books, "")
 		book.CreatedAt = now()
@@ -1118,6 +1119,9 @@ func schema(db *sql.DB) error {
 		"CREATE TABLE IF NOT EXISTS picks (id TEXT PRIMARY KEY, resource_id TEXT NOT NULL REFERENCES resources(id), source_id TEXT NOT NULL REFERENCES sources(id), source_item_id TEXT NOT NULL REFERENCES source_items(id) ON DELETE CASCADE, modality TEXT NOT NULL, pick_type TEXT NOT NULL, metadata_json TEXT NOT NULL, picked_at TEXT NOT NULL)",
 		"CREATE TABLE IF NOT EXISTS source_packs (id TEXT PRIMARY KEY, name TEXT NOT NULL, prompt TEXT NOT NULL, output_path TEXT NOT NULL, created_at TEXT NOT NULL)",
 		"CREATE TABLE IF NOT EXISTS source_pack_items (source_pack_id TEXT NOT NULL REFERENCES source_packs(id) ON DELETE CASCADE, source_item_id TEXT NOT NULL REFERENCES source_items(id) ON DELETE CASCADE, PRIMARY KEY (source_pack_id, source_item_id))",
+		// Agent suggestions are intentionally separate from source mutations. They
+		// contain a proposed change only; Sourcebook applies it after review.
+		"CREATE TABLE IF NOT EXISTS agent_suggestions (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL, source_item_ids_json TEXT NOT NULL, agent_name TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', review_error TEXT NOT NULL DEFAULT '')",
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -1253,20 +1257,24 @@ func cleanBookName(value string) string {
 	return truncate(strings.Join(strings.Fields(value), " "), 80)
 }
 
-func slug(value string) string {
-	value = strings.ToLower(value)
-	var builder strings.Builder
-	dash := false
-	for _, character := range value {
-		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') {
-			builder.WriteRune(character)
-			dash = false
-		} else if !dash {
-			builder.WriteByte('-')
-			dash = true
+// Book identity is independent of its display name and on-disk directory.
+// Existing name-based IDs remain valid so old backups, Picker selections, and
+// stored links keep working; only newly created or collision-remapped Books get
+// an opaque UUIDv4.
+func uniqueBookID(books []Book) (string, error) {
+	for attempt := 0; attempt < 4; attempt++ {
+		var bytes [16]byte
+		if _, err := rand.Read(bytes[:]); err != nil {
+			return "", fmt.Errorf("create Book ID: %w", err)
+		}
+		bytes[6] = (bytes[6] & 0x0f) | 0x40
+		bytes[8] = (bytes[8] & 0x3f) | 0x80
+		id := fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
+		if !containsBook(books, id) {
+			return id, nil
 		}
 	}
-	return strings.Trim(builder.String(), "-")
+	return "", errors.New("无法生成唯一的 Book ID，请重试")
 }
 
 func bookDirectory(book Book) string {

@@ -4,11 +4,7 @@
 
 # Sourcebook for Agents
 
-Most knowledge bases I’ve come across are centered on text, but my work in product and creative projects involves all kinds of material: web pages, screenshots, images, posts, files, and AI conversations.
-
-So I started building **Sourcebook, an open-source, local-first desktop app** for collecting different kinds of project material in one place.
-
-The idea is to keep those materials available throughout a project, so I can reuse them as it develops and bring relevant context to different coding or creative agents.
+Sourcebook keeps web material, AI conversations and local files together, ready to reuse with the agent you choose.
 
 For researchers, designers, creators and people working across AI tools:
 
@@ -72,13 +68,18 @@ Your Books and files stay on your computer. No accounts, cloud sync or hidden up
 
 Both are available in **Settings**. Backups contain Book data and local files, not Desktop settings. You decide what to share with an agent.
 
+## Connect a Local Agent
+
+The **Sourcebook Agent Plugin** currently supports Codex and WorkBuddy. It lets an Agent read and search a selected Book through Desktop's controlled local interface. Agents can prepare explicitly selected temporary context files and submit suggestions; they cannot directly change or delete Book content. You review every suggestion in Sourcebook. More Agent integrations may come later.
+
+Open **Settings → Connect an Agent**, approve access, choose Codex or WorkBuddy, then send it the generated install/update prompt. The Agent fetches a separately versioned Plugin from GitHub, verifies it, and installs or updates its own integration. Sourcebook Desktop is required; if it is not installed, the Agent directs you to [sourcebook.online](https://sourcebook.online). Then ask your connected Agent to open Sourcebook and choose a Book—`@` and `/` are optional host shortcuts, not requirements. [Agent connection guide](docs/connect-agents.md).
+
 ## Get Started
 
 The current beta needs macOS (Apple silicon) and Chrome or another Chromium browser, including Edge.
 
-1. Download and install Desktop, and unzip Picker from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases).
-2. In your browser's extension manager, enable **Developer mode**, select **Load unpacked**, and choose the extracted Picker folder.
-3. Start Desktop, open Picker on a webpage, turn it on and choose a Book.
+1. Download and install Desktop from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases), then install [Picker for Agent from the Chrome Web Store](https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=ext_sidebar).
+2. Start Desktop, open Picker on a webpage, turn it on and choose a Book.
 
 Keep Desktop running while using Picker. See [Getting Started](docs/getting-started.md) for installation, release verification and troubleshooting.
 
@@ -106,7 +107,7 @@ Run `npm test` and `npm run build` for development checks. See [CONTRIBUTING.md]
 
 ## Docs
 
-[Use Cases](docs/use-cases.md) · [Supported Sites](docs/supported-sites.md) · [Agent Plugin install guide](docs/install-agent-plugin.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md) · [Release & Deployment](docs/release-and-deployment.md)
+[Use Cases](docs/use-cases.md) · [Supported Sites](docs/supported-sites.md) · [Connect an Agent](docs/connect-agents.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md) · [Release & Deployment](docs/release-and-deployment.md)
 
 ## License
 

@@ -35,8 +35,8 @@ type Locale = "zh" | "en";
 let locale: Locale = storedPickerLanguage(window.localStorage.getItem(PICKER_LANGUAGE_KEY));
 let overlayPosition: PickerOverlayPosition = storedPickerOverlayPosition(window.localStorage.getItem(PICKER_OVERLAY_POSITION_KEY));
 const HELP_URL = "https://github.com/Yanze-He/sourcebook-for-agents#readme";
-const FEEDBACK_URL = "https://github.com/Yanze-He/sourcebook-for-agents/issues/new/choose";
-const DOWNLOAD_URL = "https://github.com/Yanze-He/sourcebook-for-agents/releases";
+const FEEDBACK_URL = "https://sourcebook.online/feedback/?from=picker";
+const DOWNLOAD_URL = "https://sourcebook.online/#download";
 const copy = {
   zh: {
     checking: "正在检查 Picker 状态",
@@ -45,6 +45,8 @@ const copy = {
     overlayOnLabel: "关闭 Picker",
     overlayOffLabel: "打开 Picker",
     downloadApp: "下载桌面应用",
+    pickTools: "采集工具",
+    recentPicksLabel: "最近采集内容",
     settings: "设置",
     help: "帮助",
     feedback: "反馈",
@@ -115,6 +117,8 @@ const copy = {
     overlayOnLabel: "Turn off Picker",
     overlayOffLabel: "Turn on Picker",
     downloadApp: "Download app",
+    pickTools: "Pick tools",
+    recentPicksLabel: "Recent picks",
     settings: "Settings",
     help: "Help",
     feedback: "Feedback",
@@ -331,6 +335,8 @@ function applyStaticText() {
   if (settingsPositionLabel) settingsPositionLabel.textContent = text.overlayPosition;
   renderOverlayPosition();
   if (bookToggle) bookToggle.setAttribute("aria-label", text.currentBook);
+  document.querySelector<HTMLElement>(".tools-panel")?.setAttribute("aria-label", text.pickTools);
+  document.querySelector<HTMLElement>(".recent-panel")?.setAttribute("aria-label", text.recentPicksLabel);
   const bookLabel = document.querySelector<HTMLElement>(".book-switcher-label");
   if (bookLabel) bookLabel.textContent = text.defaultSaveTo;
   updatePickerToggle();

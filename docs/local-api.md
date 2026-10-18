@@ -1,10 +1,12 @@
 # Local API
 
-The local service is intentionally loopback-only and is not a general-purpose local integration API. It accepts requests from the local Sources page and the bundled Picker extension; other websites and browser extensions are rejected. Do not write SQLite files directly. A future third-party integration needs its own authenticated pairing design before using these routes.
+The local service is intentionally loopback-only and is not a general-purpose local integration API. It accepts requests from the local Sources page plus the approved downloadable and Chrome Web Store Picker builds; other websites and browser extensions are rejected. Do not write SQLite files directly.
+
+Sourcebook MCP uses a separate paired bridge API, not these browser routes. The native `sourcebook-mcp` helper is bundled with Sourcebook Desktop, requires an explicit Book selection for every MCP session, and can only read data or create pending user-reviewed suggestions. See [Connect Sourcebook to an Agent](connect-agents.md).
 
 ## Create a Source
 
-`POST /api/sources` creates a Source in the supplied `bookId`. If omitted, the active Book is used. Every request also creates a `manual_create` Pick so Source provenance remains consistent with browser Picks.
+`POST /api/sources` creates a Source in the supplied `bookId`. If omitted, the active Book is used. Every request also creates a `manual_create` Pick so Source provenance remains consistent with browser Picks. Read Book IDs from `GET /api/books`; new Book IDs are opaque UUIDs, not slugs derived from Book names. Existing libraries may retain older name-based IDs.
 
 ```json
 {

@@ -138,6 +138,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 }
 
 func TestInstalledDesktopPathRejectsUnpackagedHelper(t *testing.T) {
+	t.Setenv("SOURCEBOOK_DATA_DIR", t.TempDir())
 	if _, err := installedDesktopPath("/tmp/sourcebook-mcp", "darwin"); err == nil {
 		t.Fatal("unpackaged helper must not guess a Desktop app path")
 	}

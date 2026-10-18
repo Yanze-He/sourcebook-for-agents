@@ -19,23 +19,25 @@ The release workflow builds artifacts for inspection:
 
 Pushing a `v*` tag, or running the workflow manually, never signs, notarizes, or publishes a GitHub Release. CI has read-only repository permissions and no signing credentials.
 
-## Independent Agent Plugin candidates
+## Independent Agent Plugin releases
 
-The Agent Plugin has its own version in `apps/agent-plugin/plugin.json` and
+The Agent Plugin has its **own** version in `apps/agent-plugin/plugin.json` and
 uses `agent-v<version>` tags. It does not inherit Desktop's version or build
-number. The `agent-plugin.yml` workflow creates macOS arm64 and Windows x64
-ZIPs with matching `.zip.sha256` files. A manual run requires a `build.NNN`
-candidate label; neither a manual run nor a tag push publishes a Release.
+number. `.github/workflows/agent-plugin.yml` produces versioned macOS arm64
+and Windows x64 ZIPs plus a `.zip.sha256` file for each. This workflow uploads
+CI artifacts only; it does not create a public Release. Do not attach these
+unsigned CI test artifacts directly to a public Agent Plugin Release.
 
-Before a public Agent Plugin Release, verify its install/update flow with a
-compatible Desktop, test the missing-Desktop message, and validate Codex and
-WorkBuddy installation on their supported platforms. Sign and notarize the
-macOS distribution before publication, then recalculate its checksum.
-Publish the tested platform archives and checksums under a non-draft
-`agent-v<version>` Release only after separate publication approval. The
-[Agent installation guide](install-agent-plugin.md) selects only this tag
-family. Until such a Release exists, that guide stops rather than offering an
-unsigned test artifact as an installable update.
+Before publication, test the standalone install/update guide with Desktop
+present and absent, and with Codex and WorkBuddy user-level configurations.
+The macOS helper must be Developer ID signed and its distribution archive
+notarized; verify the resulting public ZIP and its checksum. Rebuild the
+checksum after any signing or archive change. Publish both platform archives
+and matching `.zip.sha256` files in a non-draft GitHub Release for the
+`agent-v<version>` tag. The [Agent install guide](install-agent-plugin.md)
+selects only this tag family. An Agent can then download, verify, and update
+its own Plugin without a Desktop release. Changes to the Desktop bridge API
+still require compatibility testing and, if needed, a Desktop update.
 
 ## Local macOS signing and notarization
 
@@ -72,7 +74,7 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 ## Release checklist
 
 1. Confirm `main` is green in CI.
-2. Test the extension and Desktop on clean macOS and Windows machines. For each Desktop installer, also test an upgrade over the prior release: open the app, click **Install Picker**, and confirm the browser opens the GitHub Releases overview rather than a cached local page or source directory.
+2. Test the extension and Desktop on clean macOS and Windows machines. For each Desktop installer, also test an upgrade over the prior release: open the app, click **Install Picker**, and confirm the browser opens the Chrome Web Store installation page.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
 4. Choose a version tag such as `v0.1.0-beta.3`.
 5. Create and push a protected version tag such as `v0.1.0-beta.3`. The release workflow uses this tag as the Desktop and installer version.
@@ -84,13 +86,13 @@ Create or edit the matching GitHub Release manually, then upload the notarized `
 - The macOS DMG presents **Sourcebook Desktop** beside an **Applications** shortcut. Drag the app onto Applications, eject the disk image, then open it from Applications. Sourcebook appears in the Dock; its application menu opens Sources, restarts the local service, or quits the app.
 - Public macOS releases must be Developer ID signed and Apple notarized. Do not distribute an unsigned or unnotarized DMG as a public release.
 - Windows artifacts remain unsigned until a separate Windows code-signing certificate is configured.
-- The Chromium extension ZIP must be unzipped and loaded through `chrome://extensions` with Developer mode enabled.
+- The public Picker is installed from the Chrome Web Store. The downloadable ZIP remains available only for local development or recovery testing, and must be unzipped and loaded through `chrome://extensions` with Developer mode enabled.
 
 ## Before a public Chrome Web Store submission
 
 - Publish the privacy policy at a stable public URL.
 - Complete Chrome Web Store data-use disclosures and permission explanations.
-- Confirm the bundled extension ID remains `cehohknopnehbkiokoffhfjepaieapan` after packaging or store upload.
+- Confirm the downloadable build remains `cehohknopnehbkiokoffhfjepaieapan`. Chrome Web Store packages omit the manifest key and use the Store-assigned ID `pkglhngkfkjblabnhgcioindjgffgfpf`; both IDs must remain in the Desktop local API allowlist.
 - Confirm that only the minimum required extension permissions are requested.
 
 ## Do not do this

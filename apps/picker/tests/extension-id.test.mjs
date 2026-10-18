@@ -14,6 +14,7 @@ describe("bundled Picker identity", () => {
     const extensionID = [...createHash("sha256").update(Buffer.from(key, "base64")).digest().subarray(0, 16)]
       .map((byte) => alphabet[byte >> 4] + alphabet[byte & 15])
       .join("");
-    assert.match(service, new RegExp(`const PickerExtensionID = "${extensionID}"`));
+    assert.match(service, new RegExp(`LocalPickerExtensionID\\s+= "${extensionID}"`));
+    assert.match(service, /ChromeWebStorePickerExtensionID\s+= "pkglhngkfkjblabnhgcioindjgffgfpf"/);
   });
 });
