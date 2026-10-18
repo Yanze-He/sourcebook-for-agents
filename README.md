@@ -106,7 +106,7 @@ Run `npm test` and `npm run build` for development checks. See [CONTRIBUTING.md]
 
 ## Docs
 
-[Use Cases](docs/use-cases.md) · [Supported Sites](docs/supported-sites.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md) · [Release & Deployment](docs/release-and-deployment.md)
+[Use Cases](docs/use-cases.md) · [Supported Sites](docs/supported-sites.md) · [Agent Plugin install guide](docs/install-agent-plugin.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md) · [Release & Deployment](docs/release-and-deployment.md)
 
 ## License
 

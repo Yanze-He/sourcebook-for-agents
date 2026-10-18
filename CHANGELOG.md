@@ -2,6 +2,10 @@
 
 All notable user-facing changes are documented here.
 
+## Unreleased
+
+- Add the independently versioned Sourcebook Agent Plugin source, installation guide, and macOS/Windows candidate packaging workflow. No public Agent Plugin Release or compatible Desktop update is included yet.
+
 ## v0.1.1-beta.5
 
 - Simplify update notices: Settings and the Version & updates menu use a compact round badge instead of an extra text label.

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sourcebook",
+  "version": "0.1.2-beta.1",
+  "description": "Use a locally running Sourcebook Desktop library from an Agent without direct database or file access.",
+  "author": { "name": "Sourcebook" },
+  "homepage": "https://github.com/Yanze-He/sourcebook-for-agents",
+  "repository": "https://github.com/Yanze-He/sourcebook-for-agents",
+  "license": "MIT",
+  "keywords": ["sourcebook", "local-first", "context", "mcp", "agents"]
+}

@@ -19,6 +19,24 @@ The release workflow builds artifacts for inspection:
 
 Pushing a `v*` tag, or running the workflow manually, never signs, notarizes, or publishes a GitHub Release. CI has read-only repository permissions and no signing credentials.
 
+## Independent Agent Plugin candidates
+
+The Agent Plugin has its own version in `apps/agent-plugin/plugin.json` and
+uses `agent-v<version>` tags. It does not inherit Desktop's version or build
+number. The `agent-plugin.yml` workflow creates macOS arm64 and Windows x64
+ZIPs with matching `.zip.sha256` files. A manual run requires a `build.NNN`
+candidate label; neither a manual run nor a tag push publishes a Release.
+
+Before a public Agent Plugin Release, verify its install/update flow with a
+compatible Desktop, test the missing-Desktop message, and validate Codex and
+WorkBuddy installation on their supported platforms. Sign and notarize the
+macOS distribution before publication, then recalculate its checksum.
+Publish the tested platform archives and checksums under a non-draft
+`agent-v<version>` Release only after separate publication approval. The
+[Agent installation guide](install-agent-plugin.md) selects only this tag
+family. Until such a Release exists, that guide stops rather than offering an
+unsigned test artifact as an installable update.
+
 ## Local macOS signing and notarization
 
 Only a maintainer-controlled Mac signs and notarizes macOS releases. Keep the Developer ID private key, the `.p12` backup password, and Apple notarization credentials out of the repository, shell history, and GitHub Actions.
