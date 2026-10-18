@@ -21,23 +21,15 @@ Pushing a `v*` tag, or running the workflow manually, never signs, notarizes, or
 
 ## Independent Agent Plugin releases
 
-The Agent Plugin has its **own** version in `apps/agent-plugin/plugin.json` and
-uses `agent-v<version>` tags. It does not inherit Desktop's version or build
-number. `.github/workflows/agent-plugin.yml` produces versioned macOS arm64
-and Windows x64 ZIPs plus a `.zip.sha256` file for each. This workflow uploads
-CI artifacts only; it does not create a public Release. Do not attach these
-unsigned CI test artifacts directly to a public Agent Plugin Release.
-
-Before publication, test the standalone install/update guide with Desktop
-present and absent, and with Codex and WorkBuddy user-level configurations.
-The macOS helper must be Developer ID signed and its distribution archive
-notarized; verify the resulting public ZIP and its checksum. Rebuild the
-checksum after any signing or archive change. Publish both platform archives
-and matching `.zip.sha256` files in a non-draft GitHub Release for the
-`agent-v<version>` tag. The [Agent install guide](install-agent-plugin.md)
-selects only this tag family. An Agent can then download, verify, and update
-its own Plugin without a Desktop release. Changes to the Desktop bridge API
-still require compatibility testing and, if needed, a Desktop update.
+The independently versioned Agent Plugin lives in the separate public
+[sourcebook-plugin repository](https://github.com/Yanze-He/sourcebook-plugin).
+Its CI builds macOS arm64 and Windows x64 test artifacts; a successful build
+is not a public plugin release. Follow that repository's release procedure and
+[installation guide](https://github.com/Yanze-He/sourcebook-plugin/blob/main/INSTALL.md)
+for Codex and WorkBuddy. Test both with Desktop installed and absent before
+publishing. The macOS helper must be Developer ID signed and notarized before
+public distribution. Changes to Desktop's MCP bridge still require
+compatibility testing and, if needed, a Desktop update.
 
 ## Local macOS signing and notarization
 
