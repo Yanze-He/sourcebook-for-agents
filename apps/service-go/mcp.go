@@ -66,9 +66,9 @@ func (server *Server) mcpSettingsPayload(settings desktopSettings) map[string]an
 		"guideUrl":     "https://github.com/Yanze-He/sourcebook-plugin/blob/main/INSTALL.md",
 		// Installation is fetched from the independent Agent Plugin release.
 		// Bundled resources are kept only as an offline fallback and version hint.
-		"installReady": true,
+		"installReady":          true,
 		"bundledResourcesReady": installReady,
-		"agentVersion": resources.version,
+		"agentVersion":          resources.version,
 		"installGuides": map[string]string{
 			"codex":     resources.codexGuide,
 			"workbuddy": resources.workbuddyGuide,
@@ -509,12 +509,18 @@ func validateSuggestion(kind string, payload map[string]any, ids []string) error
 		if strings.TrimSpace(stringValue(payload["content"])) == "" {
 			return errors.New("Text suggestions need content.")
 		}
+		if err := validateNewSourceNote(payload); err != nil {
+			return err
+		}
 	case "import_local_file":
 		if len(ids) != 0 {
 			return errors.New("File imports cannot target existing sources.")
 		}
 		if strings.TrimSpace(stringValue(payload["path"])) == "" {
 			return errors.New("File import suggestions need a local path.")
+		}
+		if err := validateNewSourceNote(payload); err != nil {
+			return err
 		}
 	case "update_source_metadata":
 		if len(ids) != 1 {
@@ -542,6 +548,16 @@ func validateSuggestion(kind string, payload map[string]any, ids []string) error
 				return errors.New("Unsupported metadata change.")
 			}
 		}
+	}
+	return nil
+}
+func validateNewSourceNote(payload map[string]any) error {
+	note, ok := payload["note"].(string)
+	if !ok || strings.TrimSpace(note) == "" {
+		return errors.New("New source suggestions need a brief note about their origin or intended use.")
+	}
+	if len([]rune(strings.TrimSpace(note))) > 300 {
+		return errors.New("Source notes must be 300 characters or fewer.")
 	}
 	return nil
 }
@@ -715,7 +731,7 @@ func (server *Server) applySuggestion(ctx *BookContext, s mcpSuggestion) error {
 		if err != nil {
 			return err
 		}
-		_, err = importLocalFile(ctx, map[string]any{"name": filepath.Base(path), "contentBase64": base64.StdEncoding.EncodeToString(bytes)})
+		_, err = importLocalFile(ctx, map[string]any{"name": filepath.Base(path), "contentBase64": base64.StdEncoding.EncodeToString(bytes), "note": stringValue(s.Payload["note"])})
 		return err
 	case "update_source_metadata":
 		if err := ensureSuggestionSources(ctx, s.SourceItemIDs); err != nil {

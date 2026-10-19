@@ -883,7 +883,7 @@ func importLocalFile(ctx *BookContext, value map[string]any) (map[string]any, er
 			return nil, err
 		}
 	}
-	if _, err = tx.Exec("INSERT INTO source_items (id,resource_id,source_id,title,note,storage_state,created_at) VALUES (?,?,?,?,?,?,?)", sourceItemID, resourceID, sourceID, title, "", "available", pickedAt); err != nil {
+	if _, err = tx.Exec("INSERT INTO source_items (id,resource_id,source_id,title,note,storage_state,created_at) VALUES (?,?,?,?,?,?,?)", sourceItemID, resourceID, sourceID, title, stringValue(value["note"]), "available", pickedAt); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec("INSERT INTO picks (id,resource_id,source_id,source_item_id,modality,pick_type,metadata_json,picked_at) VALUES (?,?,?,?,?,?,?,?)", pickID, resourceID, sourceID, sourceItemID, modality, "local_import", "{}", pickedAt); err != nil {

@@ -72,8 +72,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 				t.Fatalf("import schema type = %T", registered.InputSchema)
 			}
 			properties, ok := schema["properties"].(map[string]any)
-			if !ok || len(properties) != 1 || properties["path"] == nil || properties["source_ids"] != nil {
-				t.Fatalf("registered import schema must require only a path: %#v", schema)
+			if !ok || len(properties) != 2 || properties["path"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
+				t.Fatalf("registered import schema must require a path and note: %#v", schema)
 			}
 		}
 		ui, ok := registered.Meta["ui"].(map[string]any)

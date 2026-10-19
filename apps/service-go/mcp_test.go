@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -101,7 +102,7 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 		t.Fatal("bridge response exposed pairing token")
 	}
 
-	filePayload := []byte(`{"kind":"import_local_file","payload":{"path":"/tmp/generated-cat.png"}}`)
+	filePayload := []byte(`{"kind":"import_local_file","payload":{"path":"/tmp/generated-cat.png","note":"Created in this conversation as a cat illustration."}}`)
 	fileProposal := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/books/sourcebook/proposals", bytes.NewReader(filePayload))
 	fileProposal.Host = "127.0.0.1:4177"
 	fileProposal.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
@@ -120,7 +121,7 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 		t.Fatalf("unrelated file gained a source association: %#v", proposedFile.Suggestion.SourceItemIDs)
 	}
 
-	payload, _ := json.Marshal(map[string]any{"kind": "create_text_source", "payload": map[string]any{"title": "Agent note", "content": "Draft only"}})
+	payload, _ := json.Marshal(map[string]any{"kind": "create_text_source", "payload": map[string]any{"title": "Agent note", "content": "Draft only", "note": "Summary of the current discussion."}})
 	proposal := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/books/sourcebook/proposals", bytes.NewReader(payload))
 	proposal.Host = "127.0.0.1:4177"
 	proposal.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
@@ -164,6 +165,13 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 	if sourceCount != 1 {
 		t.Fatalf("accepted suggestion did not create a source: %d", sourceCount)
 	}
+	var savedNote string
+	if err := ctx.DB.QueryRow("SELECT note FROM source_items LIMIT 1").Scan(&savedNote); err != nil {
+		t.Fatal(err)
+	}
+	if savedNote != "Summary of the current discussion." {
+		t.Fatalf("accepted text note = %q", savedNote)
+	}
 }
 
 func TestMCPRevokeImmediatelyInvalidatesBridge(t *testing.T) {
@@ -205,8 +213,8 @@ func TestMCPNewSourcesCannotBorrowExistingSourceIDs(t *testing.T) {
 		kind    string
 		payload map[string]any
 	}{
-		{"create_text_source", map[string]any{"content": "A new note"}},
-		{"import_local_file", map[string]any{"path": "/tmp/new.png"}},
+		{"create_text_source", map[string]any{"content": "A new note", "note": "Summary from this conversation."}},
+		{"import_local_file", map[string]any{"path": "/tmp/new.png", "note": "Generated for this task."}},
 	} {
 		if err := validateSuggestion(test.kind, test.payload, []string{"unrelated-source"}); err == nil {
 			t.Fatalf("%s accepted an unrelated source ID", test.kind)
@@ -217,6 +225,82 @@ func TestMCPNewSourcesCannotBorrowExistingSourceIDs(t *testing.T) {
 	}
 	if err := validateSuggestion("update_source_metadata", map[string]any{"changes": map[string]any{}}, []string{"target-source"}); err == nil {
 		t.Fatal("metadata update accepted an empty change set")
+	}
+}
+
+func TestMCPNewSourceSuggestionsRequireBriefNotes(t *testing.T) {
+	for _, kind := range []string{"create_text_source", "import_local_file"} {
+		payload := map[string]any{"content": "Summary", "path": "/tmp/result.png"}
+		if err := validateSuggestion(kind, payload, nil); err == nil {
+			t.Fatalf("%s accepted a missing note", kind)
+		}
+		payload["note"] = "  "
+		if err := validateSuggestion(kind, payload, nil); err == nil {
+			t.Fatalf("%s accepted a blank note", kind)
+		}
+		payload["note"] = strings.Repeat("a", 301)
+		if err := validateSuggestion(kind, payload, nil); err == nil {
+			t.Fatalf("%s accepted an overlong note", kind)
+		}
+		payload["note"] = "Created for this conversation."
+		if err := validateSuggestion(kind, payload, nil); err != nil {
+			t.Fatalf("%s rejected a valid note: %v", kind, err)
+		}
+	}
+}
+
+func TestMCPAcceptedFileSuggestionKeepsItsNote(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	path := filepath.Join(t.TempDir(), "result.png")
+	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, imageBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	enable := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/settings/mcp", nil)
+	enable.Host = "127.0.0.1:4177"
+	server.ServeHTTP(httptest.NewRecorder(), enable)
+	settings, _ := server.readDesktopSettings()
+	note := "Generated for the user's illustration request."
+	body, _ := json.Marshal(map[string]any{"kind": "import_local_file", "payload": map[string]any{"path": path, "note": note}})
+	proposal := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/books/sourcebook/proposals", bytes.NewReader(body))
+	proposal.Host = "127.0.0.1:4177"
+	proposal.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	proposed := httptest.NewRecorder()
+	server.ServeHTTP(proposed, proposal)
+	if proposed.Code != http.StatusAccepted {
+		t.Fatalf("proposal status = %d: %s", proposed.Code, proposed.Body.String())
+	}
+	var result struct {
+		Suggestion mcpSuggestion `json:"suggestion"`
+	}
+	if err := json.Unmarshal(proposed.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	accept := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/suggestions/sourcebook/"+result.Suggestion.ID+"/accept", nil)
+	accept.Host = "127.0.0.1:4177"
+	accepted := httptest.NewRecorder()
+	server.ServeHTTP(accepted, accept)
+	if accepted.Code != http.StatusOK {
+		t.Fatalf("accept status = %d: %s", accepted.Code, accepted.Body.String())
+	}
+	ctx, err := library.Context("sourcebook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var savedNote string
+	if err := ctx.DB.QueryRow("SELECT note FROM source_items LIMIT 1").Scan(&savedNote); err != nil {
+		t.Fatal(err)
+	}
+	if savedNote != note {
+		t.Fatalf("saved note = %q, want %q", savedNote, note)
 	}
 }
 

@@ -27,6 +27,8 @@ Only when the user explicitly asks to save or change something in Sourcebook:
 - Import an already-existing local file with `propose_import_local_file`; confirm the exact file when the request is ambiguous. An import does not target or relate to an existing Source, so never look up another Source ID for it.
 - Change an existing source's title, note, or favorite state with `propose_update_source_metadata`, after identifying that source.
 
+For each new text or file submission, write a short `note` before calling the proposal tool. State a concrete fact from this conversation about where the material came from or what the user will use it for. Keep it to one or two sentences. Do not invent a source, copy the full chat, or use a generic “Saved by Agent” note. Each separately imported file gets its own note. The note appears in Agent submissions and stays on the Source after acceptance.
+
 Do not use a proposal merely because something seems useful. These actions create suggestions for the user to accept or reject; they do not change a Book immediately.
 
 After submitting one or more save proposals, bring Sourcebook into view so the user can review them. Call `open_sourcebook` even if a Book was selected earlier in this conversation. A returned URL is not an open page: in WorkBuddy, explicitly open it in the right-side built-in browser panel, reusing an existing Sourcebook tab when possible; do not use an inline conversation browser. In other hosts, use the visible MCP App panel or built-in browser. If the host has no built-in browser, give the user the URL. If Desktop cannot start, ask the user to open it. Do not claim the page is open until it is actually visible.
