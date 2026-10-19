@@ -45,7 +45,7 @@ execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", binar
 const command = isWindows ? ".\\bin\\sourcebook-mcp.exe" : "./bin/sourcebook-mcp";
 const mcpConfig = { mcpServers: { sourcebook: { command, args: [], cwd: ".", env: { SOURCEBOOK_AGENT_NAME: "Codex" } } } };
 writeFileSync(join(pluginDestination, ".mcp.json"), `${JSON.stringify(mcpConfig, null, 2)}\n`);
-writeFileSync(join(pluginDestination, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: `${"${PLUGIN_ROOT}"}/bin/${binaryName}`, args: [] } } }, null, 2)}\n`);
+writeFileSync(join(pluginDestination, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: "node", args: ["${PLUGIN_ROOT}/launch-mcp.cjs"] } } }, null, 2)}\n`);
 // Keep the existing marketplace identity so an independent update replaces the
 // Desktop-seeded Sourcebook Plugin rather than creating a second installation.
 writeFileSync(join(marketplaceRoot, "marketplace.json"), `${JSON.stringify({ name: "sourcebook-bundled", interface: { displayName: "Sourcebook" }, plugins: [{ name: "sourcebook", source: { source: "local", path: "./.agents/plugins/sourcebook" }, policy: { installation: "AVAILABLE" }, category: "Productivity" }] }, null, 2)}\n`);

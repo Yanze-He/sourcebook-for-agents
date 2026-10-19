@@ -72,7 +72,7 @@ function bundleAgentPlugin(resourcesRoot) {
     stdio: "inherit",
   });
   writeFileSync(join(pluginRoot, ".mcp.json"), `${JSON.stringify({ mcpServers: { sourcebook: { command: ".\\\\bin\\\\sourcebook-mcp.exe", args: [], cwd: ".", env: { SOURCEBOOK_AGENT_NAME: "Codex" } } } }, null, 2)}\n`);
-  writeFileSync(join(pluginRoot, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: "${PLUGIN_ROOT}/bin/sourcebook-mcp.exe", args: [] } } }, null, 2)}\n`);
+  writeFileSync(join(pluginRoot, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: "node", args: ["${PLUGIN_ROOT}/launch-mcp.cjs"] } } }, null, 2)}\n`);
   writeFileSync(join(marketplaceRoot, ".agents", "plugins", "marketplace.json"), `${JSON.stringify({ name: "sourcebook-bundled", interface: { displayName: "Sourcebook Desktop" }, plugins: [{ name: "sourcebook", source: { source: "local", path: "./.agents/plugins/sourcebook" }, policy: { installation: "AVAILABLE" }, category: "Productivity" }] }, null, 2)}\n`);
 }
 

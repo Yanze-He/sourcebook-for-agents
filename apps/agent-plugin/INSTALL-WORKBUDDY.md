@@ -35,5 +35,6 @@ The user's install request authorizes the Sourcebook-specific setup below.
 
 When the user later asks to use Sourcebook, call `open_sourcebook`. After
 submitting content for review, bring Sourcebook into view again. If no
-Sourcebook panel appears, use WorkBuddy's built-in browser panel to open the
-returned local URL. Receiving a URL is not proof that the page is open.
+Sourcebook panel appears, use WorkBuddy's right-side built-in browser panel to
+open the returned local URL; do not use an inline browser card in the
+conversation. Receiving a URL is not proof that the page is open.

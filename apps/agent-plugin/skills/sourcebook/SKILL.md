@@ -11,7 +11,7 @@ If “book” could mean an ordinary book or another product rather than a Sourc
 
 ## Project work from a Book
 
-1. Call `open_sourcebook` first. Its returned URL means Desktop is available, **not** that the library is visible. If the host does not show an MCP App panel, open the URL in its built-in browser panel when available (including WorkBuddy). Do not report the panel as open until you actually open or see it. If no internal browser is available, give the URL to the user; if Desktop cannot start, ask the user to open it.
+1. Call `open_sourcebook` first. Its returned URL means Desktop is available, **not** that the library is visible. In WorkBuddy, open that URL in the **right-side built-in browser panel**, not an inline browser in the conversation. In other hosts, use the Sourcebook MCP App panel or a built-in browser when available. Do not report the page as open until you actually open or see it. If no internal browser is available, give the URL to the user; if Desktop cannot start, ask the user to open it.
 2. Call `list_books`, then explicitly call `select_book` before reading, exporting files, or proposing changes.
 3. State the narrow question or source types to inspect. Search first; call `get_sources` only for relevant returned IDs. Distinguish source-backed facts from your own inference in the result.
 
@@ -29,7 +29,7 @@ Only when the user explicitly asks to save or change something in Sourcebook:
 
 Do not use a proposal merely because something seems useful. These actions create suggestions for the user to accept or reject; they do not change a Book immediately.
 
-After submitting one or more save proposals, bring Sourcebook into view so the user can review them. Call `open_sourcebook` even if a Book was selected earlier in this conversation. A returned URL is not an open page: if no MCP App panel is visible, explicitly open that URL in the host's built-in browser panel (including WorkBuddy), reusing an existing Sourcebook tab when possible. If the host has no built-in browser, give the user the URL. If Desktop cannot start, ask the user to open it. Do not claim the page is open until it is actually visible.
+After submitting one or more save proposals, bring Sourcebook into view so the user can review them. Call `open_sourcebook` even if a Book was selected earlier in this conversation. A returned URL is not an open page: in WorkBuddy, explicitly open it in the right-side built-in browser panel, reusing an existing Sourcebook tab when possible; do not use an inline conversation browser. In other hosts, use the visible MCP App panel or built-in browser. If the host has no built-in browser, give the user the URL. If Desktop cannot start, ask the user to open it. Do not claim the page is open until it is actually visible.
 
 Then answer briefly: what was submitted, which Book it targets, and that the user needs to accept it in Sourcebook. Do not include suggestion IDs, API details, or unrelated alternative ideas unless asked. Do not call a pending suggestion "saved in the Book."
 
