@@ -2,9 +2,8 @@
 
 Use this guide when a user shares the **Connect an Agent** installation prompt
 from Sourcebook Desktop. It contains the steps needed for the normal install;
-the user should not need to read another document. Keep the reply practical and
-short. The full [installation manual](https://github.com/Yanze-He/sourcebook-plugin/blob/main/INSTALL.md)
-is optional and is only for detailed troubleshooting.
+it is self-contained and should be the only installation document the Agent
+needs. Keep the reply practical and short.
 
 ## Before you start
 
