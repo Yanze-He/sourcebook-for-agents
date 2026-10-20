@@ -34,8 +34,8 @@ const bookMenu = document.querySelector<HTMLElement>("#book-menu");
 type Locale = "zh" | "en";
 let locale: Locale = storedPickerLanguage(window.localStorage.getItem(PICKER_LANGUAGE_KEY));
 let overlayPosition: PickerOverlayPosition = storedPickerOverlayPosition(window.localStorage.getItem(PICKER_OVERLAY_POSITION_KEY));
-const HELP_URL = "https://github.com/Yanze-He/sourcebook-for-agents#readme";
-const FEEDBACK_URL = "https://sourcebook.online/feedback/?from=picker";
+const HELP_URL = "https://sourcebook.online";
+const FEEDBACK_URL = "https://sourcebook.online/feedback/";
 const DOWNLOAD_URL = "https://sourcebook.online/#download";
 const copy = {
   zh: {
