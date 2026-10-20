@@ -4,35 +4,21 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
-- Save a source note when the detail panel is dismissed by clicking outside it.
-- Keep the Windows Desktop system-tray icon responsive across relaunches, prevent multiple tray hosts, and restore the icon after Explorer restarts.
-- Keep the Windows tray host out of the taskbar; let the desktop shortcut open Sourcebook through the default browser, whose closure does not stop the tray host or local service. Quit the process from the tray menu.
-- Version the Agent Plugin independently from Desktop, add separate macOS/Windows archive builds and a GitHub-based install/update guide, and check for Desktop before an Agent changes its configuration. If Desktop is missing, direct users to sourcebook.online. Independent installations live outside Desktop's refreshed fallback bundle.
-- Refresh Codex's cached Sourcebook Plugin on reinstall, so same-version Desktop builds update the MCP and Skill. The installation guide now explains what to do if Codex cannot write its plugin cache.
-- Give the Codex Plugin a flat Sourcebook icon. Simplify the Agent connection window with a compact version-help control, an installation-target picker beside the copy action, and clearer local-access wording; Agent submissions now link directly to connection settings.
-- Show the Desktop-bundled Agent component version in the connection window. Stamp the same version and test-build label into MCP and Skill documentation, and have WorkBuddy verify and report both components' version after installation.
+- Save source notes when the detail panel loses focus or closes.
+- Keep the Windows tray icon responsive across relaunches, prevent duplicate tray hosts, and restore the icon after Explorer restarts. The tray host stays out of the taskbar; opening Sourcebook uses the default browser, and quitting from the tray exits the process.
+- Improve Agent submission editing: title and note fields are prefilled, save on blur or when accepting, and no longer duplicate preview text.
+- Improve narrow Sourcebook layouts for multi-select and Pack actions.
+- Improve agent search and Book reuse, and simplify reuse of an already open Sourcebook browser tab.
+- Release the Agent Plugin separately from Desktop, with independently versioned macOS and Windows packages and clearer install/update handling.
+- Update Picker to 0.1.2 with localized accessibility labels and a direct Chrome Web Store install link.
 
-- Add a direct feedback form for the website, Picker, and Desktop backed by a private SQLite store and password-protected admin API. Keep GitHub Issues as an alternative, remove region-specific Discord/WeChat descriptions, and preserve the shared landing-page header, language selector, and footer.
-- Simplify the feedback-page header to show Feedback and GitHub, followed by the language selector and Download CTA; remove homepage section links from this page.
-- Point Picker's disconnected-state **Download app** button to the Sourcebook landing-page download section, and localize the popup's Pick tools and Recent picks accessibility labels when the language changes.
-- Allow the published Chrome Web Store Picker to connect to Desktop while continuing to reject all other extensions. **Install Picker** now opens its Chrome Web Store page directly.
-- Add Sourcebook MCP: a paired local stdio bridge for Codex and compatible Agents.
-- Add user-reviewed Agent suggestions for text sources, local-file imports, and metadata updates.
-- Remove duplicate title and note previews from editable Agent submissions; prefilled fields save automatically on blur, and Accept waits for the latest edit.
-- Bundle `sourcebook-mcp` and the optional Codex plugin template inside macOS and Windows Desktop installers. Any compatible local Agent uses the same `sourcebook` stdio MCP namespace; `@` and slash commands are optional host shortcuts rather than prerequisites.
-- Add Desktop-generated install/update prompts for Codex and WorkBuddy. Codex now registers, installs, and verifies the bundled Plugin in one repeatable helper step; WorkBuddy checks the bundled Skill and updates only its own Sourcebook MCP configuration and Skill.
-- Keep the bundled Agent installer in a stable user-level Sourcebook support folder, so setup keeps working when Desktop is moved, renamed, installed on another disk, or updated. The Agent connection screen now focuses on enabling access, choosing an Agent, and copying a short local-guide request.
-- Let Codex install or update the bundled Plugin without requiring its installation task to reach Sourcebook's local service. Desktop now also replaces a running service when its tested build label changes, even when its semantic version is unchanged.
-- Fix the bundled Codex marketplace manifest location so Codex can register it. The Agent connection window now shows copy feedback beside the installation action, uses the same picker style as the rest of Desktop, and removes the redundant guide link and status badge.
-- Migrate Codex's Sourcebook marketplace registration when the app or bundled Agent path changes, and verify that the enabled plugin points to the current bundle. Move **Revoke access** into the connection-status panel.
-- Keep Codex CLI warnings separate from JSON output during Plugin installation. The copied install request now contains only the local guide path, while the installer guide defines its short completion message.
-- Declare both current and legacy MCP App resource metadata. `open_sourcebook` makes clear that its URL is not proof a panel opened; if a host such as WorkBuddy does not render the App, its Agent should open the URL in the built-in browser panel.
-- Allow newly generated files to be proposed for import without an unrelated existing Source association, and keep the Agent's save confirmation focused on the target Book and pending review.
-- Rename the review window **Agent submissions** and separate pending from processed items. Render proposed text as Markdown, let users enlarge submitted images or play local audio/video, and present metadata changes without raw JSON. New text/file proposals cannot carry unrelated Source IDs, while metadata proposals must contain a real change.
-- Render Markdown tables as readable, horizontally scrollable tables in text cards and Agent submissions, and keep table structure when editing a text card.
-- After an Agent submits content for review, guide it to bring Sourcebook into view so the user can accept or reject the submission.
-- Give newly created Books name-independent UUIDs while preserving existing Book IDs and readable folder names. Backup imports that collide with an existing ID also receive a new UUID.
-- Refine MCP around ongoing project work: it now makes saving proposals explicitly user-requested, supports user-requested conversation wrap-ups as concise session records, reserves temporary file export for named real files, and no longer exposes Agent-created Packs.
+## v0.1.1-beta.6
+
+- Allow the published Chrome Web Store Picker to connect to Desktop while continuing to reject unknown extensions. **Install Picker** now opens its Chrome Web Store listing.
+- Add a paired local MCP bridge for working with one explicitly selected Book at a time. Agents can search and read Sources, then submit user-requested text, file-import, and metadata changes for review rather than changing a Book immediately.
+- Add **Agent submissions** with separate pending and processed views, readable Markdown and tables, and previews for supported media. After submitting, an Agent is guided to bring Sourcebook into view for review.
+- Give newly created Books name-independent UUIDs while preserving existing Book IDs and readable folder names.
+- Add a simpler **Connect an Agent** flow for Codex and WorkBuddy. The separately versioned [Sourcebook Agent Plugin](https://github.com/Yanze-He/sourcebook-plugin) can be installed or updated without replacing Desktop; Desktop still carries a fallback helper and Skill.
 
 ## v0.1.1-beta.5
 
