@@ -1,0 +1,56 @@
+name: Build Agent Plugin artifacts
+
+on:
+  push:
+    tags:
+      - "agent-v*"
+  workflow_dispatch:
+    inputs:
+      build_label:
+        description: "Candidate build label, such as build.001"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            platform: macos-arm64
+          - runner: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.runner }}
+    env:
+      SOURCEBOOK_AGENT_PLUGIN_PLATFORM: ${{ matrix.platform }}
+      SOURCEBOOK_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.build_label || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.3"
+      - name: Check tag matches Agent Plugin version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          plugin_version=$(node -p "require('./apps/agent-plugin/plugin.json').version")
+          test "${GITHUB_REF_NAME}" = "agent-v${plugin_version}"
+      - name: Test MCP and version stamps
+        shell: bash
+        run: |
+          (cd apps/mcp-go && go test ./...)
+          node --test apps/agent-plugin/scripts/stamp-version.test.mjs
+      - name: Build standalone archive
+        run: node apps/agent-plugin/scripts/package-plugin.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sourcebook-agent-plugin-${{ matrix.platform }}-${{ github.event_name == 'workflow_dispatch' && inputs.build_label || github.ref_name }}
+          path: |
+            release/agent-plugin/*.zip
+            release/agent-plugin/*.zip.sha256

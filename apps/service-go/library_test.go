@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"testing"
 )
@@ -166,7 +167,7 @@ func TestCreateBookUsesSafeUnicodeFolderName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if book.ID != "book" || book.Directory != "中文项目" {
+	if !isUUIDv4(book.ID) || book.Directory != "中文项目" {
 		t.Fatalf("unexpected Book identity for Unicode name: %+v", book)
 	}
 	context, err := library.Context(book.ID)
@@ -176,6 +177,37 @@ func TestCreateBookUsesSafeUnicodeFolderName(t *testing.T) {
 	if filepath.Base(context.Root) != "中文项目" {
 		t.Fatalf("Book stored in %q, want Chinese folder name", context.Root)
 	}
+}
+
+func TestNewBookIDsDoNotDependOnNameAndSurviveRename(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+
+	first, err := library.CreateBook("Project Notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := library.CreateBook("Project Notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isUUIDv4(first.ID) || !isUUIDv4(second.ID) || first.ID == second.ID || first.Directory != "Project Notes" || second.Directory != "Project Notes-2" {
+		t.Fatalf("Book IDs should be unique UUIDs while folder names remain readable: first=%+v second=%+v", first, second)
+	}
+	renamed, err := library.RenameBook(first.ID, "Renamed Project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.ID != first.ID || renamed.Directory != "Renamed Project" {
+		t.Fatalf("renaming a Book changed its identity: %+v", renamed)
+	}
+}
+
+func isUUIDv4(value string) bool {
+	return regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(value)
 }
 
 func TestStreamingBackupRestoresWithoutBase64Payload(t *testing.T) {
@@ -213,7 +245,7 @@ func TestStreamingBackupRestoresWithoutBase64Payload(t *testing.T) {
 	if len(imported) != 2 || len(manifest.Books) != 2 {
 		t.Fatalf("unexpected restore result: %+v, imported=%+v", manifest, imported)
 	}
-	if !containsString(manifest.UnreadBookIDs, "sourcebook") || !containsString(manifest.UnreadBookIDs, "archive") {
+	if !containsString(manifest.UnreadBookIDs, "sourcebook") || !containsString(manifest.UnreadBookIDs, manifest.Books[1].ID) {
 		t.Fatalf("restored Books should be unread: %+v", manifest.UnreadBookIDs)
 	}
 	if _, err := os.Stat(filepath.Join(destinationRoot, "books", "sourcebook", "assets", "large-library-test.txt")); err != nil {
@@ -408,10 +440,10 @@ func TestAppendBackupKeepsDuplicateBookNameAndRebindsCachedMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(imported) != 1 || imported[0].ID != "sourcebook-2" || imported[0].Name != "Default Book" {
+	if len(imported) != 1 || !isUUIDv4(imported[0].ID) || imported[0].Name != "Default Book" {
 		t.Fatalf("unexpected imported Book: %+v", imported)
 	}
-	if !containsString(manifest.UnreadBookIDs, "sourcebook-2") {
+	if !containsString(manifest.UnreadBookIDs, imported[0].ID) {
 		t.Fatalf("imported Book should be unread: %+v", manifest.UnreadBookIDs)
 	}
 	importedContext, err := destination.Context(imported[0].ID)
@@ -426,7 +458,7 @@ func TestAppendBackupKeepsDuplicateBookNameAndRebindsCachedMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := items["items"].([]map[string]any)
-	if len(result) != 1 || result[0]["thumbnailUrl"] != "/api/books/sourcebook-2/media/asset-image" {
+	if len(result) != 1 || result[0]["thumbnailUrl"] != "/api/books/"+imported[0].ID+"/media/asset-image" {
 		t.Fatalf("cached media did not bind to imported Book: %#v", result)
 	}
 }

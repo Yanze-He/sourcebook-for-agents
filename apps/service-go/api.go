@@ -30,10 +30,15 @@ const (
 	maxMediaBytes    = 20 * 1024 * 1024
 )
 
-// PickerExtensionID is derived from the public key in apps/picker/wxt.config.ts.
-// It deliberately contains no secret material: browsers enforce the extension
-// origin, letting the local service reject requests from unrelated extensions.
-const PickerExtensionID = "cehohknopnehbkiokoffhfjepaieapan"
+// LocalPickerExtensionID is derived from the public key in
+// apps/picker/wxt.config.ts. Chrome Web Store packages cannot carry that key:
+// the Store signs them with its own key and assigns ChromeWebStorePickerExtensionID.
+// Browsers enforce these origins, letting the local service reject unrelated
+// extensions without storing any secret material.
+const (
+	LocalPickerExtensionID          = "cehohknopnehbkiokoffhfjepaieapan"
+	ChromeWebStorePickerExtensionID = "pkglhngkfkjblabnhgcioindjgffgfpf"
+)
 
 var sourceBookPattern = regexp.MustCompile(`^[\w-]+$`)
 
@@ -45,6 +50,7 @@ type Server struct {
 	libraryOperationMu sync.RWMutex
 	changeMu           sync.Mutex
 	changeSubscribers  map[string]map[chan struct{}]struct{}
+	mcpMu              sync.Mutex
 }
 
 type apiError struct {
@@ -63,7 +69,9 @@ func NewServer(library *Library, webRoot string) http.Handler {
 		// successful library migration.
 		settingsRoot = filepath.Dir(library.locationConfigPath)
 	}
-	return &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
+	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
+	server.cleanupExpiredMCPContextFiles()
+	return server
 }
 
 func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -121,13 +129,19 @@ func isExclusiveLibraryOperation(request *http.Request) bool {
 
 func (server *Server) route(response http.ResponseWriter, request *http.Request) error {
 	path := request.URL.Path
+	// MCP bridge requests deliberately use a separate, versioned API.  They are
+	// authenticated with a pairing credential and are not available to web
+	// pages or the Picker through the regular browser API.
+	if strings.HasPrefix(path, "/api/mcp/v1/") {
+		return server.routeMCPBridge(response, request)
+	}
 	if request.Method == http.MethodGet && path == "/api/health" {
 		manifest, err := server.library.List()
 		if err != nil {
 			return err
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
-			"ok": true, "app": "sourcebook-for-agents", "version": appVersion, "apiVersion": "3",
+			"ok": true, "app": "sourcebook-for-agents", "version": appVersion, "build": appBuild, "apiVersion": "3",
 			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync", "prompt-settings"},
 			"connection":   map[string]any{"protocolVersion": 1, "origin": "http://" + request.Host},
 			"library":      manifest,
@@ -160,6 +174,18 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 	if request.Method == http.MethodGet && path == "/api/settings/update" {
 		return server.getUpdateSettings(response, request)
+	}
+	if request.Method == http.MethodGet && path == "/api/settings/mcp" {
+		return server.getMCPSettings(response)
+	}
+	if request.Method == http.MethodPost && path == "/api/settings/mcp" {
+		return server.enableMCP(response, request)
+	}
+	if request.Method == http.MethodDelete && path == "/api/settings/mcp" {
+		return server.revokeMCP(response)
+	}
+	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
+		return server.listMCPSuggestions(response)
 	}
 	if request.Method == http.MethodPut && path == "/api/settings/update" {
 		return server.updateUpdateSettings(response, request)
@@ -237,6 +263,17 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "sources" && request.Method == http.MethodPost {
 		return server.sourceAction(response, request, parts[2], parts[3])
 	}
+	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && parts[5] == "preview" && request.Method == http.MethodGet {
+		return server.previewMCPSuggestion(response, request, parts[3], parts[4])
+	}
+	if len(parts) == 5 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && request.Method == http.MethodPatch {
+		return server.updateMCPSuggestion(response, request, parts[3], parts[4])
+	}
+	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && request.Method == http.MethodPost {
+		if parts[5] == "accept" || parts[5] == "reject" {
+			return server.reviewMCPSuggestion(response, request, parts[3], parts[4], parts[5])
+		}
+	}
 
 	if request.Method == http.MethodGet && server.webRoot != "" {
 		return serveWebsite(response, request, server.webRoot)
@@ -254,11 +291,16 @@ func (server *Server) listBooks(response http.ResponseWriter) error {
 }
 
 type desktopSettings struct {
-	PromptTemplate   string       `json:"promptTemplate,omitempty"`
-	AutoUpdateCheck  *bool        `json:"autoUpdateCheck,omitempty"`
-	LastUpdateCheck  string       `json:"lastUpdateCheck,omitempty"`
-	UpdateError      string       `json:"updateError,omitempty"`
-	AvailableRelease *releaseInfo `json:"availableRelease,omitempty"`
+	PromptTemplate   string        `json:"promptTemplate,omitempty"`
+	AutoUpdateCheck  *bool         `json:"autoUpdateCheck,omitempty"`
+	LastUpdateCheck  string        `json:"lastUpdateCheck,omitempty"`
+	UpdateError      string        `json:"updateError,omitempty"`
+	AvailableRelease *releaseInfo  `json:"availableRelease,omitempty"`
+	MCPEnabled       bool          `json:"mcpEnabled,omitempty"`
+	MCPToken         string        `json:"mcpToken,omitempty"`
+	MCPServiceURL    string        `json:"mcpServiceUrl,omitempty"`
+	MCPEnabledAt     string        `json:"mcpEnabledAt,omitempty"`
+	MCPActivity      []mcpActivity `json:"mcpActivity,omitempty"`
 }
 
 func (server *Server) getPromptSettings(response http.ResponseWriter) error {
@@ -301,7 +343,7 @@ func (server *Server) readDesktopSettings() (desktopSettings, error) {
 func (server *Server) writeDesktopSettings(settings desktopSettings) (desktopSettings, error) {
 	server.settingsMu.Lock()
 	defer server.settingsMu.Unlock()
-	if settings.PromptTemplate == "" && settings.AutoUpdateCheck == nil && settings.LastUpdateCheck == "" && settings.UpdateError == "" && settings.AvailableRelease == nil {
+	if settings.PromptTemplate == "" && settings.AutoUpdateCheck == nil && settings.LastUpdateCheck == "" && settings.UpdateError == "" && settings.AvailableRelease == nil && !settings.MCPEnabled && settings.MCPToken == "" && settings.MCPServiceURL == "" && settings.MCPEnabledAt == "" && len(settings.MCPActivity) == 0 {
 		if err := os.Remove(server.settingsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return desktopSettings{}, err
 		}
@@ -819,7 +861,7 @@ func importLocalFile(ctx *BookContext, value map[string]any) (map[string]any, er
 		resourceID = "resource-" + suffix
 	}
 	pickedAt := now()
-	title := strings.TrimSuffix(name, filepath.Ext(name))
+	title := firstString(stringValue(value["title"]), strings.TrimSuffix(name, filepath.Ext(name)))
 	if title == "" {
 		title = name
 	}
@@ -844,7 +886,7 @@ func importLocalFile(ctx *BookContext, value map[string]any) (map[string]any, er
 			return nil, err
 		}
 	}
-	if _, err = tx.Exec("INSERT INTO source_items (id,resource_id,source_id,title,note,storage_state,created_at) VALUES (?,?,?,?,?,?,?)", sourceItemID, resourceID, sourceID, title, "", "available", pickedAt); err != nil {
+	if _, err = tx.Exec("INSERT INTO source_items (id,resource_id,source_id,title,note,storage_state,created_at) VALUES (?,?,?,?,?,?,?)", sourceItemID, resourceID, sourceID, title, strings.TrimSpace(stringValue(value["note"])), "available", pickedAt); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec("INSERT INTO picks (id,resource_id,source_id,source_item_id,modality,pick_type,metadata_json,picked_at) VALUES (?,?,?,?,?,?,?,?)", pickID, resourceID, sourceID, sourceItemID, modality, "local_import", "{}", pickedAt); err != nil {
@@ -1657,7 +1699,11 @@ func allowedOrigin(value, host string) bool {
 	if value == "" {
 		return true
 	}
-	return value == "http://"+host || value == "chrome-extension://"+PickerExtensionID
+	if value == "http://"+host {
+		return true
+	}
+	return value == "chrome-extension://"+LocalPickerExtensionID ||
+		value == "chrome-extension://"+ChromeWebStorePickerExtensionID
 }
 
 func validModality(value string) bool {

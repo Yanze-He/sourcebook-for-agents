@@ -1,7 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
+import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Info, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { createPortal } from "react-dom";
 import TurndownService from "turndown";
+import { tables as turndownTables } from "turndown-plugin-gfm";
 
 type Language = "en" | "zh";
 type Modality = "text" | "image" | "video" | "audio" | "file" | "link" | "post" | "conversation";
@@ -27,6 +30,11 @@ type Book = { id: string; name: string; createdAt?: string };
 type BookManifest = { activeBookId: string; books: Book[]; unreadBookIds?: string[] };
 type BackupRestoreResponse = BookManifest & { imported?: Book[] };
 type PromptSettingsResponse = { template: string };
+type MCPSettingsResponse = { enabled: boolean; enabledAt?: string; serviceReady: boolean; guideUrl: string; installReady: boolean; agentVersion?: string; installGuides?: { codex?: string; workbuddy?: string; generic?: string } };
+type MCPSuggestion = { id: string; kind: "create_text_source" | "import_local_file" | "update_source_metadata" | "pack"; payload: Record<string, unknown>; sourceItemIds: string[]; agentName: string; createdAt: string; status: "pending" | "accepted" | "rejected" | "stale"; reviewedAt?: string; reviewError?: string };
+type MCPSuggestionEntry = { book: { id: string; name: string }; suggestion: MCPSuggestion };
+type MCPSuggestionsResponse = { suggestions: MCPSuggestionEntry[] };
+type AgentInstallTarget = "codex" | "workbuddy" | "generic";
 
 const interfaceCopy = {
   en: {
@@ -132,10 +140,11 @@ function kindLabel(modality: Modality, language: Language) { if (modality === "p
 const kindIcon = { text: FileText, image: Image, video: Video, audio: Music2, file: FileText, link: Link2, post: MessageSquare, conversation: Workflow } satisfies Record<Modality, typeof FileText>;
 const localImportExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md", ".rtf", ".json", ".html", ".htm"];
 const localImportAccept = localImportExtensions.join(",");
-// Send users to the Releases overview, where the current Picker package is
-// always available instead of sending them to the extension source folder.
-const pickerInstallUrl = "https://github.com/Yanze-He/sourcebook-for-agents/releases";
+// The published Picker is installed from the Chrome Web Store. This is the
+// Store-signed build that the Desktop API explicitly recognizes.
+const pickerInstallUrl = "https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=ext_sidebar";
 const markdownSerializer = new TurndownService({ bulletListMarker: "-", codeBlockStyle: "fenced", linkStyle: "inlined" });
+markdownSerializer.use(turndownTables);
 function toggleFilterValue<T>(values: T[], value: T) { return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value]; }
 
 export default function SourcebookSources() {
@@ -171,8 +180,12 @@ export default function SourcebookSources() {
   const [isPromptSettingsOpen, setIsPromptSettingsOpen] = useState(false);
   const [isLibrarySettingsOpen, setIsLibrarySettingsOpen] = useState(false);
   const [isUpdateSettingsOpen, setIsUpdateSettingsOpen] = useState(false);
+  const [isMCPSettingsOpen, setIsMCPSettingsOpen] = useState(false);
+  const [isMCPSuggestionsOpen, setIsMCPSuggestionsOpen] = useState(false);
   const [librarySettings, setLibrarySettings] = useState<LibrarySettingsResponse | null>(null);
   const [updateSettings, setUpdateSettings] = useState<UpdateSettingsResponse | null>(null);
+  const [mcpSettings, setMCPSettings] = useState<MCPSettingsResponse | null>(null);
+  const [mcpSuggestions, setMCPSuggestions] = useState<MCPSuggestionEntry[]>([]);
   const [promptTemplate, setPromptTemplate] = useState("");
   const [isClearDataOpen, setIsClearDataOpen] = useState(false);
   const [isClearingData, setIsClearingData] = useState(false);
@@ -201,6 +214,7 @@ export default function SourcebookSources() {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const localImportInputRef = useRef<HTMLInputElement | null>(null);
   const messageTimeoutRef = useRef<number | null>(null);
+  const knownPendingSuggestionIdsRef = useRef<Set<string> | null>(null);
   const packRef = useRef<HTMLDivElement | null>(null);
   const bookTransferRef = useRef<HTMLDivElement | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
@@ -211,6 +225,21 @@ export default function SourcebookSources() {
     setMessageTone(tone);
     setMessage(nextMessage);
     messageTimeoutRef.current = duration ? window.setTimeout(() => setMessage(null), duration) : null;
+  }
+
+  async function refreshMCPSuggestions({ openOnNew = false }: { openOnNew?: boolean } = {}) {
+    try {
+      const response = await request<MCPSuggestionsResponse>("/api/mcp/suggestions");
+      const suggestions = response.suggestions || [];
+      const pendingIds = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id));
+      const knownIds = knownPendingSuggestionIdsRef.current;
+      const hasNewSuggestion = Boolean(openOnNew && knownIds && [...pendingIds].some((id) => !knownIds.has(id)));
+      knownPendingSuggestionIdsRef.current = pendingIds;
+      setMCPSuggestions(suggestions);
+      if (hasNewSuggestion) setIsMCPSuggestionsOpen(true);
+    } catch {
+      // Suggestions are an enhancement to an already usable local library.
+    }
   }
 
   async function loadItems({ announce = false, background = false, bookId = activeBookId, limit = sourcePageSize }: { announce?: boolean; background?: boolean; bookId?: string; limit?: number } = {}) {
@@ -270,6 +299,23 @@ export default function SourcebookSources() {
       if (response.requiresSetup) setIsLibrarySettingsOpen(true);
     }).catch((error) => setMessage(errorMessage(error)));
     void request<UpdateSettingsResponse>("/api/settings/update").then(setUpdateSettings).catch(() => undefined);
+    void request<MCPSettingsResponse>("/api/settings/mcp").then(setMCPSettings).catch(() => undefined);
+    void refreshMCPSuggestions();
+  }, []);
+  useEffect(() => {
+    // Agent proposals can target a Book other than the one currently open in
+    // Sources, so the active-Book event stream alone cannot reliably surface
+    // them. Poll only while the window is visible; this keeps the review queue
+    // responsive without turning it into a persistent background task.
+    const refreshSuggestions = () => {
+      if (!document.hidden) void refreshMCPSuggestions({ openOnNew: true });
+    };
+    const timer = window.setInterval(refreshSuggestions, 3000);
+    document.addEventListener("visibilitychange", refreshSuggestions);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshSuggestions);
+    };
   }, []);
   useEffect(() => { if (activeBookId) void loadItems(); }, [activeBookId]);
   useEffect(() => { if (activeBookId && (query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites)) void loadItems({ limit: bookSourceLimit }); }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, source]);
@@ -281,6 +327,7 @@ export default function SourcebookSources() {
     const queueRefresh = () => {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(refresh, 180);
+      void refreshMCPSuggestions({ openOnNew: true });
     };
     const stream = new EventSource(`/api/events?bookId=${encodeURIComponent(activeBookId)}`);
     stream.addEventListener("sources", queueRefresh);
@@ -643,17 +690,19 @@ export default function SourcebookSources() {
               </div> : null}
             </div>
             <div className="book-actions">
+              <button aria-label={language === "zh" ? "Agent 提交" : "Agent submissions"} className="secondary-button header-action-button agent-suggestions-button" data-tooltip={language === "zh" ? "Agent 提交" : "Agent submissions"} onClick={() => setIsMCPSuggestionsOpen(true)} type="button"><ListChecks size={16} /><span className="header-action-label">{language === "zh" ? "Agent 提交" : "Agent submissions"}</span>{mcpSuggestions.some((entry) => entry.suggestion.status === "pending") ? <span aria-label={language === "zh" ? "有待处理的提交" : "Pending submissions"} className="agent-suggestions-dot" role="status" /> : null}</button>
               <button aria-label={copy.addText} className="secondary-button header-action-button local-import-button" data-tooltip={copy.addText} onClick={() => setIsCreateTextOpen(true)} title={copy.addText} type="button"><FilePlus2 size={16} /><span className="header-action-label">{copy.addText}</span></button>
               <button aria-label={copy.importLocalFiles} className="secondary-button header-action-button local-import-button" data-tooltip={copy.importLocalFiles} onClick={() => localImportInputRef.current?.click()} title={copy.importLocalFiles} type="button"><FileUp size={16} /><span className="header-action-label">{copy.importLocalFiles}</span></button>
               <div className="settings-menu" ref={settingsRef}>
                 <button aria-label={updateSettings?.status === "available" ? `${copy.settings} — ${language === "zh" ? "有更新" : "Update available"}` : copy.settings} aria-expanded={isSettingsOpen} className="icon-button settings-trigger" data-tooltip={copy.settings} onClick={() => setIsSettingsOpen((open) => !open)} title={copy.settings} type="button"><Settings size={16} />{updateSettings?.status === "available" ? <span aria-hidden="true" className="settings-update-dot" /> : null}</button>
                 {isSettingsOpen ? <div className="settings-popover" role="menu">
                   <button className="settings-picker-install" onClick={() => { openPickerInstall(); setIsSettingsOpen(false); }} role="menuitem" type="button"><Puzzle size={15} /><span>{copy.installPicker}</span></button>
+                  <button onClick={() => { setIsSettingsOpen(false); setIsMCPSettingsOpen(true); }} role="menuitem" type="button"><Workflow size={15} /><span>{language === "zh" ? "连接 Agent" : "Connect an Agent"}</span></button>
                   <button onClick={() => { setIsSettingsOpen(false); setIsPromptSettingsOpen(true); }} role="menuitem" type="button"><Sparkles size={15} /><span>{copy.promptSettings}</span></button>
                   <button onClick={() => { setIsSettingsOpen(false); setIsLibrarySettingsOpen(true); }} role="menuitem" type="button"><HardDrive size={15} /><span>{language === "zh" ? "管理本地数据" : "Manage local data"}</span></button>
                   <button aria-label={updateSettings?.status === "available" ? `${language === "zh" ? "版本与更新" : "Version & updates"} — ${language === "zh" ? "有更新" : "Update available"}` : undefined} className={updateSettings?.status === "available" ? "settings-update-available" : ""} onClick={() => { setIsSettingsOpen(false); setIsUpdateSettingsOpen(true); }} role="menuitem" type="button"><RefreshCw size={15} /><span>{language === "zh" ? "版本与更新" : "Version & updates"}</span>{updateSettings?.status === "available" ? <span aria-hidden="true" className="settings-update-menu-dot" /> : null}</button>
-                  <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents#readme", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><CircleHelp size={15} /><span>{copy.help}</span></button>
-                  <button onClick={() => { window.open("https://github.com/Yanze-He/sourcebook-for-agents/issues/new/choose", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><MessageSquare size={15} /><span>{copy.feedback}</span></button>
+                  <button onClick={() => { window.open("https://sourcebook.online", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><CircleHelp size={15} /><span>{copy.help}</span></button>
+                  <button onClick={() => { window.open("https://sourcebook.online/feedback/", "_blank", "noopener,noreferrer"); setIsSettingsOpen(false); }} role="menuitem" type="button"><MessageSquare size={15} /><span>{copy.feedback}</span></button>
                   <button onClick={() => { setLanguage(language === "en" ? "zh" : "en"); setIsSettingsOpen(false); }} role="menuitem" type="button"><Languages size={15} /><span>{copy.switchLanguage}</span></button>
                 </div> : null}
               </div>
@@ -695,6 +744,8 @@ export default function SourcebookSources() {
     <PromptSettingsModal isOpen={isPromptSettingsOpen} language={language} savedTemplate={promptTemplate} onClose={() => setIsPromptSettingsOpen(false)} onSave={savePromptTemplate} />
     <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
     <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
+    <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} settings={mcpSettings} />
+    <MCPSuggestionsModal isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`, { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`, { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestions={mcpSuggestions} />
   </main></LanguageContext.Provider>;
 }
 
@@ -811,18 +862,24 @@ function CardSourceMark({ item }: { item: SourceItem }) {
   return <span className={`source-card-source-mark is-${isFile ? "file" : item.modality}`}><span className="source-card-source-logo">{canUseFavicon && !logoFailed ? <img src={logo ?? undefined} alt="" onError={() => setLogoFailed(true)} /> : <Icon aria-hidden="true" className="source-card-source-fallback" size={16} strokeWidth={1.8} />}</span><span>{label}</span></span>;
 }
 
-function MarkdownContent({ compact = false, value }: { compact?: boolean; value: string }) { return <div className="markdown-content"><ReactMarkdown components={compact ? { img: () => null } : undefined} skipHtml>{value}</ReactMarkdown></div>; }
+function MarkdownContent({ compact = false, value }: { compact?: boolean; value: string }) { return <div className="markdown-content"><ReactMarkdown components={{ table: ({ children }) => <div className="markdown-table-scroll"><table>{children}</table></div>, ...(compact ? { img: () => null } : {}) }} remarkPlugins={[remarkGfm]} skipHtml>{value}</ReactMarkdown></div>; }
 
 function MarkdownContentEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const copy = interfaceCopy[useLanguage()];
   const editorRef = useRef<HTMLDivElement>(null);
+  const focusedHtmlRef = useRef<string | null>(null);
   const save = () => {
     const html = editorRef.current?.innerHTML;
-    if (html === undefined) return;
-    const markdown = markdownSerializer.turndown(html).trimEnd();
+    if (html === undefined || focusedHtmlRef.current === html) return;
+    const editor = editorRef.current;
+    editor?.querySelectorAll("th[style*='text-align']").forEach((cell) => {
+      const alignment = (cell as HTMLElement).style.textAlign;
+      if (alignment) cell.setAttribute("align", alignment);
+    });
+    const markdown = markdownSerializer.turndown(editor?.innerHTML ?? html).trimEnd();
     if (markdown !== value) onSave(markdown);
   };
-  return <section className="source-item-content-preview markdown-content-preview"><div aria-label={copy.markdownContent} className="markdown-render-editor" contentEditable onBlur={save} ref={editorRef} role="textbox" suppressContentEditableWarning><MarkdownContent value={value} /></div></section>;
+  return <section className="source-item-content-preview markdown-content-preview"><div aria-label={copy.markdownContent} className="markdown-render-editor" contentEditable onBlur={save} onFocus={() => { focusedHtmlRef.current = editorRef.current?.innerHTML ?? null; }} ref={editorRef} role="textbox" suppressContentEditableWarning><MarkdownContent value={value} /></div></section>;
 }
 
 function hasRenderableThumbnail(item: SourceItem) {
@@ -898,7 +955,7 @@ function SourceDetailModal({ focusNote, item, onClose, onContentSave, onCopy, on
   const saveTitle = async () => { const title = draftTitle.trim(); if (!title) return; if (title === item.itemTitle) { setIsEditingTitle(false); return; } if (await onTitleSave(item.id, title)) setIsEditingTitle(false); };
   const cancelTitleEdit = () => { setDraftTitle(item.itemTitle); setIsEditingTitle(false); };
   const saveNote = () => { if (draftNote !== item.userNote) onNoteSave(item.id, draftNote); };
-  return <div className="masonry-detail-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <div className="masonry-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { saveNote(); onClose(); } }}>
     <button aria-label={copy.closeDetail} className="media-preview-close" data-tooltip={copy.closeDetail} onClick={onClose} type="button"><X size={18} /></button>
     <aside className="inspector-popover masonry-detail-modal" aria-label="Source detail" aria-modal="true" role="dialog">
       <div className="inspector-body read-only-detail">
@@ -1040,6 +1097,190 @@ function UpdateSettingsModal({ isOpen, language, onClose, onLoad, settings }: { 
   const installedVersion = current?.version ?? "—";
   const installedBuild = current?.build?.trim();
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="update-settings-title"><section className="export-modal update-settings-modal"><header className="modal-head"><div><h2 id="update-settings-title">{zh ? "版本与更新" : "Version & updates"}</h2><p>{zh ? `当前版本 ${installedVersion}${installedBuild ? `（构建 ${installedBuild}）` : ""}` : `Installed version ${installedVersion}${installedBuild ? ` (Build ${installedBuild})` : ""}`}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header><div className="update-settings-body"><label className="update-toggle"><span><strong>{zh ? "自动检查更新" : "Check for updates automatically"}</strong><small>{zh ? "启动后静默检查，最多每 24 小时一次。" : "Check quietly after launch, at most once every 24 hours."}</small></span><input checked={current?.autoCheck ?? true} onChange={async (event) => { const value = await request<UpdateSettingsResponse>("/api/settings/update", { method: "PUT", body: JSON.stringify({ autoCheck: event.target.checked }) }); setCurrent(value); onLoad(value); }} type="checkbox" /></label>{release ? <section className="available-update"><span className="available-update-label">{zh ? "有新版本可用" : "Update available"}</span><h3>{release.name || release.version}</h3><p>{release.notes || (zh ? "查看 Release 页面了解此版本的更新内容。" : "See the Release page for what changed.")}</p><a className="primary-button" href={release.url} rel="noreferrer" target="_blank"><Download size={15} />{zh ? "下载更新" : "Download update"}</a></section> : <p className={current?.status === "error" ? "settings-inline-error" : "settings-muted"}>{current?.status === "error" ? current.error : (zh ? "已是最新版本。" : "You’re up to date.")}</p>}<p className="update-last-check">{current?.lastCheckedAt ? `${zh ? "上次检查" : "Last checked"}: ${formatDateTime(current.lastCheckedAt)}` : (zh ? "尚未检查更新。" : "No update check yet.")}</p></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{zh ? "关闭" : "Close"}</button><button className="secondary-button" disabled={checking} onClick={() => void refresh(true)} type="button">{checking ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "立即检查" : "Check now"}</button></footer></section></div>;
+}
+
+function agentInstallPrompt(target: AgentInstallTarget, zh: boolean, guideUrl?: string) {
+  const guide = guideUrl || "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md";
+  const action = target === "generic" ? (zh ? "连接" : "Connect") : (zh ? "安装或更新" : "Install or update");
+  const agent = target === "workbuddy" ? "WorkBuddy" : target === "codex" ? "Codex" : (zh ? "其他支持 MCP 的 Agent" : "a compatible MCP Agent");
+  return zh ? `请按这份指南为 ${agent} ${action} Sourcebook Agent 插件：${guide}` : `${action} Sourcebook Agent Plugin for ${agent} using this guide: ${guide}`;
+}
+
+function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isOpen: boolean; language: Language; onClose: () => void; onLoad: (value: MCPSettingsResponse) => void; settings: MCPSettingsResponse | null }) {
+  const zh = language === "zh";
+  const [current, setCurrent] = useState<MCPSettingsResponse | null>(settings);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [target, setTarget] = useState<AgentInstallTarget>("codex");
+  const [isTargetOpen, setIsTargetOpen] = useState(false);
+  const [showVersionHelp, setShowVersionHelp] = useState(false);
+  useEffect(() => { if (!isOpen) return; void request<MCPSettingsResponse>("/api/settings/mcp").then((value) => { setCurrent(value); onLoad(value); setMessage(""); }).catch((reason) => setMessage(errorMessage(reason))); }, [isOpen]);
+  if (!isOpen) return null;
+  const enable = async () => { setBusy(true); setMessage(""); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp", { method: "POST", body: JSON.stringify({}) }); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(false); } };
+  const revoke = async () => { setBusy(true); setMessage(""); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp", { method: "DELETE" }); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(false); } };
+  const installPrompt = agentInstallPrompt(target, zh, current?.guideUrl);
+  const installAvailable = Boolean(current?.enabled && current?.serviceReady && current?.installReady);
+  const installStatus = !current?.enabled ? (zh ? "先在上方批准本机 Agent 访问，才能生成安装提示。" : "Approve local-agent access above before generating an install prompt.") : !current?.serviceReady ? (zh ? "本机配对尚未准备好；请重新启用访问后再试。" : "Local pairing is not ready. Re-enable access and try again.") : null;
+  const copyInstallPrompt = async () => { if (!installAvailable) return; try { await navigator.clipboard.writeText(installPrompt); setMessage(zh ? "安装提示词已复制，请将它粘贴到所选Agent对话框。" : "Install prompt copied. Paste it into a conversation with the selected Agent."); } catch (reason) { setMessage(errorMessage(reason)); } };
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mcp-settings-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className="export-modal mcp-settings-modal">
+      <header className="modal-head"><div><h2 id="mcp-settings-title">{zh ? "连接 Agent" : "Connect an Agent"}</h2><p>{zh ? "让本机 Agent 在你选择 Book 后安全使用资料。" : "Let a local Agent safely use sources after you choose a Book."}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header>
+      <div className="mcp-settings-body">
+        <section className="mcp-access-panel"><div><span className={`mcp-access-indicator ${current?.enabled ? "is-enabled" : ""}`} aria-hidden="true" /><strong>{current?.enabled ? (zh ? "本机访问已开启" : "Local access is on") : (zh ? "先开启本机访问" : "Turn on local access first")}</strong><p>{zh ? "Agent可以获取Book数据，对Book的改动可在Agent提交窗口中查看" : "Agents can access Book data. Review proposed Book changes in Agent submissions."}</p></div>{!current?.enabled ? <button className="primary-button" disabled={busy} onClick={() => void enable()} type="button">{busy ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "允许本机 Agent 访问" : "Allow local-agent access"}</button> : <button className="mcp-revoke-button" disabled={busy} onClick={() => void revoke()} type="button">{busy ? <LoaderCircle className="spin" size={14} /> : null}{zh ? "撤销访问" : "Revoke access"}</button>}</section>
+        <section className="mcp-install-step">
+          <div className="mcp-install-heading">
+            <div className="mcp-install-title-row">
+              <h3>{zh ? "安装 Agent 插件" : "Install Agent plugin"}</h3>
+              {current?.agentVersion ? <div className="mcp-version-help" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setShowVersionHelp(false); }}>
+                <button aria-expanded={showVersionHelp} aria-label={zh ? "查看插件版本和更新说明" : "Plugin version and update help"} className="mcp-version-help-button" onClick={() => setShowVersionHelp((open) => !open)} type="button"><CircleHelp size={16} /></button>
+                {showVersionHelp ? <div className="mcp-version-help-popover" role="status"><strong>{zh ? `Desktop 内置插件：${current.agentVersion}` : `Bundled with Desktop: ${current.agentVersion}`}</strong><span>{zh ? "独立插件可能有更新版本；再次发送安装提示即可检查并更新。" : "The independent plugin may be newer. Send the install request again to check and update."}</span></div> : null}
+              </div> : null}
+            </div>
+            <p className="mcp-install-description">{zh ? "复制请求并发送给目标 Agent；它会检查 GitHub 上的插件版本。" : "Send the request to your Agent. It checks the plugin version on GitHub."}</p>
+          </div>
+          <div className="mcp-install-action">
+            <div className="mcp-install-action-main">
+              <div className="mcp-agent-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setIsTargetOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") setIsTargetOpen(false); }}>
+                <span>{zh ? "安装目标" : "Install target"}</span>
+                <button aria-expanded={isTargetOpen} aria-haspopup="listbox" className={`mcp-agent-picker-button${isTargetOpen ? " is-open" : ""}`} onClick={() => setIsTargetOpen((open) => !open)} type="button"><span>{target === "generic" ? (zh ? "其他支持MCP的Agent" : "Other MCP Agent") : target === "workbuddy" ? "WorkBuddy" : "Codex"}</span><ChevronDown size={15} /></button>
+                {isTargetOpen ? <div aria-label={zh ? "选择 Agent" : "Choose an Agent"} className="mcp-agent-picker-menu" role="listbox">{(["codex", "workbuddy", "generic"] as AgentInstallTarget[]).map((option) => <button aria-selected={target === option} key={option} onClick={() => { setTarget(option); setIsTargetOpen(false); setMessage(""); }} role="option" type="button">{option === "generic" ? (zh ? "其他支持MCP的Agent" : "Other MCP Agent") : option === "workbuddy" ? "WorkBuddy" : "Codex"}{target === option ? <Check aria-hidden="true" size={14} /> : null}</button>)}</div> : null}
+              </div>
+              <button className="primary-button" disabled={!installAvailable} onClick={() => void copyInstallPrompt()} type="button"><Copy size={15} />{zh ? "复制安装请求" : "Copy install request"}</button>
+            </div>
+            {message ? <p className="mcp-install-feedback" role="status"><Info aria-hidden="true" size={15} />{message}</p> : installStatus ? <p className="mcp-install-feedback"><Info aria-hidden="true" size={15} />{installStatus}</p> : null}
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>;
+}
+
+function MCPSuggestionsModal({ isOpen, language, onClose, onConnectAgent, onLoad, onReview, onUpdate, suggestions }: { isOpen: boolean; language: Language; onClose: () => void; onConnectAgent: () => void; onLoad: (suggestions: MCPSuggestionEntry[]) => void; onReview: (bookId: string, suggestionId: string, decision: "accept" | "reject") => Promise<void>; onUpdate: (bookId: string, suggestionId: string, payload: { title: string; note: string }) => Promise<void>; suggestions: MCPSuggestionEntry[] }) {
+  const zh = language === "zh";
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [view, setView] = useState<"pending" | "processed">("pending");
+  const saveHandlers = useRef(new Map<string, () => Promise<void>>());
+  useEffect(() => { if (!isOpen) return; setView("pending"); setError(""); void request<MCPSuggestionsResponse>("/api/mcp/suggestions").then((response) => onLoad(response.suggestions || [])).catch((reason) => setError(errorMessage(reason))); }, [isOpen]);
+  if (!isOpen) return null;
+  const pending = suggestions.filter((entry) => entry.suggestion.status === "pending");
+  const processed = suggestions.filter((entry) => entry.suggestion.status !== "pending");
+  const visible = view === "pending" ? pending : processed;
+  const savePendingEdits = async () => { for (const entry of pending) await saveHandlers.current.get(entry.suggestion.id)?.(); };
+  const closeAfterSave = async () => { setError(""); try { await savePendingEdits(); onClose(); return true; } catch (reason) { setError(errorMessage(reason)); return false; } };
+  const review = async (entry: MCPSuggestionEntry, decision: "accept" | "reject") => { setBusy(entry.suggestion.id); setError(""); try { await saveHandlers.current.get(entry.suggestion.id)?.(); await onReview(entry.book.id, entry.suggestion.id, decision); } catch (reason) { setError(errorMessage(reason)); } finally { setBusy(null); } };
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mcp-suggestions-title" onMouseDown={(event) => { if (event.target === event.currentTarget) void closeAfterSave(); }}>
+    <section className="export-modal mcp-suggestions-modal">
+      <header className="modal-head"><div><h2 id="mcp-suggestions-title">{zh ? "Agent 提交" : "Agent submissions"}</h2><p>{zh ? "查看 Agent 提交的内容，确认后才会写入 Book。" : "Review Agent submissions before they change a Book."}</p></div><div className="mcp-suggestions-header-actions"><button className="secondary-button" onClick={async () => { if (await closeAfterSave()) onConnectAgent(); }} type="button"><Workflow aria-hidden="true" size={15} />{zh ? "连接 Agent" : "Connect an Agent"}</button><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={() => void closeAfterSave()} type="button"><X size={16} /></button></div></header>
+      <div className="mcp-suggestion-tabs" role="tablist" aria-label={zh ? "提交状态" : "Submission status"}>
+        <button aria-selected={view === "pending"} className={view === "pending" ? "is-active" : ""} onClick={() => setView("pending")} role="tab" type="button">{zh ? "待处理" : "Pending"}<span>{pending.length}</span></button>
+        <button aria-selected={view === "processed"} className={view === "processed" ? "is-active" : ""} onClick={() => setView("processed")} role="tab" type="button">{zh ? "已处理" : "Processed"}<span>{processed.length}</span></button>
+      </div>
+      <div className="mcp-suggestions-list" role="tabpanel">
+        {visible.length ? visible.map((entry) => <article className="mcp-suggestion" key={entry.suggestion.id}>
+          <div className="mcp-suggestion-head"><div><strong>{suggestionTitle(entry.suggestion.kind, zh)}</strong><small>{entry.book.name} · {entry.suggestion.agentName} · {formatDateTime(entry.suggestion.createdAt)}</small></div><span className={`mcp-suggestion-status is-${entry.suggestion.status}`}>{suggestionStatus(entry.suggestion.status, zh)}</span></div>
+          <SuggestionPreview editing={entry.suggestion.status === "pending" && (entry.suggestion.kind === "import_local_file" || entry.suggestion.kind === "create_text_source")} entry={entry} zh={zh} />
+          {entry.suggestion.status === "pending" && (entry.suggestion.kind === "import_local_file" || entry.suggestion.kind === "create_text_source") ? <SuggestionEditFields entry={entry} onRegisterSave={(save) => saveHandlers.current.set(entry.suggestion.id, save)} onSave={(payload) => onUpdate(entry.book.id, entry.suggestion.id, payload)} zh={zh} /> : null}
+          {entry.suggestion.reviewError ? <p className="mcp-suggestion-error">{entry.suggestion.reviewError}</p> : null}
+          {entry.suggestion.status === "pending" ? <div className="mcp-suggestion-actions"><button className="text-button" disabled={busy === entry.suggestion.id} onClick={() => void review(entry, "reject")} type="button">{zh ? "拒绝" : "Reject"}</button><button className="primary-button" disabled={busy === entry.suggestion.id} onClick={() => void review(entry, "accept")} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "接受" : "Accept"}</button></div> : null}
+        </article>) : <p className="mcp-suggestions-empty">{view === "pending" ? (zh ? "没有待处理的提交。" : "No submissions need your review.") : (zh ? "暂无已处理提交。" : "No processed submissions yet.")}</p>}
+        {error ? <p className="settings-inline-error" role="alert">{error}</p> : null}
+      </div>
+      <footer className="modal-footer"><button className="secondary-button" onClick={() => void closeAfterSave()} type="button">{zh ? "完成" : "Done"}</button></footer>
+    </section>
+  </div>;
+}
+
+function SuggestionEditFields({ entry, onRegisterSave, onSave, zh }: { entry: MCPSuggestionEntry; onRegisterSave: (save: () => Promise<void>) => void; onSave: (payload: { title: string; note: string }) => Promise<void>; zh: boolean }) {
+  const [title, setTitle] = useState(String(entry.suggestion.payload.title || ""));
+  const [note, setNote] = useState(String(entry.suggestion.payload.note || ""));
+  const [error, setError] = useState("");
+  const valuesRef = useRef({ title, note });
+  valuesRef.current = { title, note };
+  const savedValuesRef = useRef({ title, note });
+  const savingRef = useRef<Promise<void> | null>(null);
+  const saveRef = useRef<() => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    const next = { title: String(entry.suggestion.payload.title || ""), note: String(entry.suggestion.payload.note || "") };
+    if (!savingRef.current && valuesRef.current.title === savedValuesRef.current.title && valuesRef.current.note === savedValuesRef.current.note) {
+      savedValuesRef.current = next;
+      valuesRef.current = next;
+      setTitle(next.title);
+      setNote(next.note);
+    }
+  }, [entry.suggestion.payload.title, entry.suggestion.payload.note]);
+  saveRef.current = async () => {
+    if (savingRef.current) await savingRef.current;
+    const values = valuesRef.current;
+    if (values.title === savedValuesRef.current.title && values.note === savedValuesRef.current.note) return;
+    if (!values.title.trim()) throw new Error(zh ? "名称不能为空。" : "Title cannot be empty.");
+    setError("");
+    const task = onSave(values);
+    savingRef.current = task;
+    try {
+      await task;
+      savedValuesRef.current = values;
+    } catch (reason) {
+      setError(errorMessage(reason));
+      throw reason;
+    } finally {
+      savingRef.current = null;
+    }
+    const latest = valuesRef.current;
+    if (latest.title !== savedValuesRef.current.title || latest.note !== savedValuesRef.current.note) await saveRef.current();
+  };
+  useEffect(() => {
+    const save = () => saveRef.current();
+    onRegisterSave(save);
+    return () => onRegisterSave(async () => undefined);
+  }, [entry.suggestion.id, onRegisterSave]);
+  const saveOnBlur = () => { void saveRef.current().catch(() => undefined); };
+  return <div className="mcp-suggestion-edit-fields">
+    <label>{zh ? "名称" : "Title"}<input maxLength={180} onBlur={saveOnBlur} onChange={(event) => { setTitle(event.target.value); setError(""); }} value={title} /></label>
+    <label>{zh ? "备注" : "Note"}<textarea maxLength={500} onBlur={saveOnBlur} onChange={(event) => { setNote(event.target.value); setError(""); }} rows={2} value={note} /></label>
+    {error ? <small className="mcp-suggestion-error">{error}</small> : null}
+  </div>;
+}
+
+function suggestionTitle(kind: MCPSuggestion["kind"], zh: boolean) { return ({ create_text_source: zh ? "新增文本素材" : "Create text source", import_local_file: zh ? "导入本地文件" : "Import local file", update_source_metadata: zh ? "更新素材信息" : "Update source metadata", pack: zh ? "创建 Pack" : "Create Pack" })[kind]; }
+function suggestionStatus(status: MCPSuggestion["status"], zh: boolean) { return ({ pending: zh ? "待确认" : "Pending", accepted: zh ? "已接受" : "Accepted", rejected: zh ? "已拒绝" : "Rejected", stale: zh ? "无法应用" : "Could not apply" })[status]; }
+function SuggestionPreview({ editing = false, entry, zh }: { editing?: boolean; entry: MCPSuggestionEntry; zh: boolean }) {
+  const { suggestion, book } = entry;
+  const payload = suggestion.payload;
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [expanded]);
+  if (suggestion.kind === "create_text_source") return <div className="mcp-suggestion-preview">{!editing ? <h3>{String(payload.title || (zh ? "未命名文本" : "Untitled text"))}</h3> : null}<div className="mcp-suggestion-markdown"><MarkdownContent compact value={String(payload.content || "")} /></div>{!editing && typeof payload.note === "string" && payload.note.trim() ? <div className="mcp-suggestion-note"><strong>{zh ? "备注" : "Note"}</strong><MarkdownContent compact value={payload.note} /></div> : null}</div>;
+  if (suggestion.kind === "import_local_file") {
+    const path = typeof payload.path === "string" ? payload.path : "";
+    const name = path.split(/[\\/]/).filter(Boolean).pop() || (zh ? "本地文件" : "Local file");
+    const mediaKind = /\.(?:png|jpe?g|webp|gif)$/i.test(name) ? "image" : /\.(?:mp4|mov|webm)$/i.test(name) ? "video" : /\.(?:mp3|wav|m4a|aac|flac|ogg)$/i.test(name) ? "audio" : null;
+    const mediaUrl = `/api/mcp/suggestions/${encodeURIComponent(book.id)}/${encodeURIComponent(suggestion.id)}/preview`;
+    return <>
+      {!editing ? <div className="mcp-suggestion-preview"><h3>{String(payload.title || name)}</h3>{typeof payload.note === "string" && payload.note.trim() ? <div className="mcp-suggestion-note"><strong>{zh ? "备注" : "Note"}</strong><MarkdownContent compact value={payload.note} /></div> : null}</div> : null}
+      <div className="mcp-suggestion-file"><div className="mcp-suggestion-file-icon">{mediaKind === "image" ? <Image size={22} /> : mediaKind === "video" ? <Video size={22} /> : mediaKind === "audio" ? <Music2 size={22} /> : <FileUp size={22} />}</div><div className="mcp-suggestion-file-details"><strong title={name}>{name}</strong><small title={path}>{path}</small></div>{mediaKind ? <SuggestionMediaThumbnail kind={mediaKind} name={name} onOpen={() => setExpanded(true)} url={mediaUrl} zh={zh} /> : null}</div>
+      {expanded && mediaKind ? createPortal(<div aria-label={zh ? "Agent 提交媒体预览" : "Agent submission media preview"} aria-modal="true" className="media-preview-backdrop mcp-media-preview-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setExpanded(false)} role="dialog"><button aria-label={zh ? "关闭预览" : "Close preview"} className="media-preview-close" onClick={() => setExpanded(false)} type="button"><X size={18} /></button>{mediaKind === "image" ? <img alt={name} src={mediaUrl} /> : mediaKind === "video" ? <video autoPlay controls playsInline preload="metadata" src={mediaUrl} /> : <section className="media-preview-audio"><strong>{name}</strong><audio autoPlay controls src={mediaUrl} /></section>}</div>, document.body) : null}
+    </>;
+  }
+  if (suggestion.kind === "update_source_metadata") {
+    const changes = payload.changes && typeof payload.changes === "object" ? payload.changes as Record<string, unknown> : {};
+    const base = payload.base && typeof payload.base === "object" ? payload.base as Record<string, unknown> : {};
+    const labels: Record<string, string> = { title: zh ? "标题" : "Title", note: zh ? "备注" : "Note", favorite: zh ? "收藏" : "Favorite" };
+    const labelValue = (value: unknown) => typeof value === "boolean" ? (value ? (zh ? "是" : "Yes") : (zh ? "否" : "No")) : String(value ?? "—");
+    return <div className="mcp-suggestion-preview"><h3>{String(base.title || (zh ? "现有素材" : "Existing source"))}</h3><dl className="mcp-suggestion-changes">{Object.entries(changes).filter(([key]) => key in labels).map(([key, value]) => <div key={key}><dt>{labels[key]}</dt><dd><span>{labelValue(base[key])}</span><span aria-hidden="true">→</span><strong>{labelValue(value)}</strong></dd></div>)}</dl></div>;
+  }
+  return <div className="mcp-suggestion-preview"><h3>{String(payload.name || "Sourcebook Pack")}</h3>{typeof payload.prompt === "string" ? <div className="mcp-suggestion-markdown"><MarkdownContent compact value={payload.prompt} /></div> : null}</div>;
+}
+
+function SuggestionMediaThumbnail({ kind, name, onOpen, url, zh }: { kind: "image" | "video" | "audio"; name: string; onOpen: () => void; url: string; zh: boolean }) {
+  const [unavailable, setUnavailable] = useState(false);
+  useEffect(() => setUnavailable(false), [url]);
+  if (unavailable) return <span className="mcp-suggestion-image-unavailable">{zh ? "预览不可用" : "Preview unavailable"}</span>;
+  return <button aria-label={kind === "image" ? (zh ? `放大查看 ${name}` : `Enlarge ${name}`) : (zh ? `播放 ${name}` : `Play ${name}`)} className={`mcp-suggestion-media-button is-${kind}`} onClick={onOpen} type="button">{kind === "image" ? <img alt={zh ? `${name} 的缩略图` : `Thumbnail of ${name}`} loading="lazy" onError={() => setUnavailable(true)} src={url} /> : kind === "video" ? <><video aria-hidden="true" muted onError={() => setUnavailable(true)} playsInline preload="metadata" src={url} /><Play aria-hidden="true" className="mcp-suggestion-play-icon" size={20} /></> : <><Music2 aria-hidden="true" size={20} /><Play aria-hidden="true" size={12} /></>}</button>;
 }
 
 function PromptSettingsModal({ isOpen, language, savedTemplate, onClose, onSave }: { isOpen: boolean; language: Language; savedTemplate: string; onClose: () => void; onSave: (template: string) => void }) {
