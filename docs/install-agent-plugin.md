@@ -1,50 +1,34 @@
-# Install or update the Sourcebook Agent Plugin
+# Handle Sourcebook installation requests
 
-This is the guide linked by Sourcebook Desktop's **Connect an Agent** prompt.
-Codex and WorkBuddy should use the public GitHub marketplace so future updates
-come from a persistent source. Sourcebook Desktop must also be installed, open,
-and have **Settings → Connect an Agent → Local access** enabled.
+This guide sets response and execution rules for the **Connect an Agent** prompt
+in Sourcebook Desktop. The [installation manual](https://github.com/Yanze-He/sourcebook-plugin/blob/main/INSTALL.md)
+is the single source for supported installation commands, UI paths, updates, and
+troubleshooting. Follow only the section for the current Agent; do not repeat the
+whole manual.
 
-## Codex
+## Choose the right path
 
-Install from the GitHub marketplace in a local Codex task or Terminal:
+- **Codex:** Installation changes the Codex configuration on the computer
+  running the task. Follow the manual only from a local Codex task or that
+  computer's Terminal. If the task is cloud-hosted or remote, stop immediately;
+  tell the user to reopen it in local Codex or run the commands in the host's
+  Terminal. Do not search the remote filesystem or retry local installation
+  commands there.
+- **WorkBuddy:** The user completes installation through WorkBuddy's interface.
+  Give only the short WorkBuddy steps from the manual. Do not attempt CLI
+  installation, edit WorkBuddy configuration files, or provide a long
+  capability explanation. Do not claim success until the user completes the
+  steps and Sourcebook tools are available.
+- **Other Agents:** The documented marketplace installs currently cover Codex
+  and WorkBuddy. The Sourcebook MCP server and Skill can be adapted if the Agent
+  documents a way to install Skills and run a local stdio MCP server on the
+  computer with Sourcebook Desktop. Give a short proposed path and clearly state
+  that it is unverified and may fail. If no compatible documented path exists,
+  say briefly that the Agent is not supported yet and may be supported later.
+  Never copy another Agent's UI steps or edit undocumented internal files.
 
-```sh
-codex plugin marketplace add Yanze-He/sourcebook-plugin
-codex plugin add sourcebook@sourcebook-plugin
-```
+## Keep the response short
 
-If the marketplace is already registered, run
-`codex plugin marketplace upgrade sourcebook-plugin`, then run the add command
-to install or update the plugin. Restart Codex and start a new local task.
-
-## WorkBuddy
-
-1. Open **Skills → Suites → Add marketplace** and enter
-   `Yanze-He/sourcebook-plugin`.
-2. Install or update **sourcebook** from that marketplace.
-3. In **Connectors → Custom connectors → MCP service management**, trust
-   Sourcebook if prompted.
-4. Restart WorkBuddy and start a new conversation.
-
-Do not add a temporary download or extracted ZIP folder as a local marketplace.
-WorkBuddy stores the folder path as the marketplace source; after that temporary
-directory is removed, the plugin may still appear installed but cannot be found
-for updates.
-
-If WorkBuddy reports **“Plugin sourcebook is not found in marketplace
-sourcebook-plugin”**, the registered marketplace may point to a missing local
-folder. Remove that broken marketplace, add `Yanze-He/sourcebook-plugin`,
-install **sourcebook** again, then restart WorkBuddy. Removing a marketplace may
-also uninstall plugins installed from it, so reinstall Sourcebook afterward.
-
-## Other stdio MCP Agents
-
-For another Agent that supports local stdio MCP, follow the
-[manual MCP guide](https://github.com/Yanze-He/sourcebook-plugin/blob/main/.agents/plugins/sourcebook/INSTALL-MCP.md).
-Keep the helper at a stable user-level path and register only its `sourcebook`
-MCP server in that Agent's user configuration.
-
-If an Agent cannot write its user-level plugin or configuration directories, it
-must stop and ask you to use a local task with the necessary access or follow
-the manual guide. A downloaded archive alone is not an installed plugin.
+Give the next steps or the specific blocker without a long analysis or command
+logs. Report success only after verifying Sourcebook tools are available; then
+provide the plugin version and next action.
