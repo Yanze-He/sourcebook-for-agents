@@ -11,3 +11,5 @@ apps/service-go/.dev/
 *.sqlite-wal
 .DS_Store
 reports/
+# The landing page is privately maintained and deployed separately.
+apps/landing/
