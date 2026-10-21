@@ -11,7 +11,7 @@ sites, or connection targets change.
 - **Support URL:** https://sourcebook.online/obsidian-plugin/
 - **Privacy policy:** https://sourcebook.online/privacy.html
 - **Contact:** innovationhyz@gmail.com
-- **Package:** `artifacts/sourcebook-picker-0.1.4-chrome-web-store.zip`
+- **Package:** `artifacts/sourcebook-picker-0.1.5-chrome-web-store.zip`
 
 ### Short description
 
@@ -53,7 +53,7 @@ belongs to.
 
 ### Permissions and data use
 
-Picker uses `activeTab`, `contextMenus`, `storage`, `alarms`, and website access
+Picker uses `activeTab`, `contextMenus`, `storage`, and website access
 only to perform user-initiated Pick actions, keep local connection settings, and
 show the extension on supported webpages. It may process website content and
 selected AI-chat messages that you explicitly choose to save. Picker does not

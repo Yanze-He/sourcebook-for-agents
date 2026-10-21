@@ -11,7 +11,7 @@ export default defineConfig({
     description: "Pick web content and AI chats into local Sourcebook for Obsidian or Desktop.",
     // Keep Chrome's manifest version aligned with package.json so an installed
     // Picker is actually updated instead of continuing to run an old popup.
-    version: "0.1.4",
+    version: "0.1.5",
     // A public key gives unpacked builds a stable Chrome extension ID. The
     // production Store package deliberately omits it so Chrome keeps the ID
     // assigned to the Store listing.
@@ -20,7 +20,7 @@ export default defineConfig({
       : {
           key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjqCkqLDFC1uYPz2bE7ChFTX8PQwRnibxwjIxrOO9U1pdQRAv+xGZ1OWc512+VnmusG+sN5uJizh4Aq5V9SXQQFph8nuL4nCsGbzVFzUcMGUbdQ+ObJKPlP3BOQxKCZ07zipe+iy/UXs8AH5V7PC3iOZBBUX8DRB1wqqa4ZcCxJAHzhJbvHd9jn2WTmp2l+DtqxM9fgbp79gWrqYeOzkeLrMS1tAQam+9CQqtA7HxRr+4lgvxMvXt0npijGLz/xmUgHquqRet7HcGvMkBCYKdibCuaUjgVdTolgsclBO9XBSmTYWUXZJ/YeOlbPYiHUoA5T5EVh9lqFCbUw3zwdhh/QIDAQAB"
         }),
-    permissions: ["activeTab", "alarms", "contextMenus", "storage"],
+    permissions: ["activeTab", "contextMenus", "storage"],
     host_permissions: [
       "https://*/*",
       "http://*/*",
