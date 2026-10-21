@@ -49,10 +49,18 @@ Terminal.”**
 
 ## WorkBuddy
 
-WorkBuddy installation must be completed by the user in its interface. Do not
-try CLI installation, edit WorkBuddy configuration files, or claim success
-before the user completes the steps and Sourcebook tools are visible. Give the
-user these steps directly:
+WorkBuddy installation must be completed by the user in its interface. Give
+the user the steps below and stop. If the current chat cannot operate
+WorkBuddy's marketplace UI, do not try to compensate with local file or shell
+access.
+
+Never inspect `~/.workbuddy` or search the user's computer for plugin files.
+Do not download a release ZIP, install or copy plugin files, run the MCP binary,
+edit `mcp.json` or WorkBuddy's plugin registries, change Trust settings, or
+write installation reports or memory files. Do not switch to a manual MCP
+fallback, even if marketplace tools are unavailable or an older installation
+is detected. If the user asks you to perform installation, explain in one
+sentence that they need to complete these UI steps themselves:
 
 1. In **Skills → Suites → Add marketplace**, add `Yanze-He/sourcebook-plugin`.
 2. Install or update **sourcebook** from that marketplace.
@@ -64,8 +72,15 @@ If WorkBuddy reports **“Plugin sourcebook is not found in marketplace
 sourcebook-plugin”**, tell the user to remove the broken Sourcebook marketplace
 entry, add `Yanze-He/sourcebook-plugin` again through **Add marketplace**, and
 then install Sourcebook. Removing an entry may also remove its installed
-plugins, so explain that before asking the user to do it. Do not suggest adding
-an unpacked ZIP or temporary folder as a marketplace.
+plugins; warn the user before they do this. Do not suggest adding an unpacked
+ZIP or temporary folder as a marketplace.
+
+After the user completes the UI steps, they must restart WorkBuddy and start a
+new conversation. Treat installation as unconfirmed until Sourcebook tools are
+visible in that new conversation. If an old manual connection appears to
+override the marketplace install, do not inspect or change WorkBuddy's files;
+state the symptom and ask the user to follow WorkBuddy's documented connector
+management steps.
 
 ## Other Agents
 
