@@ -89,10 +89,8 @@ const copy = {
     newBook: "新增",
     newBookPlaceholder: "新 Book 名称",
     confirmBook: "确认",
-    view: "查看",
     moveFailed: "无法更改 Book",
     addNote: "添加备注",
-    openSources: "打开 Sourcebook",
     addNotePlaceholder: "添加备注...",
     addNoteAria: "为这个 Pick 添加备注",
     save: "保存",
@@ -145,10 +143,8 @@ const copy = {
     newBook: "New",
     newBookPlaceholder: "New Book name",
     confirmBook: "Done",
-    view: "View",
     moveFailed: "Could not change Book",
     addNote: "Add note",
-    openSources: "Open Sources",
     addNotePlaceholder: "Add note...",
     addNoteAria: "Add note to this Pick",
     save: "Save",
@@ -295,6 +291,10 @@ class WebPicker {
       if (message.type === "START_CHAT_MULTI_PICK") return Promise.resolve(this.startChatMultiPick());
       if (message.type === "CANCEL_CHAT_MULTI_PICK") return Promise.resolve(this.cancelChatMultiPick());
       if (message.type === "CONFIRM_CHAT_MULTI_PICK") return this.pickSelectedChatMessages();
+      if (message.type === "SHOW_CONTEXT_PICK_RESULT") {
+        this.showContextPickResult(message.payload, message.response);
+        return Promise.resolve({ status: "ok" });
+      }
       return undefined;
     });
   }
@@ -863,6 +863,8 @@ class WebPicker {
     const metadata = collectPageMetadata(document);
     const payload = this.basePayload("link", "whole_page", {
       contentUrl: location.href,
+      thumbnailUrl: metadata.ogImage,
+      thumbnailCandidates: metadata.ogImage ? [metadata.ogImage] : [],
       pageMetadata: metadata
     });
 
@@ -1395,6 +1397,13 @@ class WebPicker {
     return response;
   }
 
+  private showContextPickResult(payload: PickPayload, response: PickResponse | { status: "error"; message: string }) {
+    this.lastAttemptPayload = payload;
+    const task = this.createPickTask(payload);
+    if ("sourceItemId" in response) this.lastPick = response;
+    void this.completePickTask(task, response);
+  }
+
   private createPickTask(payload: PickPayload): PickTask {
     const element = document.createElement("section");
     element.className = "pick-task is-loading";
@@ -1503,12 +1512,7 @@ class WebPicker {
       else this.removeTaskLater(task);
     });
 
-    const view = document.createElement("button");
-    view.type = "button";
-    view.className = "pick-task-view";
-    view.textContent = text.view;
-    view.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES", bookId: task.sourceBookId || currentBookId } satisfies PickerMessage));
-    task.element.replaceChildren(this.taskPreview(task.payload), details, view, chooser);
+    task.element.replaceChildren(this.taskPreview(task.payload), details, chooser);
   }
 
   private renderFailedTask(task: PickTask, message: string) {
@@ -1709,12 +1713,7 @@ class WebPicker {
       note.textContent = text.addNote;
       note.addEventListener("click", () => this.renderNoteEditor(toast));
 
-      const open = document.createElement("button");
-      open.type = "button";
-      open.textContent = text.openSources;
-      open.addEventListener("click", () => void browser.runtime.sendMessage({ type: "OPEN_SOURCES", bookId: this.lastPick?.bookId } satisfies PickerMessage));
-
-      toast.element.append(note, open);
+      toast.element.append(note);
     }
 
     this.scheduleToastDismiss(toast);
@@ -2039,9 +2038,10 @@ class WebPicker {
         gap: 10px;
         pointer-events: auto;
         position: fixed;
-        right: 18px;
+        left: 18px;
         top: 18px;
-        width: min(396px, calc(100vw - 32px));
+        transform: none;
+        width: min(396px, calc(100vw - 36px));
         z-index: 2147483647;
       }
 

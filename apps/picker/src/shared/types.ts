@@ -149,6 +149,10 @@ export type PickerStatusResponse = {
   recentPicks: RecentPickSummary[];
   activeBookId?: string;
   books?: PickerBook[];
+  workspace?: "desktop" | "obsidian";
+  obsidianPaired?: boolean;
+  /** The locally remembered Obsidian pairing code. It stays until the Vault rotates it. */
+  pairingCode?: string;
 };
 
 export type PickerBook = { id: string; name: string };
@@ -186,7 +190,11 @@ export type PickerMessage =
   | { type: "UPDATE_SOURCE_NOTE"; sourceItemId: string; note: string }
   | { type: "MOVE_PICK_TO_BOOK"; sourceItemId: string; sourceBookId: string; targetBookId: string }
   | { type: "CREATE_BOOK"; name: string }
-  | { type: "SET_ACTIVE_BOOK"; bookId: string };
+  | { type: "SET_ACTIVE_BOOK"; bookId: string }
+  | { type: "SET_PICKER_WORKSPACE"; workspace: "desktop" | "obsidian" }
+  | { type: "PAIR_OBSIDIAN"; code: string }
+  | { type: "STAGE_OBSIDIAN_PAIRING_CODE"; code: string }
+  | { type: "SHOW_CONTEXT_PICK_RESULT"; payload: PickPayload; response: PickResponse | { status: "error"; message: string } };
 
 export type PickerMessageResponse =
   | PickResponse

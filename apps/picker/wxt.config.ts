@@ -4,7 +4,9 @@ export default defineConfig({
   manifest: {
     name: "Picker for Agent",
     description: "Pick web context and save it to Sourcebook for agents.",
-    version: "0.1.1",
+    // Keep Chrome's manifest version aligned with package.json so an installed
+    // Picker is actually updated instead of continuing to run an old popup.
+    version: "0.1.3",
     // A public key gives unpacked builds the same stable Chrome extension ID as
     // release builds. The Desktop uses that ID to distinguish this Picker from
     // other local extensions; no private key is stored in this repository.
@@ -14,7 +16,9 @@ export default defineConfig({
       "https://*/*",
       "http://*/*",
       "http://127.0.0.1:4177/*",
-      "http://localhost:4177/*"
+      "http://localhost:4177/*",
+      "http://127.0.0.1:27124/*",
+      "http://localhost:27124/*"
     ],
     web_accessible_resources: [
       {

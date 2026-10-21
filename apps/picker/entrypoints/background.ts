@@ -10,6 +10,10 @@ const LEGACY_PENDING_KEY = "pendingPicks";
 const LEGACY_RECENT_KEY = "recentPicks";
 const PICKER_ENABLED_KEY = "pickerEnabled";
 const ACTIVE_BOOK_KEY = "activeBookId";
+const WORKSPACE_KEY = "sourcebookPickerWorkspace";
+const OBSIDIAN_TOKEN_KEY = "sourcebookObsidianPickerToken";
+const OBSIDIAN_PAIRING_CODE_KEY = "sourcebookObsidianPickerPairingCode";
+const OBSIDIAN_ORIGIN = "http://127.0.0.1:27124";
 let resolvedServiceOrigin: string | undefined;
 const copy = {
   zh: {
@@ -65,6 +69,7 @@ type BookState = {
   activeBookId?: string;
   books: PickerBook[];
   needsBookSelection: boolean;
+  localServiceConnected: boolean;
 };
 
 class PickerApiError extends Error {
@@ -112,6 +117,9 @@ export default defineBackground(() => {
     if (message.type === "SET_ACTIVE_BOOK") return setActiveBook(message.bookId);
     if (message.type === "MOVE_PICK_TO_BOOK") return movePickToBook(message.sourceItemId, message.sourceBookId, message.targetBookId);
     if (message.type === "CREATE_BOOK") return createBook(message.name);
+    if (message.type === "SET_PICKER_WORKSPACE") return setWorkspace(message.workspace);
+    if (message.type === "PAIR_OBSIDIAN") return pairObsidian(message.code);
+    if (message.type === "STAGE_OBSIDIAN_PAIRING_CODE") return stageObsidianPairingCode(message.code);
     return undefined;
   });
 });
@@ -180,12 +188,12 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
   if (!tab?.url) return;
 
   if (info.menuItemId === "pick-page") {
-    await savePick(pagePayloadFromTab(tab));
+    await saveContextPick(tab, pagePayloadFromTab(tab));
     return;
   }
 
   if (info.menuItemId === "pick-selection" && info.selectionText) {
-    await savePick(basePayload(tab, "text", "selection", {
+    await saveContextPick(tab, basePayload(tab, "text", "selection", {
       contentText: info.selectionText.trim(),
       locator: {
         textQuote: { exact: info.selectionText.trim() }
@@ -195,7 +203,7 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
   }
 
   if (info.menuItemId === "pick-image" && info.srcUrl) {
-    await savePick(basePayload(tab, "image", "image", {
+    await saveContextPick(tab, basePayload(tab, "image", "image", {
       contentText: undefined,
       contentUrl: info.srcUrl,
       thumbnailUrl: info.srcUrl
@@ -204,7 +212,7 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
   }
 
   if (info.menuItemId === "pick-video" && info.srcUrl) {
-    await savePick(basePayload(tab, "video", "video", {
+    await saveContextPick(tab, basePayload(tab, "video", "video", {
       contentText: tab.title || info.srcUrl,
       contentUrl: info.srcUrl
     }));
@@ -212,7 +220,7 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
   }
 
   if (info.menuItemId === "pick-audio" && info.srcUrl) {
-    await savePick(basePayload(tab, "audio", "audio", {
+    await saveContextPick(tab, basePayload(tab, "audio", "audio", {
       contentText: tab.title || info.srcUrl,
       contentUrl: info.srcUrl
     }));
@@ -221,7 +229,7 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
 
   if (info.menuItemId === "pick-link" && info.linkUrl) {
     const title = info.selectionText?.trim() || info.linkUrl;
-    await savePick(basePayload(tab, "link", "link", {
+    await saveContextPick(tab, basePayload(tab, "link", "link", {
       contentUrl: info.linkUrl,
       sourceUrl: info.linkUrl,
       sourceTitle: title,
@@ -231,7 +239,21 @@ async function handleContextMenu(info: Browser.contextMenus.OnClickData, tab?: B
   }
 }
 
+async function saveContextPick(tab: Browser.tabs.Tab, payload: PickPayload): Promise<void> {
+  const result = await savePick(payload);
+  const feedback = result.status === "error" || result.status === "saved" || result.status === "duplicate"
+    ? result
+    : { status: "error" as const, message: text.pickFailed };
+  if (!tab.id) return;
+  await browser.tabs.sendMessage(tab.id, { type: "SHOW_CONTEXT_PICK_RESULT", payload, response: feedback } satisfies PickerMessage).catch(() => undefined);
+}
+
 async function serviceOrigin(): Promise<string> {
+  if (await workspace() === "obsidian") return obsidianOrigin();
+  return desktopServiceOrigin();
+}
+
+async function desktopServiceOrigin(): Promise<string> {
   if (resolvedServiceOrigin) return resolvedServiceOrigin;
 
   const stored = await browser.storage.local.get(SERVICE_ORIGIN_KEY);
@@ -239,26 +261,55 @@ async function serviceOrigin(): Promise<string> {
     .filter((value): value is string => typeof value === "string" && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(value))
     .filter((value, index, values) => values.indexOf(value) === index);
 
-  for (const origin of candidates) {
+  // Probe known local endpoints together.  A stale endpoint should not delay the
+  // first popup paint or postpone discovering a running Desktop app.
+  const probes = await Promise.all(candidates.map(async (origin) => {
     try {
       const response = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(800) });
       const health = response.ok ? await response.json() as { app?: string; connection?: { origin?: string } } : null;
-      if (health?.app !== "sourcebook-for-agents") continue;
-      resolvedServiceOrigin = health.connection?.origin && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(health.connection.origin) ? health.connection.origin : origin;
-      await browser.storage.local.set({ [SERVICE_ORIGIN_KEY]: resolvedServiceOrigin });
-      return resolvedServiceOrigin;
+      if (health?.app !== "sourcebook-for-agents") return undefined;
+      return health.connection?.origin && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(health.connection.origin) ? health.connection.origin : origin;
     } catch {
-      // Try the next known Sourcebook Desktop endpoint.
+      return undefined;
     }
+  }));
+  const resolved = probes.find((origin): origin is string => Boolean(origin));
+  if (resolved) {
+    resolvedServiceOrigin = resolved;
+    await browser.storage.local.set({ [SERVICE_ORIGIN_KEY]: resolvedServiceOrigin });
+    return resolvedServiceOrigin;
   }
 
   throw new LocalServiceUnavailableError("Sourcebook Desktop is unavailable.");
 }
 
+async function obsidianOrigin(): Promise<string> {
+  try {
+    const response = await fetch(`${OBSIDIAN_ORIGIN}/api/health`, { signal: AbortSignal.timeout(800) });
+    const health = response.ok ? await response.json() as { app?: string } : undefined;
+    if (health?.app === "sourcebook-obsidian") return OBSIDIAN_ORIGIN;
+  } catch { /* The vault may be closed. */ }
+  throw new LocalServiceUnavailableError("Sourcebook Obsidian is unavailable.");
+}
+
+async function workspace(): Promise<"desktop" | "obsidian"> {
+  const stored = await browser.storage.local.get(WORKSPACE_KEY);
+  return stored[WORKSPACE_KEY] === "obsidian" ? "obsidian" : "desktop";
+}
+
+async function activeBookKey(): Promise<string> { return (await workspace()) === "obsidian" ? `${ACTIVE_BOOK_KEY}:obsidian` : ACTIVE_BOOK_KEY; }
+
 async function serviceFetch(path: string, init?: RequestInit): Promise<Response> {
   const origin = await serviceOrigin();
   try {
-    return await fetch(`${origin}/api${path}`, init);
+    const headers = new Headers(init?.headers);
+    if (await workspace() === "obsidian") {
+      const stored = await browser.storage.local.get(OBSIDIAN_TOKEN_KEY);
+      const token = stored[OBSIDIAN_TOKEN_KEY];
+      if (typeof token !== "string" || !token) throw new LocalServiceUnavailableError("Pair Picker with Obsidian first.");
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return await fetch(`${origin}/api${path}`, { ...init, headers });
   } catch {
     if (resolvedServiceOrigin === origin) resolvedServiceOrigin = undefined;
     throw new LocalServiceUnavailableError("Sourcebook Desktop is unavailable.");
@@ -285,7 +336,7 @@ async function savePick(payload: PickPayload): Promise<PickerMessageResponse> {
 
     if (!response.ok) throw await responseError(response);
     let result: PickResponse = { ...((await response.json()) as PickResponse), bookId: preparedPayload.bookId };
-    if (preparedPayload.modality === "image" && !preparedPayload.contentBase64) {
+    if ((await workspace()) === "desktop" && preparedPayload.modality === "image" && !preparedPayload.contentBase64) {
       result = await downloadPickedImage(result, preparedPayload.bookId);
     }
     return result;
@@ -382,9 +433,19 @@ async function downloadPickedImage(result: PickResponse, bookId: string): Promis
 }
 
 async function getActivePickerStatus(): Promise<PickerMessageResponse> {
-  const enabled = await getPickerEnabled();
+  const [currentWorkspace, enabled, pairingCode, stored] = await Promise.all([
+    workspace(),
+    getPickerEnabled(),
+    storedObsidianPairingCode(),
+    browser.storage.local.get(OBSIDIAN_TOKEN_KEY)
+  ]);
   const bookState = await getBookState();
-  const recentResult = await getRecentPicks(bookState.activeBookId);
+  // When Desktop is not running, getBookState has already spent the bounded
+  // health-check budget. Avoid a second endpoint probe before the popup can
+  // switch from its loading shell to the connection screen.
+  const recentResult = bookState.localServiceConnected
+    ? await getRecentPicks(bookState.activeBookId)
+    : { items: [], localServiceConnected: false };
   const fallback: PickerStatusResponse = {
     status: "picker_status",
     mode: "idle",
@@ -395,7 +456,10 @@ async function getActivePickerStatus(): Promise<PickerMessageResponse> {
     localServiceConnected: recentResult.localServiceConnected,
     recentPicks: recentResult.items,
     activeBookId: bookState.activeBookId,
-    books: bookState.books
+    books: bookState.books,
+    workspace: currentWorkspace,
+    obsidianPaired: currentWorkspace === "obsidian" && Boolean(stored[OBSIDIAN_TOKEN_KEY])
+    ,pairingCode
   };
 
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -413,6 +477,9 @@ async function getActivePickerStatus(): Promise<PickerMessageResponse> {
       recentPicks: recentResult.items,
       activeBookId: bookState.activeBookId,
       books: bookState.books
+      ,workspace: currentWorkspace
+      ,obsidianPaired: currentWorkspace === "obsidian" && Boolean(stored[OBSIDIAN_TOKEN_KEY])
+      ,pairingCode
     };
   } catch {
     return fallback;
@@ -464,6 +531,11 @@ async function openSources(bookId?: string): Promise<PickerMessageResponse> {
   try {
     const origin = await serviceOrigin();
     const targetBookId = bookId || (await getBookState()).activeBookId;
+    if (await workspace() === "obsidian") {
+      const response = await serviceFetch(`/open${targetBookId ? `?bookId=${encodeURIComponent(targetBookId)}` : ""}`, { method: "POST" });
+      if (!response.ok) throw await responseError(response);
+      return { status: "ok" };
+    }
     const targetUrl = targetBookId ? `${origin}/?bookId=${encodeURIComponent(targetBookId)}` : `${origin}/`;
     const sourcebookTabs = await browser.tabs.query({ url: `${origin}/*` });
     const existingTab = sourcebookTabs.find((tab) => tab.id && tab.url && new URL(tab.url).origin === origin);
@@ -538,8 +610,9 @@ async function createBook(name: string): Promise<PickerMessageResponse> {
 }
 
 async function getBookState(): Promise<BookState> {
-  const stored = await browser.storage.local.get(ACTIVE_BOOK_KEY);
-  const remembered = typeof stored[ACTIVE_BOOK_KEY] === "string" ? stored[ACTIVE_BOOK_KEY] : undefined;
+  const key = await activeBookKey();
+  const stored = await browser.storage.local.get(key);
+  const remembered = typeof stored[key] === "string" ? stored[key] : undefined;
   try {
     const response = await serviceFetch("/books");
     if (!response.ok) throw await responseError(response);
@@ -547,10 +620,10 @@ async function getBookState(): Promise<BookState> {
     const books = Array.isArray(value.books) ? value.books : [];
     const rememberedStillExists = !remembered || books.some((book) => book.id === remembered);
     const activeBookId = remembered ? (rememberedStillExists ? remembered : undefined) : value.activeBookId;
-    if (!remembered && activeBookId) await browser.storage.local.set({ [ACTIVE_BOOK_KEY]: activeBookId });
-    return { activeBookId, books, needsBookSelection: Boolean(remembered && !rememberedStillExists) };
+    if (!remembered && activeBookId) await browser.storage.local.set({ [key]: activeBookId });
+    return { activeBookId, books, needsBookSelection: Boolean(remembered && !rememberedStillExists), localServiceConnected: true };
   } catch {
-    return { activeBookId: remembered, books: [], needsBookSelection: false };
+    return { activeBookId: remembered, books: [], needsBookSelection: false, localServiceConnected: false };
   }
 }
 
@@ -565,11 +638,41 @@ async function setActiveBook(bookId: string): Promise<PickerMessageResponse> {
   try {
     const { books } = await getBookState();
     if (!books.some((book) => book.id === bookId)) throw new PickerApiError("BOOK_NOT_FOUND", text.missingBook, 404);
-    await browser.storage.local.set({ [ACTIVE_BOOK_KEY]: bookId });
+    await browser.storage.local.set({ [await activeBookKey()]: bookId });
     return { status: "ok" };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : text.bookSelectFailed };
   }
+}
+
+async function setWorkspace(next: "desktop" | "obsidian"): Promise<PickerMessageResponse> {
+  await browser.storage.local.set({ [WORKSPACE_KEY]: next });
+  resolvedServiceOrigin = undefined;
+  return { status: "ok" };
+}
+
+async function pairObsidian(code: string): Promise<PickerMessageResponse> {
+  try {
+    const response = await fetch(`${OBSIDIAN_ORIGIN}/api/pair`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    if (!response.ok) throw await responseError(response);
+    const body = await response.json() as { token?: string };
+    if (!body.token) throw new Error("Obsidian did not return a pairing token.");
+    await browser.storage.local.set({ [WORKSPACE_KEY]: "obsidian", [OBSIDIAN_TOKEN_KEY]: body.token });
+    return { status: "ok" };
+  } catch (error) { return { status: "error", message: error instanceof Error ? error.message : "Obsidian pairing failed." }; }
+}
+
+async function storedObsidianPairingCode(): Promise<string | undefined> {
+  const stored = await browser.storage.local.get(OBSIDIAN_PAIRING_CODE_KEY);
+  const code = stored[OBSIDIAN_PAIRING_CODE_KEY];
+  return typeof code === "string" && code.trim() ? code : undefined;
+}
+
+async function stageObsidianPairingCode(value: string): Promise<PickerMessageResponse> {
+  const code = value.trim().toUpperCase();
+  if (!code) { await browser.storage.local.remove(OBSIDIAN_PAIRING_CODE_KEY); return { status: "ok" }; }
+  await browser.storage.local.set({ [OBSIDIAN_PAIRING_CODE_KEY]: code });
+  return { status: "ok" };
 }
 
 function pagePayloadFromTab(tab: Browser.tabs.Tab): Omit<PickPayload, "bookId"> {

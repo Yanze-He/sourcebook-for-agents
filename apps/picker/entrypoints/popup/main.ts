@@ -8,9 +8,15 @@ import "./style.css";
 const status = document.querySelector<HTMLSpanElement>("#status");
 const pickerContent = document.querySelector<HTMLElement>("#picker-content");
 const connectionGate = document.querySelector<HTMLElement>("#connection-gate");
+const popupLoading = document.querySelector<HTMLElement>("#popup-loading");
+const popupLoadingLabel = document.querySelector<HTMLElement>("#popup-loading-label");
 const connectionStatus = document.querySelector<HTMLParagraphElement>("#connection-status");
-const connectionRefresh = document.querySelector<HTMLButtonElement>("#connection-refresh");
+const connectionPairForm = document.querySelector<HTMLFormElement>("#connection-obsidian-form");
+const connectionPair = document.querySelector<HTMLButtonElement>("#connection-pair");
+const connectionRetry = document.querySelector<HTMLButtonElement>("#connection-retry");
 const connectionDownload = document.querySelector<HTMLButtonElement>("#connection-download");
+const connectionDesktopStatus = document.querySelector<HTMLParagraphElement>("#connection-desktop-status");
+const connectionCode = document.querySelector<HTMLInputElement>("#connection-code");
 const pickerToggle = document.querySelector<HTMLButtonElement>("#picker-toggle");
 const pickerToggleLabel = document.querySelector<HTMLSpanElement>("#picker-toggle-label");
 const settingsMenu = document.querySelector<HTMLElement>("#settings-menu");
@@ -19,12 +25,13 @@ const settingsPopover = document.querySelector<HTMLElement>("#settings-popover")
 const settingsHelp = document.querySelector<HTMLButtonElement>("#settings-help");
 const settingsFeedback = document.querySelector<HTMLButtonElement>("#settings-feedback");
 const settingsLanguage = document.querySelector<HTMLButtonElement>("#settings-language");
+const connectionSwitch = document.querySelector<HTMLButtonElement>("#connection-switch");
+const connectionIndicator = document.querySelector<HTMLElement>("#connection-indicator");
 const settingsPositionLabel = document.querySelector<HTMLElement>("#settings-position-label");
 const settingsPositionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-picker-position]"));
 const pickPage = document.querySelector<HTMLButtonElement>("#pick-page");
 const startPicking = document.querySelector<HTMLButtonElement>("#start-picking");
 const selectChatMessages = document.querySelector<HTMLButtonElement>("#select-chat-messages");
-const openSources = document.querySelector<HTMLButtonElement>("#open-sources");
 const recentPicks = document.querySelector<HTMLDivElement>("#recent-picks");
 const bookControl = document.querySelector<HTMLElement>("#book-control");
 const bookToggle = document.querySelector<HTMLButtonElement>("#book-toggle");
@@ -34,12 +41,13 @@ const bookMenu = document.querySelector<HTMLElement>("#book-menu");
 type Locale = "zh" | "en";
 let locale: Locale = storedPickerLanguage(window.localStorage.getItem(PICKER_LANGUAGE_KEY));
 let overlayPosition: PickerOverlayPosition = storedPickerOverlayPosition(window.localStorage.getItem(PICKER_OVERLAY_POSITION_KEY));
-const HELP_URL = "https://sourcebook.online";
+const HELP_URL = "https://sourcebook.online/obsidian-plugin/";
 const FEEDBACK_URL = "https://sourcebook.online/feedback/";
 const DOWNLOAD_URL = "https://sourcebook.online/#download";
 const copy = {
   zh: {
     checking: "正在检查 Picker 状态",
+    opening: "正在打开 Picker…",
     overlayOn: "Picker 已开启",
     overlayOff: "Picker 已关闭",
     overlayOnLabel: "关闭 Picker",
@@ -58,7 +66,7 @@ const copy = {
     switchLanguage: "English",
     helpLabel: "打开帮助文档",
     helpHint: "Picker 正在打开帮助文档。",
-    openSources: "打开 Sourcebook",
+    recentMoreHint: "打开 Sourcebook 查看更多",
     chooseBook: "选择保存 Book",
     defaultSaveTo: "默认保存至：",
     book: "Book",
@@ -112,6 +120,7 @@ const copy = {
   },
   en: {
     checking: "Checking Picker status",
+    opening: "Opening Picker…",
     overlayOn: "Picker is on",
     overlayOff: "Picker is off",
     overlayOnLabel: "Turn off Picker",
@@ -130,7 +139,7 @@ const copy = {
     switchLanguage: "中文",
     helpLabel: "Open help docs",
     helpHint: "Picker is opening help documentation.",
-    openSources: "Open Sourcebook",
+    recentMoreHint: "Open Sourcebook to see more",
     chooseBook: "Choose a Book",
     defaultSaveTo: "Save picks to:",
     book: "Book",
@@ -189,9 +198,12 @@ let currentMode: PickerMode = "idle";
 let isEnabled = false;
 let localServiceConnected = false;
 let pickerAttentionTimer: number | undefined;
-let lastConnectionRefresh: Date | undefined;
-let connectionRefreshFailed = false;
 let currentPostPlatform: PickerStatusResponse["postPlatform"];
+let currentWorkspace: "desktop" | "obsidian" = "desktop";
+let connectionTargetOpen = false;
+let connectionTarget: "chooser" | "obsidian" | "desktop" = "chooser";
+let connectionFailed = false;
+let pairingDraftTimer: number | undefined;
 
 applyStaticText();
 void browser.storage.local.set({ [PICKER_LANGUAGE_KEY]: locale });
@@ -201,6 +213,7 @@ settingsMenu?.addEventListener("click", (event) => event.stopPropagation());
 settingsHelp?.addEventListener("click", () => void openHelp());
 settingsFeedback?.addEventListener("click", () => void openFeedback());
 settingsLanguage?.addEventListener("click", () => switchLanguage());
+connectionSwitch?.addEventListener("click", () => showConnectionTargetChooser());
 settingsPositionButtons.forEach((button) => button.addEventListener("click", () => setOverlayPosition(storedPickerOverlayPosition(button.dataset.pickerPosition))));
 pickPage?.addEventListener("click", () => {
   if (showBlockedReason(pickPage)) return;
@@ -214,11 +227,15 @@ selectChatMessages?.addEventListener("click", () => {
   if (showBlockedReason(selectChatMessages)) return;
   void toggleChatPickMode();
 });
-openSources?.addEventListener("click", () => {
-  void browser.runtime.sendMessage({ type: "OPEN_SOURCES" } satisfies PickerMessage);
-});
-connectionRefresh?.addEventListener("click", () => void refreshPickerStatus(true));
+connectionPairForm?.addEventListener("submit", (event) => { event.preventDefault(); void pairObsidian(); });
+connectionRetry?.addEventListener("click", () => void connectDesktop());
 connectionDownload?.addEventListener("click", () => void openDownload());
+connectionCode?.addEventListener("input", () => {
+  if (pairingDraftTimer) window.clearTimeout(pairingDraftTimer);
+  pairingDraftTimer = window.setTimeout(() => {
+    void browser.runtime.sendMessage({ type: "STAGE_OBSIDIAN_PAIRING_CODE", code: connectionCode?.value || "" } satisfies PickerMessage);
+  }, 180);
+});
 bookToggle?.addEventListener("click", (event) => { event.stopPropagation(); toggleBooks(); });
 bookControl?.addEventListener("click", (event) => event.stopPropagation());
 
@@ -301,7 +318,10 @@ async function toggleChatPickMode() {
 }
 
 async function refreshPickerStatus(reportConnectionAttempt = false) {
-  if (reportConnectionAttempt) setConnectionRefreshState("checking");
+  if (reportConnectionAttempt && connectionTarget === "desktop") {
+    connectionFailed = false;
+    renderConnectionGate();
+  }
 
   try {
     const response = (await browser.runtime.sendMessage({ type: "GET_PICKER_STATUS" } satisfies PickerMessage)) as PickerMessageResponse;
@@ -311,10 +331,22 @@ async function refreshPickerStatus(reportConnectionAttempt = false) {
     }
 
     applyPickerStatus(response);
-    if (!response.localServiceConnected && reportConnectionAttempt) setConnectionRefreshState("failed");
+    if (!response.localServiceConnected && reportConnectionAttempt && connectionTarget === "desktop") {
+      connectionFailed = true;
+      renderConnectionGate();
+    }
   } catch {
     setUnavailableState(reportConnectionAttempt);
+  } finally {
+    setPopupLoading(false);
   }
+}
+
+function setPopupLoading(loading: boolean) {
+  if (popupLoading) popupLoading.hidden = !loading;
+  if (!loading) return;
+  if (pickerContent) pickerContent.hidden = true;
+  if (connectionGate) connectionGate.hidden = true;
 }
 
 function setStatus(message: string) {
@@ -325,6 +357,7 @@ function setStatus(message: string) {
 function applyStaticText() {
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
   if (status) status.textContent = text.checking;
+  if (popupLoadingLabel) popupLoadingLabel.textContent = text.opening;
   if (settingsToggle) {
     settingsToggle.setAttribute("aria-label", text.settings);
     settingsToggle.title = text.settings;
@@ -345,36 +378,35 @@ function applyStaticText() {
   if (selectChatMessages) setActionLabel(selectChatMessages, text.selectMessages);
   const recentTitle = document.querySelector<HTMLElement>(".recent-panel .panel-title strong");
   if (recentTitle) recentTitle.textContent = text.recentPick;
+  const recentMoreHint = document.querySelector<HTMLElement>(".recent-more-hint");
+  if (recentMoreHint) recentMoreHint.textContent = text.recentMoreHint;
   const recentLimit = document.querySelector<HTMLElement>(".recent-limit");
   if (recentLimit) recentLimit.textContent = text.recentLimit;
   const empty = recentPicks?.querySelector("p");
   if (empty) empty.textContent = text.noRecent;
-  if (openSources) setActionLabel(openSources, text.openSources);
-  const connectionTitle = connectionGate?.querySelector<HTMLElement>("strong");
-  if (connectionTitle) connectionTitle.textContent = text.connectionTitle;
-  const connectionBody = connectionGate?.querySelector<HTMLParagraphElement>("p");
-  if (connectionBody) connectionBody.textContent = text.connectionBody;
-  if (connectionRefresh) connectionRefresh.textContent = text.refreshConnection;
-  if (connectionDownload) connectionDownload.textContent = text.downloadApp;
-  if (connectionStatus && connectionRefreshFailed && lastConnectionRefresh) {
-    connectionStatus.textContent = text.refreshFailed(formatConnectionRefreshTime(lastConnectionRefresh));
-  }
+  renderConnectionGate();
 }
 
 function applyPickerStatus(response: PickerStatusResponse) {
+  setPopupLoading(false);
+  currentWorkspace = response.workspace || "desktop";
   currentMode = response.mode;
   isEnabled = response.enabled;
   localServiceConnected = response.localServiceConnected;
   currentPostPlatform = response.postPlatform;
-  setConnectionGate(!response.localServiceConnected);
+  if (connectionIndicator) {
+    const destination = currentWorkspace === "obsidian" ? "Obsidian" : "Desktop";
+    connectionIndicator.textContent = response.localServiceConnected
+      ? (locale === "zh" ? `已连接 ${destination}` : `Connected to ${destination}`)
+      : (locale === "zh" ? "未连接" : "Not connected");
+  }
+  if (connectionCode && !connectionCode.matches(":focus") && !connectionCode.value && response.pairingCode) connectionCode.value = response.pairingCode;
+  if (response.localServiceConnected && connectionTarget !== "chooser") connectionTargetOpen = false;
+  setConnectionGate(!response.localServiceConnected || connectionTargetOpen);
+  renderConnectionGate();
   if (response.localServiceConnected) {
-    connectionRefreshFailed = false;
-    lastConnectionRefresh = undefined;
+    connectionFailed = false;
     if (connectionStatus) connectionStatus.textContent = "";
-    if (connectionRefresh) {
-      connectionRefresh.disabled = false;
-      connectionRefresh.textContent = text.refreshConnection;
-    }
   }
   if (!response.localServiceConnected) {
     closeBooks();
@@ -410,39 +442,103 @@ function applyPickerStatus(response: PickerStatusResponse) {
   renderBooks(response.books ?? [], response.activeBookId, !response.activeBookId);
 }
 
+function connectionStrings() {
+  return locale === "zh"
+    ? { title: "请选择 Picker 的连接对象", body: "选择你正在使用的 Sourcebook。", obsidian: "方式1: 连接 Obsidian", obsidianHint: "融入知识管理软件生态", desktop: "方式2: 连接 Desktop App", desktopHint: "和本地Agent的最佳协作方式", code: "配对码", pair: "连接", obsidianFailed: "连接失败，请检查配对码后重试。", desktopFailed: "连接失败，请先启动本地应用。", retry: "连接", download: "去下载", switchTarget: "切换连接对象", codeRequired: "请输入 Obsidian 配对码。", pairing: "正在连接 Obsidian…" }
+    : { title: "Choose a Picker connection", body: "Select the Sourcebook you are using.", obsidian: "Method 1: Connect Obsidian", obsidianHint: "Fit into your knowledge-management ecosystem", desktop: "Method 2: Connect Desktop App", desktopHint: "The best way to collaborate with local agents", code: "Pairing code", pair: "Connect", obsidianFailed: "Connection failed. Check the pairing code and retry.", desktopFailed: "Connection failed. Start the local app, then retry.", retry: "Connect", download: "Get App", switchTarget: "Switch connection target", codeRequired: "Enter the Obsidian pairing code.", pairing: "Connecting to Obsidian…" };
+}
+
+function renderConnectionGate() {
+  const labels = connectionStrings();
+  const title = document.querySelector<HTMLElement>("#connection-title");
+  const body = document.querySelector<HTMLParagraphElement>("#connection-body");
+  if (title) title.textContent = labels.title;
+  if (body) body.textContent = labels.body;
+  const obsidianTitle = connectionGate?.querySelector<HTMLElement>('[data-connection-target="obsidian"] b');
+  const obsidianHint = connectionGate?.querySelector<HTMLElement>('[data-connection-target="obsidian"] small');
+  const desktopTitle = connectionGate?.querySelector<HTMLElement>('[data-connection-target="desktop"] b');
+  const desktopHint = connectionGate?.querySelector<HTMLElement>('[data-connection-target="desktop"] small');
+  if (obsidianTitle) obsidianTitle.textContent = labels.obsidian;
+  if (obsidianHint) obsidianHint.textContent = labels.obsidianHint;
+  if (desktopTitle) desktopTitle.textContent = labels.desktop;
+  if (desktopHint) desktopHint.textContent = labels.desktopHint;
+  if (connectionPair) connectionPair.textContent = labels.pair;
+  const codeLabel = connectionPairForm?.querySelector("label span");
+  if (codeLabel) codeLabel.textContent = labels.code;
+  if (connectionCode) connectionCode.placeholder = locale === "zh" ? "请输入配对码…" : "Enter pairing code…";
+  if (connectionDesktopStatus) { connectionDesktopStatus.textContent = labels.desktopFailed; connectionDesktopStatus.hidden = connectionTarget !== "desktop" || !connectionFailed; }
+  if (connectionRetry) connectionRetry.textContent = labels.pair;
+  if (connectionDownload) connectionDownload.textContent = labels.download;
+}
+
+function showConnectionTargetChooser() {
+  connectionTargetOpen = true;
+  connectionTarget = "chooser";
+  connectionFailed = false;
+  if (connectionStatus) connectionStatus.textContent = "";
+  if (connectionDesktopStatus) connectionDesktopStatus.hidden = true;
+  closeSettings();
+  setConnectionGate(true);
+  renderConnectionGate();
+}
+
+async function pairObsidian() {
+  // The pairing form stays visible on the chooser. Record its destination before
+  // attempting the handshake so a successful connection can leave setup.
+  connectionTarget = "obsidian";
+  connectionTargetOpen = true;
+  const code = connectionCode?.value.trim() || "";
+  const labels = connectionStrings();
+  if (!code) { if (connectionStatus) connectionStatus.textContent = labels.codeRequired; return; }
+  if (connectionPair) connectionPair.disabled = true;
+  if (connectionStatus) connectionStatus.textContent = labels.pairing;
+  const response = await browser.runtime.sendMessage({ type: "PAIR_OBSIDIAN", code } satisfies PickerMessage) as PickerMessageResponse;
+  if (connectionPair) connectionPair.disabled = false;
+  if (response?.status === "error") {
+    connectionFailed = true;
+    if (connectionStatus) connectionStatus.textContent = labels.obsidianFailed;
+    renderConnectionGate();
+    return;
+  }
+  void browser.runtime.sendMessage({ type: "STAGE_OBSIDIAN_PAIRING_CODE", code } satisfies PickerMessage);
+  await refreshPickerStatus();
+}
+
+async function connectDesktop() {
+  connectionTargetOpen = true;
+  connectionTarget = "desktop";
+  connectionFailed = false;
+  renderConnectionGate();
+  const response = await browser.runtime.sendMessage({ type: "SET_PICKER_WORKSPACE", workspace: "desktop" } satisfies PickerMessage) as PickerMessageResponse;
+  if (response?.status === "error") {
+    connectionFailed = true;
+    renderConnectionGate();
+    return;
+  }
+  currentWorkspace = "desktop";
+  await refreshPickerStatus(true);
+}
+
+// The popup can remain open while a pairing request completes elsewhere. Keep
+// its connection badge and gate in sync without requiring a manual reopen.
+window.setInterval(() => {
+  if (connectionGate && !connectionGate.hidden) void refreshPickerStatus();
+}, 900);
+
 function setUnavailableState(reportConnectionAttempt = false) {
   currentMode = "idle";
   isEnabled = false;
   localServiceConnected = false;
   setConnectionGate(true);
-  if (reportConnectionAttempt) setConnectionRefreshState("failed");
+  if (reportConnectionAttempt && connectionTarget === "desktop") connectionFailed = true;
+  renderConnectionGate();
   closeBooks();
 }
 
-function setConnectionRefreshState(state: "checking" | "failed") {
-  if (!connectionStatus || !connectionRefresh) return;
-
-  if (state === "checking") {
-    connectionRefresh.disabled = true;
-    connectionRefresh.textContent = text.refreshingConnection;
-    connectionStatus.textContent = text.refreshingConnection;
-    return;
-  }
-
-  lastConnectionRefresh = new Date();
-  connectionRefreshFailed = true;
-  connectionRefresh.disabled = false;
-  connectionRefresh.textContent = text.refreshConnection;
-  connectionStatus.textContent = text.refreshFailed(formatConnectionRefreshTime(lastConnectionRefresh));
-}
-
-function formatConnectionRefreshTime(value: Date): string {
-  return formatLocalDateTime(value);
-}
-
 function setConnectionGate(disconnected: boolean) {
-  if (pickerContent) pickerContent.hidden = disconnected;
-  if (connectionGate) connectionGate.hidden = !disconnected;
+  const visible = disconnected || connectionTargetOpen;
+  if (pickerContent) pickerContent.hidden = visible;
+  if (connectionGate) connectionGate.hidden = !visible;
 }
 
 function renderBooks(books: PickerBook[], activeBookId?: string, needsSelection = false) {
@@ -502,7 +598,7 @@ function labelForMode(mode: PickerMode, pageAvailable: boolean): string {
 
 function updatePickerToggle() {
   if (!pickerToggle) return;
-  if (pickerToggleLabel) pickerToggleLabel.textContent = isEnabled ? text.overlayOn : text.overlayOff;
+  if (pickerToggleLabel) pickerToggleLabel.textContent = isEnabled ? "On" : "Off";
   pickerToggle.setAttribute("aria-label", isEnabled ? text.overlayOnLabel : text.overlayOffLabel);
   pickerToggle.setAttribute("aria-pressed", String(isEnabled));
   pickerToggle.dataset.active = String(isEnabled);
@@ -649,6 +745,7 @@ function renderRecentPicks(items: RecentPickSummary[]) {
     recentPicks.append(row);
   }
 }
+
 
 function createRecentFallback(modality: RecentPickSummary["modality"]): HTMLElement {
   const fallback = document.createElement("span");

@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Picker for Agent</title>
+    <!-- This is deliberately inline: it paints before the application bundle or
+         local-service check starts, so the toolbar popup never appears blank. -->
+    <style>
+      html, body { background: #f7f6f1; color: #151513; margin: 0; min-width: 392px; width: 392px; }
+      .popup { min-height: 126px; padding: 14px; }
+      .popup-loading { align-items: center; display: flex; font: 680 12px/1.2 system-ui, sans-serif; gap: 9px; justify-content: center; min-height: 126px; color: #76746e; }
+      .popup-loading-spinner { animation: picker-loading-spin 800ms linear infinite; border: 2px solid #dedcd5; border-radius: 999px; border-top-color: #1769ff; height: 16px; width: 16px; }
+      @keyframes picker-loading-spin { to { transform: rotate(360deg); } }
+    </style>
     <script type="module" src="./main.ts"></script>
   </head>
   <body>
@@ -40,15 +49,22 @@
         </div>
       </div>
 
-      <div id="picker-content" class="picker-content">
+      <section id="popup-loading" class="popup-loading" role="status" aria-live="polite">
+        <span class="popup-loading-spinner" aria-hidden="true"></span>
+        <span id="popup-loading-label">正在打开 Picker…</span>
+      </section>
+
+      <div id="picker-content" class="picker-content" hidden>
       <header class="topbar">
         <div class="brand">
           <span class="sourcebook-mark"><img src="/sourcebook-mark.png" alt="" /></span>
-          <div class="picker-wordmark">picker<span>for agent</span></div>
+          <div class="picker-wordmark">picker</div>
+          <span id="connection-indicator" class="picker-connection-indicator">已连接 Desktop</span>
+          <button id="connection-switch" class="connection-switch" type="button" aria-label="切换连接对象" title="切换连接对象"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3"/><path d="m19 7-3 3M5 17l3-3"/></svg></button>
         </div>
         <div class="top-actions">
           <button id="picker-toggle" class="toggle-button" type="button" aria-pressed="false">
-            <span id="picker-toggle-label">Picker 关</span>
+            <span id="picker-toggle-label">Off</span>
           </button>
         </div>
       </header>
@@ -109,21 +125,10 @@
       <section class="recent-panel" aria-label="Recent picks">
         <div class="panel-title">
           <strong>最近 Pick</strong>
+          <small class="recent-more-hint">打开 Sourcebook 查看更多</small>
         </div>
         <div id="recent-picks" class="recent-list">
           <p>还没有最近内容。</p>
-        </div>
-        <div class="sources-actions">
-          <button id="open-sources" type="button">
-            <span class="sources-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M14 4h6v6" />
-                <path d="m20 4-9 9" />
-                <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
-              </svg>
-            </span>
-            <span class="button-label">打开 Sourcebook</span>
-          </button>
         </div>
       </section>
 
@@ -132,15 +137,26 @@
       </div>
 
       <section id="connection-gate" class="connection-gate" aria-live="polite" hidden>
-        <span class="connection-mark"><img src="/sourcebook-mark.png" alt="" /></span>
-        <div>
-          <strong>Sourcebook Desktop 未连接</strong>
-          <p>请先启动 Sourcebook Desktop，等待它打开后，再点击“重新连接”。</p>
+        <div class="connection-heading">
+          <span class="connection-mark"><img src="/sourcebook-mark.png" alt="" /></span>
+          <div><strong id="connection-title">请选择 Picker 的连接对象</strong><p id="connection-body">选择你正在使用的 Sourcebook。</p></div>
         </div>
-        <p id="connection-status" class="connection-status" role="status" aria-live="polite"></p>
-        <div class="connection-actions">
-          <button id="connection-refresh" type="button">重新连接</button>
-          <button id="connection-download" class="connection-download" type="button">下载应用</button>
+        <div class="connection-targets">
+          <section class="connection-target" data-connection-target="obsidian">
+            <div class="connection-target-button"><span class="connection-target-icon is-obsidian" aria-hidden="true"><img src="https://obsidian.md/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" /></span><span><b>方式1: 连接 Obsidian</b><small>连接当前 Vault 中的 Sourcebook</small></span></div>
+            <form id="connection-obsidian-form" class="connection-pair-form">
+              <label><span>配对码</span><input id="connection-code" autocomplete="one-time-code" placeholder="请输入配对码…" /></label>
+              <button id="connection-pair" class="connection-primary" type="submit">连接</button>
+              <p id="connection-status" class="connection-status" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="connection-target" data-connection-target="desktop">
+            <div class="connection-target-button"><span class="connection-target-icon" aria-hidden="true"><img src="/sourcebook-mark.png" alt="" /></span><span><b>方式2: 连接 Desktop App</b><small>连接本机运行的 Sourcebook</small></span></div>
+            <div class="connection-desktop-error">
+              <div><button id="connection-download" class="connection-download" type="button">去下载</button><button id="connection-retry" class="connection-primary" type="button">连接</button></div>
+              <p id="connection-desktop-status" class="connection-status" role="status" aria-live="polite" hidden>连接失败，请先启动本地应用。</p>
+            </div>
+          </section>
         </div>
       </section>
 
