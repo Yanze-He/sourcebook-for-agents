@@ -7,6 +7,7 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
+    "zip:store": "node scripts/zip-store.mjs",
     "typecheck": "wxt prepare && tsc --noEmit",
     "test": "node --test tests/*.test.mjs"
   },

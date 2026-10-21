@@ -10,7 +10,15 @@ This directory contains the Sourcebook for Agents Chrome/Chromium extension and 
    npm install
    ```
 
-2. Build and start the browser-first Sourcebook Desktop. Its local API is the single data store for Pick, Sources, and Pack:
+2. Start one of the two local Sourcebook connection targets:
+
+   - **Sourcebook for Obsidian** in the current Vault. Open the plugin's
+     “连接 Picker” panel, copy its pairing code, then choose Obsidian in
+     Picker and connect with that code.
+   - **Sourcebook Desktop** on this computer. Start the app, then choose
+     Desktop App in Picker and click Connect.
+
+   For Desktop development, build and start the local app:
 
    ```bash
    cd ../..
@@ -26,11 +34,13 @@ This directory contains the Sourcebook for Agents Chrome/Chromium extension and 
 
 4. Load the generated extension from `.output/chrome-mv3` in Chrome's extension page.
 
-5. Open the local Sources:
+5. For Desktop development, open the connected Sourcebook and choose a Book:
 
    ```text
    http://127.0.0.1:4177/
    ```
+
+   For Obsidian, open the Sourcebook view in the paired Vault instead.
 
 ## MVP Scope
 
@@ -38,7 +48,9 @@ This directory contains the Sourcebook for Agents Chrome/Chromium extension and 
 - Pick visible images (PNG, JPEG, GIF, WebP). Picker automatically attempts to copy each image into the current Book; when the browser cannot read an image directly, Sourcebook tries the original source link. If the site blocks the request, the Pick remains available as a source link.
 - Pick links.
 - Pick lightweight webpage metadata.
-- Save all picks to Sources.
-- Require Sourcebook Desktop to be connected before exposing Pick controls; the popup offers refresh and Desktop download actions when the local service is unavailable.
+- Save all Picks to the selected Book in the connected Sourcebook.
+- Connect to either the current Vault's Sourcebook for Obsidian plugin or the
+  local Sourcebook Desktop app. Pairing data remains on the device; no account
+  or cloud sync is required.
 - Pick individual, selected, or visible messages from supported AI chat pages.
 - Reload the unpacked extension in Chrome after rebuilding, then refresh the source page.
