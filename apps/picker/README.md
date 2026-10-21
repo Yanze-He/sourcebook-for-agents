@@ -1,6 +1,6 @@
-# Sourcebook for Agents Picker
+# Sourcebook Picker
 
-This directory contains the Sourcebook for Agents Chrome/Chromium extension and its local Pick integration.
+This directory contains the Sourcebook Picker Chrome/Chromium extension and its local Pick integration.
 
 ## Run
 

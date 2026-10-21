@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Picker for Agent
+# Chrome Web Store listing — Sourcebook Picker
 
 This file is the approved source copy for the Picker listing. Update it together
 with the Store privacy disclosure whenever permissions, captured data, supported
@@ -6,23 +6,22 @@ sites, or connection targets change.
 
 ## Store fields
 
-- **Name:** Picker for Agent
+- **Name:** Sourcebook Picker
 - **Category:** Productivity
 - **Support URL:** https://sourcebook.online/obsidian-plugin/
 - **Privacy policy:** https://sourcebook.online/privacy.html
 - **Contact:** innovationhyz@gmail.com
-- **Package:** `artifacts/sourcebook-picker-0.1.3-chrome-web-store.zip`
+- **Package:** `artifacts/sourcebook-picker-0.1.4-chrome-web-store.zip`
 
 ### Short description
 
-Pick web pages, links, media, and AI chats into Sourcebook for Obsidian or
-Sourcebook Desktop—local, organized, and ready for your next agent task.
+Pick web content and AI chats into local Sourcebook for Obsidian or Desktop.
 
 ### Detailed description
 
 Save what matters from the web, then keep it ready for the next task.
 
-Picker for Agent lets you save useful material from the page you are already
+Sourcebook Picker lets you save useful material from the page you are already
 reading directly to a Book in Sourcebook. It works with either connection target
 you use:
 
@@ -39,7 +38,7 @@ organize it by project, and prepare focused context for the agent you choose.
 ### How it works
 
 1. Install Sourcebook for Obsidian or start Sourcebook Desktop.
-2. Open Picker for Agent on a webpage.
+2. Open Sourcebook Picker on a webpage.
 3. Choose **Connect Obsidian** and enter the pairing code, or choose
    **Connect Desktop App** and connect to the running app.
 4. Choose a Book and Pick what matters.
@@ -63,7 +62,7 @@ advertising. See the privacy policy for details.
 
 ## 中文产品介绍
 
-Picker for Agent 可以把网页、链接、图片、视频和音频来源、帖子，以及支持的
+Sourcebook Picker 可以把网页、链接、图片、视频和音频来源、帖子，以及支持的
 AI 对话保存到 Sourcebook 的指定 Book。它支持两种本地连接方式：
 
 - **连接 Obsidian：** 使用当前 Vault 中的 Sourcebook 插件配对码连接。

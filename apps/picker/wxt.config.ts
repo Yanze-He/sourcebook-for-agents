@@ -7,11 +7,11 @@ const isChromeWebStoreBuild = process.env.SOURCEBOOK_PICKER_STORE_BUILD === "1";
 
 export default defineConfig({
   manifest: {
-    name: "Picker for Agent",
-    description: "Pick web context and save it to Sourcebook for agents.",
+    name: "Sourcebook Picker",
+    description: "Pick web content and AI chats into local Sourcebook for Obsidian or Desktop.",
     // Keep Chrome's manifest version aligned with package.json so an installed
     // Picker is actually updated instead of continuing to run an old popup.
-    version: "0.1.3",
+    version: "0.1.4",
     // A public key gives unpacked builds a stable Chrome extension ID. The
     // production Store package deliberately omits it so Chrome keeps the ID
     // assigned to the Store listing.
@@ -56,7 +56,7 @@ export default defineConfig({
         32: "sourcebook-icon-32.png",
         48: "sourcebook-icon-48.png"
       },
-      default_title: "Picker for Agent",
+      default_title: "Sourcebook Picker",
       default_popup: "popup.html"
     }
   }
