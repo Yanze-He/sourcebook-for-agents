@@ -2,7 +2,7 @@
 
 All notable user-facing changes are documented here.
 
-## Unreleased
+## 0.1.2 — 2026-10-23
 
 - Save source notes when the detail panel loses focus or closes.
 - Keep the Windows tray icon responsive across relaunches, prevent duplicate tray hosts, and restore the icon after Explorer restarts. The tray host stays out of the taskbar; opening Sourcebook uses the default browser, and quitting from the tray exits the process.
@@ -10,7 +10,7 @@ All notable user-facing changes are documented here.
 - Improve narrow Sourcebook layouts for multi-select and Pack actions.
 - Improve agent search and Book reuse, and simplify reuse of an already open Sourcebook browser tab.
 - Release the Agent Plugin separately from Desktop, with independently versioned macOS and Windows packages and clearer install/update handling.
-- Update Picker to 0.1.2 with localized accessibility labels and a direct Chrome Web Store install link.
+- Update Sourcebook Picker to 0.1.5 with a clearer product name, a direct Chrome Web Store link, localized accessibility labels, and only the permissions it uses.
 
 ## v0.1.1-beta.6
 
