@@ -65,7 +65,7 @@ Export one, several, or all Books to a `.sourcebook-backup` archive, then import
 ## Install
 
 1. Download and install [Sourcebook Desktop](https://github.com/Yanze-He/sourcebook-for-agents/releases).
-2. Install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US).
+2. Install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=github_agents_readme&utm_medium=referral&utm_campaign=picker_install).
 3. Start Desktop, open Picker, and choose a Book.
 4. To connect an agent, open **Settings → Connect an Agent** and follow the setup prompt. To Pack, select materials, add notes, and choose **Pack for agent**.
 
