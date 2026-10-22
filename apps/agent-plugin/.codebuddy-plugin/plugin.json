@@ -1,0 +1,10 @@
+{
+  "name": "sourcebook",
+  "version": "0.1.2-beta.4",
+  "description": "Use a locally running Sourcebook Desktop library through Book-scoped MCP tools and a workflow Skill.",
+  "author": { "name": "Sourcebook" },
+  "homepage": "https://github.com/Yanze-He/sourcebook-plugin",
+  "repository": "https://github.com/Yanze-He/sourcebook-plugin",
+  "license": "MIT",
+  "mcpServers": "./workbuddy-mcp.json"
+}

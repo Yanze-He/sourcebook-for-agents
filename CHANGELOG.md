@@ -9,6 +9,7 @@ All notable user-facing changes are documented here.
 - Improve Agent submission editing: title and note fields are prefilled, save on blur or when accepting, and no longer duplicate preview text.
 - Improve narrow Sourcebook layouts for multi-select and Pack actions.
 - Improve agent search and Book reuse, and simplify reuse of an already open Sourcebook browser tab.
+- Bundle the latest Agent Plugin v0.1.2-beta.4 as Desktop's offline fallback, and keep the Connect an Agent request pointed at the version-independent guide for installing or updating the standalone package.
 - Release the Agent Plugin separately from Desktop, with independently versioned macOS and Windows packages and clearer install/update handling.
 - Update Sourcebook Picker to 0.1.5 with a clearer product name, a direct Chrome Web Store link, localized accessibility labels, and only the permissions it uses.
 

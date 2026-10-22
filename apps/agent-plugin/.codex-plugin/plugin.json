@@ -1,13 +1,13 @@
 {
   "name": "sourcebook",
-  "version": "0.1.2-beta.1",
+  "version": "0.1.2-beta.4",
   "description": "Use a local Sourcebook library from Codex through safe, Book-scoped MCP tools.",
   "author": { "name": "Sourcebook" },
-  "homepage": "https://github.com/Yanze-He/sourcebook-for-agents",
-  "repository": "https://github.com/Yanze-He/sourcebook-for-agents",
+  "homepage": "https://github.com/Yanze-He/sourcebook-plugin",
+  "repository": "https://github.com/Yanze-He/sourcebook-plugin",
   "license": "MIT",
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": "./mcp.json",
   "requires_local_executor": true,
   "interface": {
     "displayName": "Sourcebook",
@@ -18,7 +18,7 @@
     "composerIcon": "./assets/sourcebook-plugin-logo.png",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read", "Write"],
-    "websiteURL": "https://github.com/Yanze-He/sourcebook-for-agents",
+    "websiteURL": "https://github.com/Yanze-He/sourcebook-plugin",
     "privacyPolicyURL": "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/privacy.md",
     "defaultPrompt": ["Open my Sourcebook library", "Find sources in my current Sourcebook Book"]
   }

@@ -39,6 +39,14 @@ selects only this tag family. An Agent can then download, verify, and update
 its own Plugin without a Desktop release. Changes to the Desktop bridge API
 still require compatibility testing and, if needed, a Desktop update.
 
+Desktop also bundles an offline fallback copy of the Agent Plugin. Before
+building Desktop, synchronize `apps/agent-plugin` and `apps/mcp-go` with the
+latest accepted standalone Plugin package, while retaining any Desktop-specific
+marketplace wrapper and guides. Candidate `build-info.json` records the bundled
+Agent Plugin version separately from the Desktop version. The Connect an Agent
+prompt should continue to point to the version-independent install guide, which
+directs supported Agents to the standalone marketplace package for updates.
+
 ## Local macOS signing and notarization
 
 Only a maintainer-controlled Mac signs and notarizes macOS releases. Keep the Developer ID private key, the `.p12` backup password, and Apple notarization credentials out of the repository, shell history, and GitHub Actions.

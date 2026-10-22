@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sourcebook": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CODEBUDDY_PLUGIN_ROOT}/launch-mcp.cjs"],
+      "cwd": "${CODEBUDDY_PLUGIN_ROOT}",
+      "env": { "SOURCEBOOK_AGENT_NAME": "WorkBuddy" }
+    }
+  }
+}

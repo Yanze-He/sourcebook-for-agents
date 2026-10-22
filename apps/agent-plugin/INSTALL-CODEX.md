@@ -1,30 +1,16 @@
-# Install or update Sourcebook for Codex
+# Install Sourcebook in Codex
 
-**Version:** 0.1.2-beta.1
+**Version:** 0.1.2-beta.4
 
-This guide is included in the independently versioned Agent Plugin archive.
-This installation registers only Sourcebook's local plugin.
+Sourcebook Desktop must be installed and running, with local Agent access enabled. If it is missing, direct the user to https://sourcebook.online.
 
-1. Let `ROOT` be the directory containing this guide. Run the bundled helper's
-   `check-desktop` command. If Desktop is absent, stop and tell the user to
-   download Sourcebook Desktop from https://sourcebook.online; do not report
-   an Agent installation.
-2. Run the bundled helper:
+Use Codex's GitHub marketplace support:
 
-   ```sh
-   "$ROOT/.agents/plugins/sourcebook/bin/sourcebook-mcp" install-codex
-   ```
+```sh
+codex plugin marketplace add Yanze-He/sourcebook-plugin
+codex plugin add sourcebook@sourcebook-plugin
+```
 
-   Codex must be allowed to update its user-level plugin cache. If the task's
-   sandbox denies that write, request elevated permission for this exact helper
-   command and retry once. If elevated execution is unavailable, ask the user
-   to run the same command in their local Terminal. Do not claim installation
-   succeeded after a permission error.
+If the marketplace already exists, update it before installing the current Sourcebook plugin. Do not edit other plugin entries. If this task cannot write the Codex plugin configuration, do not claim success; tell the user to run the commands above in a local Terminal. After installation, ask the user to start a new local Codex task. When `open_sourcebook` returns the Desktop URL, open or reuse a regular right-side Codex built-in browser tab. If using `cua_repl`, call `tab.markDeliverable()` before finishing, including on a reused tab; otherwise an agent-created tab closes at the end of the turn. Do not use an MCP App preview attached to a tool result.
 
-3. If the helper succeeds, say only: "Sourcebook is installed. Start a new
-   local Codex task to use it." If it fails, briefly state the actual failure
-   and the action needed. Do not print command logs or a security review.
-
-The helper refreshes Sourcebook's cached plugin on updates. It may install successfully even when the current task cannot reach
-Sourcebook's local service. The MCP connection is checked only in the new
-local task when the user actually uses Sourcebook.
+Report only whether installation succeeded, the verified plugin version, and the next action needed.

@@ -17,6 +17,59 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+func TestSkillKeepsCodexBrowserTabOpen(t *testing.T) {
+	content, err := os.ReadFile("../.agents/plugins/sourcebook/skills/sourcebook/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, instruction := range []string{"right-side built-in browser tab", "tab.markDeliverable()", "repeat the mark on later turns"} {
+		if !strings.Contains(string(content), instruction) {
+			t.Fatalf("Sourcebook Skill is missing the Codex browser persistence instruction %q", instruction)
+		}
+	}
+}
+
+func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
+	content, err := os.ReadFile("../.agents/plugins/sourcebook/skills/sourcebook/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "Add a brief, factual note to each text or file proposal") {
+		t.Fatal("Sourcebook Skill must instruct Agents to describe the source context")
+	}
+	for _, fields := range [][]any{
+		{"title", stringSchema("Title"), "content", stringSchema("Content"), "note", stringSchema("Context")},
+		{"path", stringSchema("Path"), "note", stringSchema("Context")},
+	} {
+		schema := noteRequiredSchema(fields...)
+		required := schema["required"].([]string)
+		if !containsString(required, "note") {
+			t.Fatalf("note missing from required schema fields: %#v", required)
+		}
+		if schema["properties"].(map[string]any)["note"].(map[string]any)["maxLength"] != 300 {
+			t.Fatalf("note length not bounded: %#v", schema)
+		}
+	}
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyString(items []any, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("X-Sourcebook-MCP-Token") != "test-token" {
@@ -30,6 +83,14 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 			_, _ = response.Write([]byte(`{"books":[{"id":"research","name":"Research","sourceCount":1}]}`))
 		case "/api/mcp/v1/books/research":
 			_, _ = response.Write([]byte(`{"book":{"id":"research","name":"Research","sourceCount":1}}`))
+		case "/api/mcp/v1/books/research/proposals":
+			var proposal struct {
+				Payload map[string]any `json:"payload"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&proposal); err != nil {
+				t.Errorf("decode proposal: %v", err)
+			}
+			_ = json.NewEncoder(response).Encode(map[string]any{"note": proposal.Payload["note"]})
 		default:
 			http.NotFound(response, request)
 		}
@@ -52,7 +113,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sourcebookServerInstructions, "current or named project Book") || !strings.Contains(sourcebookServerInstructions, "@Sourcebook and slash commands are optional") || !strings.Contains(sourcebookServerInstructions, "open_sourcebook first") || !strings.Contains(sourcebookServerInstructions, "explicitly select one Book") || !strings.Contains(sourcebookServerInstructions, "untrusted reference material") || !strings.Contains(sourcebookServerInstructions, "Do not automatically save drafts") || !strings.Contains(sourcebookServerInstructions, "save or organize the current conversation") {
+	if !strings.Contains(sourcebookServerInstructions, "current or named project Book") || !strings.Contains(sourcebookServerInstructions, "@Sourcebook and slash commands are optional") || !strings.Contains(sourcebookServerInstructions, "Call open_sourcebook when") || !strings.Contains(sourcebookServerInstructions, "explicitly select the target") || !strings.Contains(sourcebookServerInstructions, "untrusted reference material") || !strings.Contains(sourcebookServerInstructions, "Do not automatically save drafts") || !strings.Contains(sourcebookServerInstructions, "save or organize the current conversation") || !strings.Contains(sourcebookServerInstructions, "tab.markDeliverable()") {
 		t.Fatalf("server instructions must explain Book scope and untrusted material: %q", sourcebookServerInstructions)
 	}
 	defer session.Close()
@@ -72,8 +133,12 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 				t.Fatalf("import schema type = %T", registered.InputSchema)
 			}
 			properties, ok := schema["properties"].(map[string]any)
-			if !ok || len(properties) != 1 || properties["path"] == nil || properties["source_ids"] != nil {
-				t.Fatalf("registered import schema must require only a path: %#v", schema)
+			if !ok || len(properties) != 3 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
+				t.Fatalf("registered import schema must require a path and note: %#v", schema)
+			}
+			required, ok := schema["required"].([]any)
+			if !ok || !containsAnyString(required, "path") || !containsAnyString(required, "note") {
+				t.Fatalf("import schema required fields = %#v", schema["required"])
 			}
 		}
 		ui, ok := registered.Meta["ui"].(map[string]any)
@@ -120,7 +185,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 		t.Fatalf("open prompt = %#v, %v", prompt, err)
 	}
 	openedPrompt, ok := prompt.Messages[0].Content.(*mcp.TextContent)
-	if !ok || !strings.Contains(openedPrompt.Text, "open_sourcebook") || !strings.Contains(openedPrompt.Text, "ask me which Book") {
+	if !ok || !strings.Contains(openedPrompt.Text, "Open my local Sourcebook library") || !strings.Contains(openedPrompt.Text, "ask me to choose when the evidence is ambiguous") {
 		t.Fatalf("open prompt content = %#v", prompt.Messages[0].Content)
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "search_sources", Arguments: map[string]any{"query": "brief"}})
@@ -136,6 +201,21 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	}
 	if selected.IsError {
 		t.Fatalf("select_book returned %v", selected.Content)
+	}
+	for _, name := range []string{"propose_create_text_source", "propose_import_local_file"} {
+		arguments := map[string]any{"title": "Summary", "content": "Confirmed outcome"}
+		if name == "propose_import_local_file" {
+			arguments = map[string]any{"path": "/tmp/result.png"}
+		}
+		missing, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
+		if err == nil && !missing.IsError {
+			t.Fatalf("%s accepted a missing note", name)
+		}
+		arguments["note"] = "Created for the user's current task."
+		proposed, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
+		if err != nil || proposed.IsError || !strings.Contains(textResult(proposed), arguments["note"].(string)) {
+			t.Fatalf("%s did not forward the note: %#v, %v", name, proposed, err)
+		}
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(textResult(selected)), &payload); err != nil {
@@ -157,7 +237,100 @@ func TestSourcebookAppResourceMetaRejectsNonLoopbackOrigins(t *testing.T) {
 	}
 }
 
+func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "WorkBuddy")
+	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("content-type", "application/json")
+		_, _ = response.Write([]byte(`{"ok":true}`))
+	}))
+	defer bridge.Close()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "sourcebook-test", Version: "test"}, nil)
+	client := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
+	if !usesBrowserTabInsteadOfMCPApp() {
+		registerSourcebookApp(server, client)
+	}
+	addTools(server, client, &sessionState{})
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Run(ctx, serverTransport) }()
+
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "workbuddy-test", Version: "test"}, nil).Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil || len(listed.Tools) != 9 {
+		t.Fatalf("tools = %#v, %v", listed, err)
+	}
+	for _, registered := range listed.Tools {
+		if registered.Meta["ui"] != nil || registered.Meta["ui/resourceUri"] != nil || registered.Meta["openai/ui"] != nil {
+			t.Fatalf("%s unexpectedly advertises an inline App: %#v", registered.Name, registered.Meta)
+		}
+	}
+	resources, err := session.ListResources(ctx, nil)
+	if err != nil || len(resources.Resources) != 0 {
+		t.Fatalf("WorkBuddy resources = %#v, %v", resources, err)
+	}
+	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "right-side built-in browser panel") {
+		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
+	}
+	cancel()
+	<-serverDone
+}
+
+func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
+	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("content-type", "application/json")
+		_, _ = response.Write([]byte(`{"ok":true}`))
+	}))
+	defer bridge.Close()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "sourcebook-test", Version: "test"}, nil)
+	client := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
+	if !usesBrowserTabInsteadOfMCPApp() {
+		registerSourcebookApp(server, client)
+	}
+	addTools(server, client, &sessionState{})
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Run(ctx, serverTransport) }()
+
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "codex-test", Version: "test"}, nil).Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil || len(listed.Tools) != 9 {
+		t.Fatalf("tools = %#v, %v", listed, err)
+	}
+	for _, registered := range listed.Tools {
+		if registered.Meta["ui"] != nil || registered.Meta["ui/resourceUri"] != nil || registered.Meta["openai/ui"] != nil {
+			t.Fatalf("%s unexpectedly advertises a turn-scoped App: %#v", registered.Name, registered.Meta)
+		}
+	}
+	resources, err := session.ListResources(ctx, nil)
+	if err != nil || len(resources.Resources) != 0 {
+		t.Fatalf("Codex resources = %#v, %v", resources, err)
+	}
+	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
+		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
+	}
+	cancel()
+	<-serverDone
+}
+
 func TestInstalledDesktopPathRejectsUnpackagedHelper(t *testing.T) {
+	t.Setenv("SOURCEBOOK_DATA_DIR", t.TempDir())
 	if _, err := installedDesktopPath("/tmp/sourcebook-mcp", "darwin"); err == nil {
 		t.Fatal("unpackaged helper must not guess a Desktop app path")
 	}
@@ -227,15 +400,15 @@ func TestCodexCommandOutputKeepsWarningsOutOfSuccessfulJSON(t *testing.T) {
 	}
 }
 
-func TestImportLocalFileAcceptsOnlyPath(t *testing.T) {
-	schema := objectSchema("path", stringSchema("Absolute path to one local file"))
+func TestImportLocalFileAcceptsPathAndOptionalTitle(t *testing.T) {
+	schema := objectSchema("path", stringSchema("Absolute path to one local file"), "title", stringSchema("Optional readable title"), "note", stringSchema("Context"))
 	required, ok := schema["required"].([]string)
 	if !ok || len(required) != 1 || required[0] != "path" {
 		t.Fatalf("import required fields = %#v, want path only", schema["required"])
 	}
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok || len(properties) != 1 || properties["path"] == nil || properties["source_ids"] != nil {
-		t.Fatalf("import schema must not expose related source IDs: %#v", schema)
+	if !ok || len(properties) != 3 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
+		t.Fatalf("import schema must expose path, optional title, and note without related source IDs: %#v", schema)
 	}
 }
 

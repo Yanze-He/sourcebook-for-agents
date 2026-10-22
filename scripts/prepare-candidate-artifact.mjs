@@ -12,6 +12,7 @@ const installer = options.installer;
 const app = options.app;
 const build = process.env.SOURCEBOOK_BUILD?.trim();
 const version = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
+const agentPluginVersion = JSON.parse(readFileSync(join(repositoryRoot, "apps", "agent-plugin", "plugin.json"), "utf8")).version;
 
 if (!["macos", "windows"].includes(platform)) throw new Error("Pass --platform macos or --platform windows.");
 if (!installer || !existsSync(installer)) throw new Error("Pass an existing --installer path.");
@@ -27,6 +28,7 @@ copyFileSync(installer, join(outputRoot, installerName));
 const metadata = {
   platform,
   version,
+  agentPluginVersion,
   build,
   commit: git("rev-parse", "HEAD"),
   tree: git("rev-parse", "HEAD^{tree}"),
