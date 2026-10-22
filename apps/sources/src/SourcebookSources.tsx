@@ -142,7 +142,7 @@ const localImportExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp3",
 const localImportAccept = localImportExtensions.join(",");
 // The published Picker is installed from the Chrome Web Store. This is the
 // Store-signed build that the Desktop API explicitly recognizes.
-const pickerInstallUrl = "https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=ext_sidebar";
+const pickerInstallUrl = "https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=sourcebook_desktop&utm_medium=in_product&utm_campaign=picker_install&utm_content=install_picker";
 const markdownSerializer = new TurndownService({ bulletListMarker: "-", codeBlockStyle: "fenced", linkStyle: "inlined" });
 markdownSerializer.use(turndownTables);
 function toggleFilterValue<T>(values: T[], value: T) { return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value]; }

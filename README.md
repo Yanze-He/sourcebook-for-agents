@@ -78,7 +78,7 @@ Open **Settings → Connect an Agent**, approve access, choose Codex, WorkBuddy,
 
 The current beta needs macOS (Apple silicon) and Chrome or another Chromium browser, including Edge.
 
-1. Download and install Desktop from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases), then install [Picker for Agent from the Chrome Web Store](https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=ext_sidebar).
+1. Download and install Desktop from the [Releases page](https://github.com/Yanze-He/sourcebook-for-agents/releases), then install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=github_agents_readme&utm_medium=referral&utm_campaign=picker_install).
 2. Start Desktop, open Picker on a webpage, turn it on and choose a Book.
 
 Keep Desktop running while using Picker. See [Getting Started](docs/getting-started.md) for installation, release verification and troubleshooting.

@@ -8,7 +8,7 @@ To run Sourcebook from source, you need Node.js 22.18+, npm, and Go 1.24+. Node 
 
 ### Release install
 
-Download the macOS DMG or Windows installer from the repository Release page, then install [Picker for Agent from the Chrome Web Store](https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=ext_sidebar). The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. Sourcebook appears in the Dock; use its application menu to open Sources, restart the local service, or quit.
+Download the macOS DMG or Windows installer from the repository Release page, then install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=github_agents_docs&utm_medium=referral&utm_campaign=picker_install). The macOS disk image presents **Sourcebook Desktop** beside an **Applications** shortcut: drag the app onto Applications, eject the disk image, then open Sourcebook Desktop from Applications. Sourcebook appears in the Dock; use its application menu to open Sources, restart the local service, or quit.
 
 Before opening an installer, verify its entry in `SHA256SUMS.txt`. Public macOS releases are Developer ID signed and Apple notarized. Do not bypass a macOS verification warning for a build that is missing either signal.
 
