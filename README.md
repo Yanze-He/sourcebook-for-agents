@@ -1,77 +1,70 @@
 <p align="right">English · <a href="README.zh-CN.md">简体中文</a></p>
 
-<p align="center">
-  <img src="docs/images/sourcebook-hero-value-v8.png" alt="Collect project materials, keep them in a Book, and continue with the agent you choose." width="100%" />
-</p>
+https://github.com/user-attachments/assets/dda9e679-2675-43f6-a79e-6d251f9a739d
 
 # Sourcebook
 
 **A local-first creative library for AI creators.**
 
-Organize each project in its own Book. Collect references, files, links, posts, and AI conversations, then continue with your chosen agent through Connect or Pack.
+Organize every project in its own Book. Collect references, files, links, posts, and AI conversations—then continue with your chosen agent through Connect or Pack.
 
-## At a glance
 
-| Workflow | What you can do |
+# Your project, in one Book
+
+<img width="1672" height="743" alt="sourcebook-desktop-features-v9-even-margins" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
+
+
+| Need | Sourcebook |
 | --- | --- |
-| **Books** | Keep a visual, project-based feed of references and work in progress. |
-| **Pick** | Collect web content, images, posts, and selected AI chat messages with their sources. |
-| **Connect** | Let a compatible local agent search a selected Book and submit suggestions for your review. |
-| **Pack** | Select materials, add creative notes, and copy context for the AI tool you choose. |
-| **Back up** | Export and restore Books with a `.sourcebook-backup` archive. |
+| Organize a project | Create a Book for each project and browse its materials in a visual feed. |
+| Keep creative references | Collect common creative files and media, webpages, links, posts, and AI conversations. |
+| Return to the source | Keep source information with materials so you can revisit the original page or post. |
+| Work with an agent | Connect a compatible local agent or Pack selected materials for any AI tool. |
+| Keep your library safe | Your library stays on your computer. Export to a `.sourcebook-backup` archive, then restore them when needed. |
 
-## Pick from the browser
+
+# Pick from the browser
 
 **Sourcebook Picker** is a Chrome extension for collecting materials from webpages, feeds, and AI conversations.
 
-| Material | Sources | Saved content |
-| --- | --- | --- |
-| Text and pages | Webpages | Selected passages, page details, and source links |
-| Images | Webpages | Supported images and their source links |
-| AI conversations | ChatGPT, Gemini, DeepSeek, Grok | Selected or loaded messages with roles |
-| Posts | X, Xiaohongshu | Post text, author, available metadata, and cover |
-| Video and audio | Webpages | Media links and available previews |
+<img width="1920" height="600" alt="你的段落文字 (7)" src="https://github.com/user-attachments/assets/691e3784-55f6-49fd-8ef7-a020021cffad" />
 
-Picker tries to save images locally when possible. Some sites restrict downloads; video and audio remain source references, and page Picks are not full-page archives. See [supported sites and limits](docs/supported-sites.md).
-
-<p align="center">
-  <img src="docs/images/sourcebook-picker-features-v6.png" alt="Picker for selecting a Book, collecting chats, media, and pages." width="100%" />
-</p>
-
-## Keep a project together
-
-Create a Book for each project and browse its materials in a visual feed. Import local documents and media, write your own records, add notes, search, filter, and revisit original sources.
-
-<p align="center">
-  <img src="docs/images/sourcebook-desktop-features-v7.png" alt="Sourcebook Desktop for organizing Books, finding materials, and preparing a Pack." width="100%" />
-</p>
-
-## Connect or Pack
-
-| Connect a local agent | Pack for any AI tool |
+| Material | Supported sources |
 | --- | --- |
-| Compatible MCP agents—including Codex, Claude Code, WorkBuddy, and Grokbot—can search and read a selected Book. They can prepare context files and submit suggestions; you review every suggestion in Sourcebook. | Select materials, add notes, then copy the prompt and available files or links. Paste them into Codex, Claude Code, Figma, Lovable, or another AI tool. |
+| Web content and links | Webpages |
+| Images and visual references | Webpages |
+| AI conversations | ChatGPT · Gemini · DeepSeek · Grok |
+| Posts | X · Xiaohongshu |
+| Video and audio | Media links and available previews |
 
-Sourcebook agents do not directly change or delete Book content. You choose what is saved and what is shared.
+Picker saves available media and source information. Some sites restrict downloads, so a saved item may retain a source link or preview.
 
-See the [Agent connection guide](docs/connect-agents.md).
+# Two ways to work with AI
 
-## Local-first, with backup and restore
+| | #1 Connect a local agent | #2 Pack for any AI tool |
+| --- | --- | --- |
+| **Features** | Install the Agent plugin to search and read Books, submit media content, and turn conversation progress into handoff documents. | Select materials, add notes, and copy prompts with files or links to provide structured context for any AI tool. |
+| **Supported agents** | **Codex**, **WorkBuddy** (more coming soon) | Works with virtually any AI agent or tool, including **Codex**, **Claude Code**, **Cursor**, **Windsurf**, **ChatGPT**, **Gemini**, **Figma**, **Lovable**, and more. |
+| **Demo** | https://github.com/user-attachments/assets/80a41b3d-8627-41c9-bd99-4723d3d553f9 | https://github.com/user-attachments/assets/bce06a27-b87a-4829-8230-377fde623da3 |
 
-Your Books and files stay on your computer. Sourcebook has no account or cloud sync.
+<img width="1470" height="855" alt="sourcebook-connect-agent-book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
 
-Export one, several, or all Books to a `.sourcebook-backup` archive, then import them on this or another device. Backups include Book data and local files; Desktop settings are not included. You can add the backed-up Books or replace the library during import.
+# Local-first. Back up and restore your Books.
 
-## Install
+ Backups include Book data and local files; Desktop settings are not included.
 
-1. Download and install [Sourcebook Desktop](https://github.com/Yanze-He/sourcebook-for-agents/releases).
+
+# Install
+
+1. Download and install [Sourcebook Desktop](https://sourcebook.online/#download).
 2. Install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=github_agents_readme&utm_medium=referral&utm_campaign=picker_install).
 3. Start Desktop, open Picker, and choose a Book.
 4. To connect an agent, open **Settings → Connect an Agent** and follow the setup prompt. To Pack, select materials, add notes, and choose **Pack for agent**.
 
 The current beta supports Apple silicon macOS and Windows x64. Picker works with Chrome and Edge. See [Getting Started](docs/getting-started.md) for setup and troubleshooting.
 
-## Contribute
+
+# Contribute
 
 Issues and pull requests are welcome. Areas include:
 
@@ -83,10 +76,12 @@ Issues and pull requests are welcome. Areas include:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and conventions. Development checks: `npm test` and `npm run build`.
 
-## License
+
+# License
 
 Sourcebook for Agents is released under the [MIT License](LICENSE).
 
-## Documentation
+
+# Documentation
 
 [Use cases](docs/use-cases.md) · [Supported sites](docs/supported-sites.md) · [Connect an agent](docs/connect-agents.md) · [Architecture](docs/architecture.md) · [Local API](docs/local-api.md) · [Privacy](docs/privacy.md)
