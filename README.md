@@ -49,11 +49,6 @@ Picker saves available media and source information. Some sites restrict downloa
 
 <img width="1470" height="855" alt="sourcebook-connect-agent-book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
 
-# Local-first. Back up and restore your Books.
-
- Backups include Book data and local files; Desktop settings are not included.
-
-
 # Install
 
 1. Download and install [Sourcebook Desktop](https://sourcebook.online/#download).
