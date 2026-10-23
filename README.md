@@ -1,6 +1,6 @@
 # Sourcebook
 
-**A local-first creative library for AI creators.**   [Visit Sourcebook website](https://sourcebook.online/#download).
+**A local-first creative library for AI creators.**   [Visit Sourcebook website](https://sourcebook.online).
 
 Organize every project in its own Book. Collect references, files, links, posts, and AI conversations—then continue with your chosen agent through Connect or Pack.
 
