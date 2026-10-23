@@ -1,8 +1,6 @@
-<p align="left">English · <a href="README.zh-CN.md">简体中文</a> · <a href="https://sourcebook.online">Sourcebook Website</a></p>
-
 # Sourcebook
 
-**A local-first creative library for AI creators.** 
+**A local-first creative library for AI creators.**   [Visit Sourcebook website](https://sourcebook.online/#download).
 
 Organize every project in its own Book. Collect references, files, links, posts, and AI conversations—then continue with your chosen agent through Connect or Pack.
 
