@@ -1,4 +1,4 @@
-<p align="left">English · <a href="README.zh-CN.md">简体中文</a> · <a href="https://sourcebook.online"> -> Sourcebook Website</a></p>
+<p align="left">English · <a href="README.zh-CN.md">简体中文</a> · <a href="https://sourcebook.online">Sourcebook Website</a></p>
 
 # Sourcebook
 
