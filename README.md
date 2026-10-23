@@ -4,7 +4,7 @@
 
 Organize every project in its own Book. Collect references, files, links, posts, and AI conversations—then continue with your chosen agent through Connect or Pack.
 
-https://github.com/user-attachments/assets/dda9e679-2675-43f6-a79e-6d251f9a739d
+https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
 # Your project, in one Book
 
