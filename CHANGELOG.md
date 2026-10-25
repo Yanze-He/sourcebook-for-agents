@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Fix **Show in folder** on Windows. It now opens the local file's parent folder directly rather than relying on Explorer's unreliable legacy selection argument, which could fall back to Documents for some paths.
 - Make **Load more** cancellable when switching Books. A late page response can no longer append its old Book's items after the switch, and a stalled local request returns to a retryable state after 20 seconds.
 - Add a system **Open** action for every Source with a cached local file. Use it from the card toolbar or the file-detail preview to open the original in the operating system’s default app; details consistently show the Book-relative saved location with a Finder or Explorer reveal action.
 - Refine the stored-file detail preview: it now has space below the title area, uses one flat file-identity row instead of nested rounded frames, and places its default-app open icon at the far right.

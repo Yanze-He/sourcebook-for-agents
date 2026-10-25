@@ -39,3 +39,20 @@ func TestParseClipboardFilePathsRejectsMalformedClipboardOutput(t *testing.T) {
 		t.Fatal("expected malformed clipboard output to be rejected")
 	}
 }
+
+func TestRevealLocalFileCommandUsesFolderOnWindows(t *testing.T) {
+	filePath := `C:\Users\Zeke\Documents\Sourcebook\Book\assets\设计参考.zip`
+	command := revealLocalFileCommand("windows", filePath)
+	if command.Path != "explorer.exe" {
+		t.Fatalf("command = %q, want explorer.exe", command.Path)
+	}
+	if got, want := command.Args, []string{"explorer.exe", `C:\Users\Zeke\Documents\Sourcebook\Book\assets`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
+func TestWindowsParentFolderKeepsDriveRoot(t *testing.T) {
+	if got, want := windowsParentFolder(`C:\brief.pdf`), `C:\`; got != want {
+		t.Fatalf("folder = %q, want %q", got, want)
+	}
+}

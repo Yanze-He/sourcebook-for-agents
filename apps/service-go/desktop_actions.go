@@ -17,19 +17,40 @@ func revealLocalFile(ctx *BookContext, sourceItemID string) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
-	var command *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		command = exec.Command("open", "-R", path)
-	case "windows":
-		command = exec.Command("explorer.exe", "/select,"+path)
-	default:
-		command = exec.Command("xdg-open", filepath.Dir(path))
-	}
+	command := revealLocalFileCommand(runtime.GOOS, path)
 	if err := command.Start(); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true, "localPath": "assets/" + name}, nil
+}
+
+func revealLocalFileCommand(goos, filePath string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.Command("open", "-R", filePath)
+	case "windows":
+		// Explorer's legacy /select, syntax can misparse paths with spaces or
+		// non-ASCII characters and fall back to Documents. Opening the parent
+		// folder directly is reliable and still fulfils “show in folder”.
+		return exec.Command("explorer.exe", windowsParentFolder(filePath))
+	default:
+		return exec.Command("xdg-open", filepath.Dir(filePath))
+	}
+}
+
+func windowsParentFolder(filePath string) string {
+	separator := strings.LastIndexAny(filePath, `\/`)
+	if separator < 0 {
+		return filePath
+	}
+	// Preserve a drive root such as C:\ rather than returning C:.
+	if separator == 2 && len(filePath) > 2 && filePath[1] == ':' {
+		return filePath[:3]
+	}
+	if separator == 0 {
+		return filePath[:1]
+	}
+	return filePath[:separator]
 }
 
 func openLocalFile(ctx *BookContext, sourceItemID string) (map[string]any, error) {
