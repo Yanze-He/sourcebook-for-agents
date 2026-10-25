@@ -2,7 +2,7 @@
 
 All notable user-facing changes are documented here.
 
-## Unreleased
+## 0.1.3 — 2026-10-25
 
 - Fix **Show in folder** on Windows. It now opens the local file's parent folder directly rather than relying on Explorer's unreliable legacy selection argument, which could fall back to Documents for some paths.
 - Make **Load more** cancellable when switching Books. A late page response can no longer append its old Book's items after the switch, and a stalled local request returns to a retryable state after 20 seconds.
