@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, Funnel, Globe2, HardDrive, Image, Info, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
+import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, FolderOpen, Funnel, Globe2, HardDrive, Image, Info, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createPortal } from "react-dom";
@@ -18,6 +18,7 @@ type UpdateSettingsResponse = { version: string; build?: string; autoCheck: bool
 type SourcePage = { items: SourceItem[]; total: number; nextCursor: string | null; limit: number };
 const sourcePageSize = 60;
 const bookSourceLimit = 200;
+const clipboardFileLimit = 20;
 type TemplateId = "none" | "continue-agent" | "build-app-site" | "promo-video" | "creative-direction-deck";
 type TemplateField = { key: string; label: string; placeholder: string; type?: "text" | "textarea" | "select"; options?: { value: string; label: string }[] };
 type PackTemplate = { id: TemplateId; title: string; description: string; fields: TemplateField[]; defaults: Record<string, string>; build: (values: Record<string, string>) => string[] };
@@ -26,12 +27,19 @@ function useLanguage() { return useContext(LanguageContext); }
 type DateFilter = "all" | "today" | "yesterday" | "week" | "custom";
 type LinkFilter = "all" | "linked" | "invalid";
 type LocalFilter = "all" | "pending" | "local" | "missing" | "failed" | "downloading";
-type Book = { id: string; name: string; createdAt?: string };
+type Book = { id: string; name: string; createdAt?: string; revision?: number };
 type BookManifest = { activeBookId: string; books: Book[]; unreadBookIds?: string[] };
 type BackupRestoreResponse = BookManifest & { imported?: Book[] };
 type PromptSettingsResponse = { template: string };
-type MCPSettingsResponse = { enabled: boolean; enabledAt?: string; serviceReady: boolean; guideUrl: string; installReady: boolean; agentVersion?: string; installGuides?: { codex?: string; workbuddy?: string; generic?: string } };
-type MCPSuggestion = { id: string; kind: "create_text_source" | "import_local_file" | "update_source_metadata" | "pack"; payload: Record<string, unknown>; sourceItemIds: string[]; agentName: string; createdAt: string; status: "pending" | "accepted" | "rejected" | "stale"; reviewedAt?: string; reviewError?: string };
+type ClipboardFileModality = "image" | "video" | "audio" | "file";
+type ClipboardScopeModality = ClipboardFileModality | "link" | "text";
+type ClipboardFile = { id: string; name: string; size?: number; mimeType?: string; modality: ClipboardFileModality; modifiedAt?: string; unsupportedReason?: "folder" | "unreadable" | "unsupported" };
+type ClipboardItemStatus = "pending" | "importing" | "imported" | "unsupported" | "failed";
+type ClipboardItem = { id: string; kind: "native-file" | "browser-file" | "native-probe" | "link" | "text" | "unsupported"; modality: ClipboardScopeModality; title: string; detail: string; status: ClipboardItemStatus; reason?: string; nativeFileId?: string; file?: File; value?: string };
+type ClipboardPlan = { bookId: string; bookName: string; token: string; items: ClipboardItem[]; hiddenFileCount: number; browserFiles: File[]; browserFolderNames: string[]; ignoredTypes: string[]; links: string[]; text: string; needsNativeProbe: boolean };
+type ClipboardImportResponse = { results: { id: string; status: "imported" | "failed"; reason?: string }[] };
+type MCPSettingsResponse = { enabled: boolean; enabledAt?: string; serviceReady: boolean; guideUrl: string; installReady: boolean };
+type MCPSuggestion = { id: string; batchId?: string; kind: "create_text_source" | "import_local_file" | "update_source_metadata" | "pack"; payload: Record<string, unknown>; sourceItemIds: string[]; agentName: string; createdAt: string; status: "pending" | "accepted" | "rejected" | "stale"; reviewedAt?: string; reviewError?: string };
 type MCPSuggestionEntry = { book: { id: string; name: string }; suggestion: MCPSuggestion };
 type MCPSuggestionsResponse = { suggestions: MCPSuggestionEntry[] };
 type AgentInstallTarget = "codex" | "workbuddy" | "generic";
@@ -39,7 +47,7 @@ type AgentInstallTarget = "codex" | "workbuddy" | "generic";
 const interfaceCopy = {
   en: {
     showing: "Showing", search: "Search sources", filter: "Filter", favorites: "Favorites only", masonry: "Masonry view", list: "List view", refresh: "Refresh sources", noSources: "No sources yet", noMatches: "No matching sources", emptyGuide: "Use the Picker extension to collect web content or import local files.", tryAnother: "Try another search or filter.", settings: "Settings", setting: "Setting", promptSettings: "Prompt settings", help: "Help", feedback: "Feedback", installPicker: "Install Picker", switchLanguage: "中文", switchBook: "Switch Sourcebook", importLocalFiles: "Import local files", addText: "Record", textTitle: "Title (optional)", textContent: "Text", createText: "Create record", clearSearch: "Clear search",
-    close: "Close", cancel: "Cancel", save: "Save", delete: "Delete", copy: "Copy", copyFiles: "Copy files", copyLink: "Copy link", select: "Select", selected: "Selected", unselect: "Unselect", edit: "Edit", loading: "Loading…", loadMore: "Load more", loadingSources: "Loading sources", readingSources: "Reading from your local Sourcebook.", selectAll: "Select all", clearSelection: "Clear selection", clear: "Cancel", addNote: "Add note", addToOtherBook: "Add to another Book", packForAgent: "Pack for agent", sourcesSelected: "sources selected", sourceSelected: "source selected", note: "Note", info: "Info", source: "Source", picked: "Picked", format: "Format", size: "Size", localLink: "Local link", webLink: "Web link", localFile: "Local file", link: "Link", post: "Post", image: "Image", video: "Video", audio: "Audio", text: "Text", chat: "Chat", file: "File", cover: "Cover", open: "Open", visit: "Visit", view: "View", play: "Play", download: "Download", downloading: "Downloading", missing: "Missing", fileMissing: "File missing", downloadFailed: "Download failed", retry: "Retry", invalid: "Invalid", invalidLink: "Invalid link", copyForAgent: "Copy for agent", openDetail: "Open source detail", closeDetail: "Close detail", addFavorite: "Add to favorites", removeFavorite: "Remove from favorites", editTitle: "Edit title", saveTitle: "Save title", cancelTitleEdit: "Cancel title edit", sourceTitle: "Source title", showInFolder: "Show in folder", viewLocalFile: "View local file", downloadAgain: "Download this file again", retryDownload: "Retry download", downloadLocalFile: "Download local file", moveTo: "Move to…", confirmDelete: "Confirm delete", deleteSources: "Delete sources", deleteBook: "Delete Book", bookSetting: "Book Setting", newBook: "New Book", bookName: "Book name", createBook: "Create Book", targetBook: "Target Book", copyHere: "Copy here", moveHere: "Move here", exportBackup: "Export backup", importBackup: "Import backup", selectBooksToExport: "Select Books to export", selectedBooks: "Books selected", exportSelectedBooks: "Export selected Books", clearLocalData: "Clear local data", markdownContent: "Markdown content", mediaPreview: "Media preview", closePreview: "Close preview", downloadImage: "Download image", downloadMissingFile: "Download missing file?", imageDownloadMessage: "Sourcebook will save a local copy of this image in the current Book.", missingDownloadMessage: "A local copy is missing. Sourcebook will download it again into this Book.", addContext: "Add context for the agent…", noteHelp: "This note is added to the Pack prompt so the agent can understand your intent.", notSavedLocally: "Not saved locally",
+    close: "Close", cancel: "Cancel", save: "Save", delete: "Delete", copy: "Copy", copyFiles: "Copy files", copyLink: "Copy link", select: "Select", selected: "Selected", unselect: "Unselect", edit: "Edit", loading: "Loading…", loadMore: "Load more", loadingSources: "Loading sources", readingSources: "Reading from your local Sourcebook.", selectAll: "Select all", clearSelection: "Clear selection", clear: "Cancel", addNote: "Add note", addToOtherBook: "Add to another Book", packForAgent: "Pack for agent", sourcesSelected: "sources selected", sourceSelected: "source selected", note: "Note", info: "Info", source: "Source", picked: "Picked", format: "Format", size: "Size", localLink: "Local link", savedLocation: "Saved location", webLink: "Web link", localFile: "Local file", link: "Link", post: "Post", image: "Image", video: "Video", audio: "Audio", text: "Text", chat: "Chat", file: "File", cover: "Cover", open: "Open", visit: "Visit", view: "View", play: "Play", download: "Download", downloading: "Downloading", missing: "Missing", fileMissing: "File missing", downloadFailed: "Download failed", retry: "Retry", invalid: "Invalid", invalidLink: "Invalid link", copyForAgent: "Copy for agent", openDetail: "Open source detail", closeDetail: "Close detail", addFavorite: "Add to favorites", removeFavorite: "Remove from favorites", editTitle: "Edit title", saveTitle: "Save title", cancelTitleEdit: "Cancel title edit", sourceTitle: "Source title", showInFolder: "Show in folder", viewLocalFile: "View local file", downloadAgain: "Download this file again", retryDownload: "Retry download", downloadLocalFile: "Download local file", moveTo: "Move to…", confirmDelete: "Confirm delete", deleteSources: "Delete sources", deleteBook: "Delete Book", bookSetting: "Book Setting", newBook: "New Book", bookName: "Book name", createBook: "Create Book", targetBook: "Target Book", copyHere: "Copy here", moveHere: "Move here", exportBackup: "Export backup", importBackup: "Import backup", selectBooksToExport: "Select Books to export", selectedBooks: "Books selected", exportSelectedBooks: "Export selected Books", clearLocalData: "Clear local data", markdownContent: "Markdown content", mediaPreview: "Media preview", closePreview: "Close preview", downloadImage: "Download image", downloadMissingFile: "Download missing file?", imageDownloadMessage: "Sourcebook will save a local copy of this image in the current Book.", missingDownloadMessage: "A local copy is missing. Sourcebook will download it again into this Book.", addContext: "Add context for the agent…", noteHelp: "This note is added to the Pack prompt so the agent can understand your intent.", notSavedLocally: "Not saved locally",
   },
   zh: {
     showing: "显示", search: "搜索素材", filter: "筛选", favorites: "仅看收藏", masonry: "瀑布流视图", list: "列表视图", refresh: "刷新素材", noSources: "还没有素材", noMatches: "没有匹配的素材", emptyGuide: "使用 Picker插件获取网页内容 或 导入本地文件", tryAnother: "请尝试其他搜索词或筛选条件。", settings: "设置", setting: "设置", promptSettings: "提示词设置", help: "帮助", feedback: "反馈", installPicker: "安装Picker", switchLanguage: "English", switchBook: "切换 Sourcebook", importLocalFiles: "导入本地文件", addText: "记录", textTitle: "标题（选填）", textContent: "文本内容", createText: "创建记录", clearSearch: "清空搜索",
@@ -181,7 +189,7 @@ export default function SourcebookSources() {
   const [isLibrarySettingsOpen, setIsLibrarySettingsOpen] = useState(false);
   const [isUpdateSettingsOpen, setIsUpdateSettingsOpen] = useState(false);
   const [isMCPSettingsOpen, setIsMCPSettingsOpen] = useState(false);
-  const [isMCPSuggestionsOpen, setIsMCPSuggestionsOpen] = useState(false);
+  const [isMCPSuggestionsOpen, setIsMCPSuggestionsOpen] = useState(() => new URLSearchParams(window.location.search).get("panel") === "agent-submissions");
   const [librarySettings, setLibrarySettings] = useState<LibrarySettingsResponse | null>(null);
   const [updateSettings, setUpdateSettings] = useState<UpdateSettingsResponse | null>(null);
   const [mcpSettings, setMCPSettings] = useState<MCPSettingsResponse | null>(null);
@@ -201,6 +209,8 @@ export default function SourcebookSources() {
   const [focusDetailNote, setFocusDetailNote] = useState(false);
   const [previewItem, setPreviewItem] = useState<SourceItem | null>(null);
   const [isPackOpen, setIsPackOpen] = useState(false);
+  const [clipboardPlan, setClipboardPlan] = useState<ClipboardPlan | null>(null);
+  const [isClipboardImporting, setIsClipboardImporting] = useState(false);
   const [isBookTransferOpen, setIsBookTransferOpen] = useState(false);
   const [isTransferringSelected, setIsTransferringSelected] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -215,9 +225,11 @@ export default function SourcebookSources() {
   const localImportInputRef = useRef<HTMLInputElement | null>(null);
   const messageTimeoutRef = useRef<number | null>(null);
   const knownPendingSuggestionIdsRef = useRef<Set<string> | null>(null);
-  const packRef = useRef<HTMLDivElement | null>(null);
   const bookTransferRef = useRef<HTMLDivElement | null>(null);
+  const activeBookIdRef = useRef("");
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
+  const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
 
   function showSourcesMessage(nextMessage: string, duration = 3600, tone: "neutral" | "success" | "error" = "neutral") {
@@ -268,14 +280,28 @@ export default function SourcebookSources() {
   }
   async function loadMoreItems() {
     if (!nextCursor || isLoadingMore) return;
+    const bookId = activeBookId;
+    const cursor = nextCursor;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 20_000);
+    loadMoreAbortRef.current = controller;
     setIsLoadingMore(true);
     try {
-      const response = await request<SourcePage>(bookPath(`/api/sources?limit=${sourcePageSize}&cursor=${encodeURIComponent(nextCursor)}`, activeBookId));
+      const response = await request<SourcePage>(bookPath(`/api/sources?limit=${sourcePageSize}&cursor=${encodeURIComponent(cursor)}`, bookId), { signal: controller.signal });
+      if (activeBookIdRef.current !== bookId || loadMoreAbortRef.current !== controller) return;
       setItems((current) => [...current, ...response.items.filter((item) => !current.some((existing) => existing.id === item.id))]);
       setTotalItems(response.total);
       setNextCursor(response.nextCursor);
-    } catch (error) { showSourcesMessage(errorMessage(error), 3600, "error"); }
-    finally { setIsLoadingMore(false); }
+    } catch (error) {
+      if (!isAbortedRequest(error)) showSourcesMessage(timedOut ? (language === "zh" ? "加载更多超时，请重试。" : "Loading more timed out. Try again.") : errorMessage(error), 3600, "error");
+    } finally {
+      window.clearTimeout(timeout);
+      if (loadMoreAbortRef.current === controller) {
+        loadMoreAbortRef.current = null;
+        setIsLoadingMore(false);
+      }
+    }
   }
   async function loadBooks() {
     let response = await request<BookManifest>("/api/books");
@@ -283,10 +309,16 @@ export default function SourcebookSources() {
     const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : response.activeBookId;
     if (targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
     requestedBookIdRef.current = null;
-    if (requestedBookId) window.history.replaceState({}, "", window.location.pathname);
-    setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId);
+    if (requestedBookId) {
+      const query = new URLSearchParams(window.location.search);
+      query.delete("bookId");
+      window.history.replaceState({}, "", window.location.pathname + (query.toString() ? "?" + query.toString() : ""));
+    }
+    setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId);
   }
   useEffect(() => { void loadBooks(); }, []);
+  useEffect(() => { activeBookIdRef.current = activeBookId; }, [activeBookId]);
+  useEffect(() => () => loadMoreAbortRef.current?.abort(), []);
   useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
   useEffect(() => {
     void request<PromptSettingsResponse>("/api/settings/prompt")
@@ -344,13 +376,32 @@ export default function SourcebookSources() {
   }, [activeBookId]);
   useEffect(() => () => { if (messageTimeoutRef.current) window.clearTimeout(messageTimeoutRef.current); }, []);
   useEffect(() => {
-    const closeIfOutside = (event: MouseEvent) => { if (!settingsRef.current?.contains(event.target as Node)) setIsSettingsOpen(false); if (!filterRef.current?.contains(event.target as Node)) setIsFiltersOpen(false); if (!bookRef.current?.contains(event.target as Node)) setIsBookOpen(false); if (!packRef.current?.contains(event.target as Node)) setIsPackOpen(false); if (!bookTransferRef.current?.contains(event.target as Node)) setIsBookTransferOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setIsSettingsOpen(false); setIsFiltersOpen(false); setIsBookOpen(false); setIsPackOpen(false); setIsBookTransferOpen(false); } };
+    const closeIfOutside = (event: MouseEvent) => { if (!settingsRef.current?.contains(event.target as Node)) setIsSettingsOpen(false); if (!filterRef.current?.contains(event.target as Node)) setIsFiltersOpen(false); if (!bookRef.current?.contains(event.target as Node)) setIsBookOpen(false); if (!bookTransferRef.current?.contains(event.target as Node)) setIsBookTransferOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setIsSettingsOpen(false); setIsFiltersOpen(false); setIsBookOpen(false); setIsPackOpen(false); setClipboardPlan(null); setIsBookTransferOpen(false); } };
     document.addEventListener("mousedown", closeIfOutside);
     document.addEventListener("keydown", closeOnEscape);
     return () => { document.removeEventListener("mousedown", closeIfOutside); document.removeEventListener("keydown", closeOnEscape); };
   }, []);
   useEffect(() => { document.documentElement.lang = language === "zh" ? "zh-CN" : "en"; window.localStorage.setItem("sourcebook-language", language); }, [language]);
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (!activeBookId || clipboardPlan || isEditablePasteTarget(event.target)) return;
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+      event.preventDefault();
+      const browserEntries = clipboardBrowserEntries(clipboard);
+      const parsed = parseClipboardPayload(clipboard);
+      const bookName = books.find((book) => book.id === activeBookId)?.name || "Default Book";
+      // Pasting is synchronous from the user's point of view: render the
+      // browser-provided preview now. Some embedded browsers expose only a
+      // Files marker, not File objects; defer the slower native path probe for
+      // that specific fallback until the user explicitly confirms.
+      const needsNativeProbe = clipboard.types.includes("Files") && !browserEntries.files.length && !browserEntries.folderNames.length;
+      setClipboardPlan(buildClipboardPlan({ activeBookId, bookName, browserFiles: browserEntries.files, browserFolderNames: browserEntries.folderNames, ignoredTypes: parsed.ignoredTypes, language, links: parsed.links, nativeFiles: [], needsNativeProbe, text: parsed.text, token: "" }));
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [activeBookId, books, clipboardPlan, language]);
 
   const visibleItems = useMemo(() => items.filter((item) => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -426,10 +477,9 @@ export default function SourcebookSources() {
       return false;
     }
   }
-  async function copyPackPrompt() {
+  async function copyPackPrompt(prompt: string) {
     try {
-      const activeBookName = books.find((book) => book.id === activeBookId)?.name || "Default Book";
-      await navigator.clipboard.writeText(renderPromptTemplate(promptTemplate || defaultPromptTemplate(language), selectedItems, language, activeBookName));
+      await navigator.clipboard.writeText(prompt);
       showSourcesMessage(language === "zh" ? "提示词已复制，可粘贴到 Agent 对话框。" : "Prompt copied. Paste it into your agent chat.", 3600, "success");
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制提示词：${errorMessage(error)}` : `Could not copy prompt: ${errorMessage(error)}`, 6000, "error");
@@ -518,10 +568,15 @@ export default function SourcebookSources() {
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function selectBook(bookId: string) {
+    if (bookId === activeBookId) { setIsBookOpen(false); return; }
+    loadMoreAbortRef.current?.abort();
+    loadMoreAbortRef.current = null;
+    setIsLoadingMore(false);
+    setIsBookOpen(false);
     try {
       const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
       if (isBatchSelecting) rememberSelection(activeBookId, selectedIds);
-      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null); setIsBookOpen(false);
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function createBook(name: string) {
@@ -661,6 +716,43 @@ export default function SourcebookSources() {
       showSourcesMessage(`Uploaded ${succeeded} file${succeeded === 1 ? "" : "s"}.${failureSummary}`, failures.length ? 9000 : 3600);
     } finally { setIsImporting(false); }
   }
+  async function importClipboardPlan() {
+    if (!clipboardPlan || isClipboardImporting) return;
+    setIsClipboardImporting(true);
+    try {
+      let resolvedPlan = clipboardPlan;
+      if (resolvedPlan.needsNativeProbe) {
+        setClipboardPlan((current) => current ? { ...current, items: current.items.map((item) => item.kind === "native-probe" ? { ...item, status: "importing" } : item) } : current);
+        const native = await request<{ token: string; files: ClipboardFile[] }>("/api/clipboard/files", { method: "POST" });
+        resolvedPlan = buildClipboardPlan({ activeBookId: resolvedPlan.bookId, bookName: resolvedPlan.bookName, browserFiles: resolvedPlan.browserFiles, browserFolderNames: resolvedPlan.browserFolderNames, ignoredTypes: resolvedPlan.ignoredTypes, language, links: resolvedPlan.links, nativeFiles: native.files || [], needsNativeProbe: false, text: resolvedPlan.text, token: native.token });
+        setClipboardPlan(resolvedPlan);
+      }
+      const pendingItems = resolvedPlan.items.filter((item) => item.status === "pending");
+      if (!pendingItems.length) return;
+      setClipboardPlan((current) => current ? { ...current, items: current.items.map((item) => item.status === "pending" ? { ...item, status: "importing" } : item) } : current);
+      const form = new FormData();
+      const items = pendingItems.map((item) => ({ id: item.id, kind: item.kind, nativeFileId: item.nativeFileId, value: item.value }));
+      form.append("payload", JSON.stringify({ token: resolvedPlan.token, items }));
+      for (const item of pendingItems) if (item.kind === "browser-file" && item.file) form.append(`file-${item.id}`, item.file, item.file.name || "Pasted file");
+      const result = await requestFormData<ClipboardImportResponse>(`/api/books/${encodeURIComponent(resolvedPlan.bookId)}/clipboard-import`, form);
+      const resultByID = new Map(result.results.map((entry) => [entry.id, entry]));
+      const imported = result.results.filter((entry) => entry.status === "imported").length;
+      setClipboardPlan((current) => current ? { ...current, items: current.items.map((item) => {
+        const result = resultByID.get(item.id);
+        if (!result) return item.status === "importing" ? { ...item, status: "failed", reason: language === "zh" ? "导入未完成。请重新粘贴后再试。" : "The import did not finish. Paste again and retry." } : item;
+        return { ...item, status: result.status, reason: result.reason };
+      }) } : current);
+      if (imported) {
+        await loadItems({ background: true, bookId: activeBookId });
+        showSourcesMessage(language === "zh" ? `已添加 ${imported} 个素材到当前 Book。` : `Added ${imported} source${imported === 1 ? "" : "s"} to this Book.`, 3600, "success");
+      }
+    } catch (error) {
+      const reason = clipboardErrorReason(errorMessage(error), language);
+      setClipboardPlan((current) => current ? { ...current, items: current.items.map((item) => item.status === "importing" ? { ...item, status: "failed", reason } : item) } : current);
+    } finally {
+      setIsClipboardImporting(false);
+    }
+  }
   const openPickerInstall = () => window.open(pickerInstallUrl, "_blank", "noopener,noreferrer");
   const emptySourceDescription = language === "zh"
     ? <>使用 <button className="empty-action-link" onClick={openPickerInstall} type="button">Picker插件</button> 获取网页内容 或 <button className="empty-action-link" onClick={() => localImportInputRef.current?.click()} type="button">{copy.importLocalFiles}</button></>
@@ -725,8 +817,8 @@ export default function SourcebookSources() {
       </div>
       {loading ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
       {!loading && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
-      {!loading && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onToggle={toggleSelected} /> : null}
-      {isBatchSelecting ? <footer className="sources-footer sources-batch-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={!visibleItems.length || selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button>{hasReusableSelection ? <button className="text-button sources-select-all-button" onClick={restoreLastSelection} type="button">{language === "zh" ? "使用上一次选择" : "Use previous selection"}</button> : null}</div><div className="sources-footer-actions"><button className="secondary-button sources-delete-button" disabled={!selectedIds.length} onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button" disabled={!selectedIds.length} onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><div className="sources-pack-wrap" ref={bookTransferRef}><button aria-expanded={isBookTransferOpen} className={`secondary-button sources-transfer-button ${isBookTransferOpen ? "is-open" : ""}`} disabled={!selectedIds.length} onClick={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={selectedIds.length} isTransferring={isTransferringSelected} onClose={() => setIsBookTransferOpen(false)} onTransfer={transferSelectedSources} /> : null}</div><div className="sources-pack-wrap" ref={packRef}><button aria-expanded={isPackOpen} className={`primary-button sources-pack-button ${isPackOpen ? "is-open" : ""}`} disabled={!selectedIds.length} onClick={() => { setIsBookTransferOpen(false); setIsPackOpen((open) => !open); }} type="button"><Package size={15} />{copy.packForAgent}</button>{isPackOpen ? <PackPopover items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} /> : null}</div><button aria-label={copy.clear} className="secondary-button sources-cancel-button" data-tooltip={copy.clear} onClick={exitBatchSelection} type="button"><X size={17} /></button></div></footer> : !loading && visibleItems.length > 0 ? <button className="batch-actions-fab" onClick={() => setIsBatchSelecting(true)} type="button"><ListChecks size={16} />{language === "zh" ? "批量操作" : "Batch actions"}</button> : null}
+      {!loading && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onRevealLocal={revealLocalFile} onToggle={toggleSelected} /> : null}
+      {isBatchSelecting ? <footer className="sources-footer sources-batch-footer"><div className="sources-selection-summary"><span>{selectedIds.length} {selectedIds.length === 1 ? copy.sourceSelected : copy.sourcesSelected}</span><button className="text-button sources-select-all-button" disabled={!visibleItems.length || selectedIds.length === visibleItems.length && selectedIds.every((id) => visibleItems.some((item) => item.id === id))} onClick={selectVisibleItems} type="button">{copy.selectAll}</button>{hasReusableSelection ? <button className="text-button sources-select-all-button" onClick={restoreLastSelection} type="button">{language === "zh" ? "使用上一次选择" : "Use previous selection"}</button> : null}</div><div className="sources-footer-actions"><button className="secondary-button sources-delete-button" disabled={!selectedIds.length} onClick={() => setIsDeleteOpen(true)} type="button"><Trash2 size={15} />{copy.delete}</button><button className="secondary-button" disabled={!selectedIds.length} onClick={() => setIsBatchNoteOpen(true)} type="button"><MessageSquare size={15} />{copy.addNote}</button><div className="sources-pack-wrap" ref={bookTransferRef}><button aria-expanded={isBookTransferOpen} className={`secondary-button sources-transfer-button ${isBookTransferOpen ? "is-open" : ""}`} disabled={!selectedIds.length} onClick={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={selectedIds.length} isTransferring={isTransferringSelected} onClose={() => setIsBookTransferOpen(false)} onTransfer={transferSelectedSources} /> : null}</div><button className="primary-button sources-pack-button" disabled={!selectedIds.length} onClick={() => { setIsBookTransferOpen(false); setIsPackOpen(true); }} type="button"><Package size={15} />{copy.packForAgent}</button><button aria-label={copy.clear} className="secondary-button sources-cancel-button" data-tooltip={copy.clear} onClick={exitBatchSelection} type="button"><X size={17} /></button></div></footer> : !loading && visibleItems.length > 0 ? <button className="batch-actions-fab" onClick={() => setIsBatchSelecting(true)} type="button"><ListChecks size={16} />{language === "zh" ? "批量操作" : "Batch actions"}</button> : null}
       {message ? <p className={`sources-message is-${messageTone}`} role="status">{isRefreshing || isImporting ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
     <SourceDetailModal focusNote={focusDetailNote} item={detailItem} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onTitleSave={saveTitle} />
@@ -742,22 +834,24 @@ export default function SourcebookSources() {
     <ClearLocalDataModal isClearing={isClearingData} isOpen={isClearDataOpen} onClose={() => !isClearingData && setIsClearDataOpen(false)} onConfirm={() => void clearLocalData()} />
     <BackupExportModal books={books} isOpen={isBackupExportOpen} onClose={() => setIsBackupExportOpen(false)} onExport={exportBackup} onSelectionChange={setBackupBookIds} selectedBookIds={backupBookIds} />
     <PromptSettingsModal isOpen={isPromptSettingsOpen} language={language} savedTemplate={promptTemplate} onClose={() => setIsPromptSettingsOpen(false)} onSave={savePromptTemplate} />
+    <PackHandoffModal bookName={books.find((book) => book.id === activeBookId)?.name || "Default Book"} isOpen={isPackOpen} items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} onEditTemplate={() => { setIsPackOpen(false); setIsPromptSettingsOpen(true); }} promptTemplate={promptTemplate} />
+    <ClipboardImportModal busy={isClipboardImporting} language={language} onClose={() => !isClipboardImporting && setClipboardPlan(null)} onConfirm={() => void importClipboardPlan()} plan={clipboardPlan} />
     <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
     <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
     <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} settings={mcpSettings} />
-    <MCPSuggestionsModal isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`, { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`, { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestions={mcpSuggestions} />
+    <MCPSuggestionsModal batchId={requestedSubmissionBatchIdRef.current} isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`, { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`, { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestions={mcpSuggestions} />
   </main></LanguageContext.Provider>;
 }
 
-function SourceMasonry({ density, isBatchSelecting, items, selectedIds, hasMore, isLoadingMore, onLoadMore, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { density: CardDensity; isBatchSelecting: boolean; items: SourceItem[]; selectedIds: string[]; hasMore: boolean; isLoadingMore: boolean; onLoadMore: () => void; onCopy: (item: SourceItem) => Promise<void>; onFavorite: (id: string, favorite: boolean) => void; onOpen: (item: SourceItem) => void; onEditNote: (item: SourceItem) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onToggle: (id: string) => void }) {
+function SourceMasonry({ density, isBatchSelecting, items, selectedIds, hasMore, isLoadingMore, onLoadMore, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onRevealLocal, onToggle }: { density: CardDensity; isBatchSelecting: boolean; items: SourceItem[]; selectedIds: string[]; hasMore: boolean; isLoadingMore: boolean; onLoadMore: () => void; onCopy: (item: SourceItem) => Promise<void>; onFavorite: (id: string, favorite: boolean) => void; onOpen: (item: SourceItem) => void; onEditNote: (item: SourceItem) => void; onOpenLocal: (item: SourceItem) => void; onPreview: (item: SourceItem) => void; onRequestDownload: (item: SourceItem) => void; onRetryDownload: (item: SourceItem) => void; onRevealLocal: (item: SourceItem) => void; onToggle: (id: string) => void }) {
   const copy = interfaceCopy[useLanguage()];
   const ref = useRef<HTMLDivElement | null>(null); const [columnCount, setColumnCount] = useState(4);
   useEffect(() => { const element = ref.current; if (!element) return; const minWidth = density === "compact" ? 198 : density === "spacious" ? 340 : 258; const update = () => setColumnCount(element.clientWidth < 500 ? 1 : Math.max(2, Math.min(8, Math.floor((element.clientWidth + 16) / (minWidth + 16))))); update(); const observer = new ResizeObserver(update); observer.observe(element); return () => observer.disconnect(); }, [density]);
   const columns = Array.from({ length: columnCount }, () => [] as SourceItem[]); items.forEach((item, index) => columns[index % columnCount].push(item));
-  return <div className={`source-masonry density-${density} ${isBatchSelecting ? "is-selecting" : ""}`} ref={ref}><div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard isBatchSelecting={isBatchSelecting} item={item} key={item.id} selected={selectedIds.includes(item.id)} onCopy={() => void onCopy(item)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
+  return <div className={`source-masonry density-${density} ${isBatchSelecting ? "is-selecting" : ""}`} ref={ref}><div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard isBatchSelecting={isBatchSelecting} item={item} key={item.id} selected={selectedIds.includes(item.id)} onCopy={() => void onCopy(item)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onRevealLocal={() => onRevealLocal(item)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
 }
 
-function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onToggle }: { isBatchSelecting: boolean; item: SourceItem; selected: boolean; onCopy: () => void; onFavorite: () => void; onOpen: () => void; onEditNote: () => void; onOpenLocal: () => void; onPreview: () => void; onRequestDownload: () => void; onRetryDownload: () => void; onToggle: () => void }) {
+function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOpen, onEditNote, onOpenLocal, onPreview, onRequestDownload, onRetryDownload, onRevealLocal, onToggle }: { isBatchSelecting: boolean; item: SourceItem; selected: boolean; onCopy: () => void; onFavorite: () => void; onOpen: () => void; onEditNote: () => void; onOpenLocal: () => void; onPreview: () => void; onRequestDownload: () => void; onRetryDownload: () => void; onRevealLocal: () => void; onToggle: () => void }) {
   const language = useLanguage(); const copy = interfaceCopy[language];
   const excerpt = descriptionFor(item);
   const isWebLink = item.modality === "link" && item.pickType !== "local_import";
@@ -770,7 +864,7 @@ function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOp
   const hasVisual = !usesCardSourceMark && (["image", "video", "conversation"].includes(item.modality) || hasTextArtwork);
   const isPlayable = (item.modality === "video" || item.modality === "audio") && !isWebVideo;
   const previewable = item.modality === "image" || isPlayable;
-  const openableLocalFile = item.modality === "file" && localFileState(item) === "cached";
+  const openableLocalFile = localFileState(item) === "cached";
   const showVideoCover = item.modality === "video" && localFileState(item) !== "cached";
   const duration = useMediaDuration(item);
   const previewLabel = item.modality === "audio" ? copy.play + " " + copy.audio : item.modality === "video" ? copy.play + " " + copy.video : copy.view + " " + copy.image;
@@ -786,7 +880,7 @@ function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOp
     {item.favorite ? <button aria-label={copy.removeFavorite} className="source-card-favorite-pinned" data-tooltip={copy.removeFavorite} onClick={(event) => { event.stopPropagation(); event.currentTarget.blur(); onFavorite(); }} type="button"><Star fill="currentColor" size={13} /></button> : null}
     {usesCardSourceMark ? <CardSourceMark item={item} /> : null}
     {hasVisual ? <div className="source-masonry-media preserve-media-ratio">{item.modality === "conversation" || item.modality === "text" ? <CardSourceMark item={item} /> : null}{previewable ? <button aria-label={copy.openDetail} className="source-masonry-media-button" data-tooltip={copy.openDetail} onClick={(event) => { event.stopPropagation(); if (isBatchSelecting) onToggle(); else onOpen(); }} type="button"><SourceThumbnail item={item} /></button> : <SourceThumbnail item={item} />}{showVideoCover ? <span className="video-cover-label">{copy.cover}</span> : null}{(item.modality === "video" || item.modality === "audio") && duration !== null ? <span className="media-duration">{formatDuration(duration)}</span> : null}</div> : null}
-    <div className="source-masonry-body"><h2 title={item.itemTitle}>{item.itemTitle}</h2><div className="source-masonry-meta"><DataStatus item={item} onRequestDownload={onRequestDownload} onRetryDownload={onRetryDownload} /><div className="source-masonry-origin"><span>{sourceLabel(item)}</span><time>{formatDate(item.pickedAt)}</time></div></div>{post ? <PostByline className="post-card-meta" post={post} /> : null}{!hasTextArtwork && excerpt ? <p className="source-masonry-excerpt">{excerpt}</p> : null}{!hasVisual && !usesCardSourceMark && !excerpt ? <div className="source-masonry-abstract"><SourceThumbnail item={item} /></div> : null}<div className="source-card-actions"><button className={`source-note-summary ${item.userNote ? "has-note" : "is-empty"}`} onClick={(event) => { event.stopPropagation(); onEditNote(); }} title={item.userNote || `${copy.addNote}…`} type="button"><MessageSquare aria-hidden="true" size={12} /><span>{item.userNote || `${copy.addNote}…`}</span></button></div></div>
+    <div className="source-masonry-body"><h2 title={item.itemTitle}>{item.itemTitle}</h2><div className="source-masonry-meta"><DataStatus item={item} onRequestDownload={onRequestDownload} onRetryDownload={onRetryDownload} onRevealLocal={onRevealLocal} /><div className="source-masonry-origin"><span>{sourceLabel(item)}</span><time>{formatDate(item.pickedAt)}</time></div></div>{post ? <PostByline className="post-card-meta" post={post} /> : null}{!hasTextArtwork && excerpt ? <p className="source-masonry-excerpt">{excerpt}</p> : null}{!hasVisual && !usesCardSourceMark && !excerpt ? <div className="source-masonry-abstract"><SourceThumbnail item={item} /></div> : null}<div className="source-card-actions"><button className={`source-note-summary ${item.userNote ? "has-note" : "is-empty"}`} onClick={(event) => { event.stopPropagation(); onEditNote(); }} title={item.userNote || `${copy.addNote}…`} type="button"><MessageSquare aria-hidden="true" size={12} /><span>{item.userNote || `${copy.addNote}…`}</span></button></div></div>
   </article>;
 }
 
@@ -910,14 +1004,14 @@ function useMediaDuration(item: SourceItem) {
   }, [declared, item.assetCacheState, item.contentUrl, item.id, item.modality, item.thumbnailUrl]);
   return duration;
 }
-function DataStatus({ item, onRequestDownload, onRetryDownload }: { item: SourceItem; onRequestDownload?: () => void; onRetryDownload?: () => void }) {
+function DataStatus({ item, onRequestDownload, onRetryDownload, onRevealLocal }: { item: SourceItem; onRequestDownload?: () => void; onRetryDownload?: () => void; onRevealLocal?: () => void }) {
   const copy = interfaceCopy[useLanguage()];
   const stopPropagation = (event: React.MouseEvent) => event.stopPropagation();
   const isImageWithRemoteFile = item.modality === "image" && Boolean(item.contentUrl);
   const link = item.linkState === "none" ? null : item.linkState === "invalid" ? <span aria-label={copy.invalidLink} className="data-status-badge is-invalid is-icon" data-tooltip={copy.invalidLink}><Link2Off size={13} /></span> : <a aria-label={copy.visit} className="data-status-badge is-link is-action is-icon" data-tooltip={copy.visit} href={item.sourceUrl} onClick={stopPropagation} rel="noreferrer" target="_blank"><Link2 size={13} /></a>;
-  if (!isImageWithRemoteFile) return <>{link}{item.assetCacheState === "cached" ? <a aria-label={copy.localFile} className="data-status-badge is-local is-action is-icon" data-tooltip={copy.localFile} href={item.thumbnailUrl ?? item.sourceUrl} onClick={stopPropagation} rel="noreferrer" target="_blank"><HardDrive size={13} /></a> : null}</>;
+  if (!isImageWithRemoteFile) return <>{link}{item.assetCacheState === "cached" && onRevealLocal ? <button aria-label={copy.showInFolder} className="data-status-badge is-local is-action is-icon" data-tooltip={copy.showInFolder} onClick={(event) => { stopPropagation(event); onRevealLocal(); }} type="button"><FolderOpen size={13} /></button> : null}</>;
   const state = localState(item);
-  const local = state === "downloading" ? <span aria-label={copy.downloading} className="data-status-badge is-downloading is-icon" data-tooltip={copy.downloading}><LoaderCircle className="spin" size={13} /></span> : state === "local" ? <a aria-label={copy.viewLocalFile} className="data-status-badge is-local is-action is-icon" data-tooltip={copy.viewLocalFile} href={item.thumbnailUrl ?? item.sourceUrl} onClick={stopPropagation} rel="noreferrer" target="_blank"><HardDrive size={13} /></a> : state === "missing" && onRequestDownload ? <button aria-label={copy.fileMissing} className="data-status-badge is-missing is-icon" data-tooltip={copy.fileMissing} onClick={(event) => { event.stopPropagation(); onRequestDownload(); }} type="button"><FileWarning size={13} /></button> : state === "failed" && onRetryDownload ? <button aria-label={copy.downloadFailed} className="data-status-badge is-failed is-icon" data-tooltip={copy.downloadFailed} onClick={(event) => { event.stopPropagation(); onRetryDownload(); }} type="button"><CloudOff size={13} /></button> : null;
+  const local = state === "downloading" ? <span aria-label={copy.downloading} className="data-status-badge is-downloading is-icon" data-tooltip={copy.downloading}><LoaderCircle className="spin" size={13} /></span> : state === "local" && onRevealLocal ? <button aria-label={copy.showInFolder} className="data-status-badge is-local is-action is-icon" data-tooltip={copy.showInFolder} onClick={(event) => { stopPropagation(event); onRevealLocal(); }} type="button"><FolderOpen size={13} /></button> : state === "missing" && onRequestDownload ? <button aria-label={copy.fileMissing} className="data-status-badge is-missing is-icon" data-tooltip={copy.fileMissing} onClick={(event) => { event.stopPropagation(); onRequestDownload(); }} type="button"><FileWarning size={13} /></button> : state === "failed" && onRetryDownload ? <button aria-label={copy.downloadFailed} className="data-status-badge is-failed is-icon" data-tooltip={copy.downloadFailed} onClick={(event) => { event.stopPropagation(); onRetryDownload(); }} type="button"><CloudOff size={13} /></button> : null;
   return <>{link}{local}</>;
 }
 function SourcebookMark({ size = 28 }: { size?: number }) { return <svg aria-hidden="true" className="sourcebook-mark" height={size} viewBox="0 0 256 256" width={size}><g fill="currentColor"><rect x="36" y="60" width="42" height="28" rx="5" /><rect x="36" y="105" width="42" height="28" rx="5" /><rect x="36" y="150" width="42" height="28" rx="5" /><rect x="66" y="36" width="166" height="166" rx="15" /><rect x="94" y="190" width="36" height="34" rx="6" /><rect x="168" y="190" width="36" height="34" rx="6" /></g><path d="m133 100 19 20-19 20" fill="none" stroke="var(--mark-eye, #fff)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="18" /><rect x="179" y="91" width="18" height="58" rx="9" fill="var(--mark-eye, #fff)" /></svg>; }
@@ -975,7 +1069,7 @@ function SourceDetailModal({ focusNote, item, onClose, onContentSave, onCopy, on
             <DetailRow label={copy.picked} value={formatDateTime(item.pickedAt)} />
             {post ? <PostInfoRows post={post} /> : null}
             {!page && !post ? <><DetailRow label={copy.format} value={item.mimeType ?? kindLabel(item.modality, language)} /><DetailRow label={copy.size} value={formatBytes(item.fileSize, language)} /></> : null}
-            {storedFileState === "cached" && item.localPath ? <DetailActionRow label={copy.localLink} onClick={() => onRevealLocal(item)} title={copy.showInFolder} value={item.localPath} /> : null}
+            {storedFileState === "cached" && item.localPath ? <DetailActionRow icon={<FolderOpen size={13} />} label={language === "zh" ? "保存位置" : "Saved location"} onClick={() => onRevealLocal(item)} title={copy.showInFolder} value={item.localPath} /> : null}
             {(storedFileState === "missing" || storedFileState === "failed") && webLink ? <DetailActionRow icon={<Download size={13} />} label={copy.localLink} onClick={() => onRetryDownload(item)} title={copy.downloadAgain} value={copy.downloadAgain} /> : null}
             {storedFileState === "downloading" ? <DetailRow label={copy.localLink} value={copy.downloading} /> : null}
             {webLink ? <DetailRow hideLinkIcon label={copy.webLink} link value={webLink} /> : null}
@@ -990,7 +1084,10 @@ function SourceDetailModal({ focusNote, item, onClose, onContentSave, onCopy, on
 
 function DetailRow({ hideLinkIcon = false, label, link = false, value }: { hideLinkIcon?: boolean; label: string; link?: boolean; value: string }) { return <div className="field"><span>{label}</span>{link ? <strong><a href={value} rel="noreferrer" target="_blank" title={value}>{value}{!hideLinkIcon ? <ExternalLink size={12} /> : null}</a></strong> : <strong title={value}>{value}</strong>}</div>; }
 function DetailActionRow({ icon, label, onClick, title, value }: { icon?: React.ReactNode; label: string; onClick: () => void; title: string; value: string }) { return <div className="field"><span>{label}</span><button className="detail-path-action" data-tooltip={title} onClick={onClick} type="button"><span>{value}</span>{icon}</button></div>; }
-function LocalFileDetailPreview({ item, onOpen }: { item: SourceItem; onOpen: () => void }) { return <button aria-label="Open file" className="detail-local-file-preview" onClick={onOpen} type="button"><FileIdentity item={item} /></button>; }
+function LocalFileDetailPreview({ item, onOpen }: { item: SourceItem; onOpen: () => void }) {
+  const language = useLanguage();
+  return <button aria-label={language === "zh" ? "打开文件" : "Open file"} className="detail-local-file-preview" data-tooltip={language === "zh" ? "用默认应用打开" : "Open with the default app"} onClick={onOpen} type="button"><FileIdentity item={item} /><ExternalLink aria-hidden="true" className="detail-local-file-open-icon" size={18} /></button>;
+}
 function WebPageDetailPreview({ item }: { item: SourceItem }) { const title = item.metadata.pageTitle || item.metadata.ogTitle || item.itemTitle; const hasThumbnail = Boolean(item.thumbnailUrl); return <button aria-label="Open link in browser" className={`webpage-detail-preview ${hasThumbnail ? "has-thumbnail" : ""}`} onClick={() => openWebLink(item)} type="button">{hasThumbnail ? <span className="webpage-artwork-large"><img src={item.thumbnailUrl ?? undefined} alt="" onError={(event) => { event.currentTarget.parentElement?.setAttribute("hidden", ""); event.currentTarget.closest(".webpage-detail-preview")?.classList.remove("has-thumbnail"); }} /></span> : null}<div className="webpage-detail-copy"><div className="webpage-site-line">{item.faviconUrl ? <img src={item.faviconUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}<span>{sourceLabel(item)}</span></div><h3>{title}</h3>{item.metadata.description ? <p>{item.metadata.description}</p> : null}</div></button>; }
 function WebVideoDetailPreview({ item }: { item: SourceItem }) {
   const copy = interfaceCopy[useLanguage()];
@@ -1113,7 +1210,6 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
   const [message, setMessage] = useState("");
   const [target, setTarget] = useState<AgentInstallTarget>("codex");
   const [isTargetOpen, setIsTargetOpen] = useState(false);
-  const [showVersionHelp, setShowVersionHelp] = useState(false);
   useEffect(() => { if (!isOpen) return; void request<MCPSettingsResponse>("/api/settings/mcp").then((value) => { setCurrent(value); onLoad(value); setMessage(""); }).catch((reason) => setMessage(errorMessage(reason))); }, [isOpen]);
   if (!isOpen) return null;
   const enable = async () => { setBusy(true); setMessage(""); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp", { method: "POST", body: JSON.stringify({}) }); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(false); } };
@@ -1131,12 +1227,8 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
           <div className="mcp-install-heading">
             <div className="mcp-install-title-row">
               <h3>{zh ? "安装 Agent 插件" : "Install Agent plugin"}</h3>
-              {current?.agentVersion ? <div className="mcp-version-help" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setShowVersionHelp(false); }}>
-                <button aria-expanded={showVersionHelp} aria-label={zh ? "查看插件版本和更新说明" : "Plugin version and update help"} className="mcp-version-help-button" onClick={() => setShowVersionHelp((open) => !open)} type="button"><CircleHelp size={16} /></button>
-                {showVersionHelp ? <div className="mcp-version-help-popover" role="status"><strong>{zh ? `Desktop 内置插件：${current.agentVersion}` : `Bundled with Desktop: ${current.agentVersion}`}</strong><span>{zh ? "独立插件可能有更新版本；再次发送安装提示即可检查并更新。" : "The independent plugin may be newer. Send the install request again to check and update."}</span></div> : null}
-              </div> : null}
             </div>
-            <p className="mcp-install-description">{zh ? "复制请求并发送给目标 Agent；它会检查 GitHub 上的插件版本。" : "Send the request to your Agent. It checks the plugin version on GitHub."}</p>
+            <p className="mcp-install-description">{zh ? "复制请求并发送给目标 Agent；插件独立于 Desktop 安装和更新。首次实际使用时，Agent 会检查本机连接、自动启动 Desktop，并在只需更新插件时自行处理。" : "Send the request to your Agent. The Plugin installs and updates independently from Desktop. On first use, it checks the local connection, starts Desktop when possible, and updates only the Plugin when that is the required fix."}</p>
           </div>
           <div className="mcp-install-action">
             <div className="mcp-install-action-main">
@@ -1155,20 +1247,49 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
   </div>;
 }
 
-function MCPSuggestionsModal({ isOpen, language, onClose, onConnectAgent, onLoad, onReview, onUpdate, suggestions }: { isOpen: boolean; language: Language; onClose: () => void; onConnectAgent: () => void; onLoad: (suggestions: MCPSuggestionEntry[]) => void; onReview: (bookId: string, suggestionId: string, decision: "accept" | "reject") => Promise<void>; onUpdate: (bookId: string, suggestionId: string, payload: { title: string; note: string }) => Promise<void>; suggestions: MCPSuggestionEntry[] }) {
+function MCPSuggestionsModal({ batchId, isOpen, language, onClose, onConnectAgent, onLoad, onReview, onUpdate, suggestions }: { batchId: string | null; isOpen: boolean; language: Language; onClose: () => void; onConnectAgent: () => void; onLoad: (suggestions: MCPSuggestionEntry[]) => void; onReview: (bookId: string, suggestionId: string, decision: "accept" | "reject") => Promise<void>; onUpdate: (bookId: string, suggestionId: string, payload: { title: string; note: string }) => Promise<void>; suggestions: MCPSuggestionEntry[] }) {
   const zh = language === "zh";
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"pending" | "processed">("pending");
+  const [editingSuggestionIds, setEditingSuggestionIds] = useState<Set<string>>(() => new Set());
   const saveHandlers = useRef(new Map<string, () => Promise<void>>());
-  useEffect(() => { if (!isOpen) return; setView("pending"); setError(""); void request<MCPSuggestionsResponse>("/api/mcp/suggestions").then((response) => onLoad(response.suggestions || [])).catch((reason) => setError(errorMessage(reason))); }, [isOpen]);
+  useEffect(() => { if (!isOpen) return; setView("pending"); setError(""); setEditingSuggestionIds(new Set()); const suffix = batchId ? "?batchId=" + encodeURIComponent(batchId) : ""; void request<MCPSuggestionsResponse>("/api/mcp/suggestions" + suffix).then((response) => onLoad(response.suggestions || [])).catch((reason) => setError(errorMessage(reason))); }, [batchId, isOpen]);
   if (!isOpen) return null;
-  const pending = suggestions.filter((entry) => entry.suggestion.status === "pending");
-  const processed = suggestions.filter((entry) => entry.suggestion.status !== "pending");
+  const scopedSuggestions = batchId ? suggestions.filter((entry) => entry.suggestion.batchId === batchId) : suggestions;
+  const pending = scopedSuggestions.filter((entry) => entry.suggestion.status === "pending");
+  const processed = scopedSuggestions.filter((entry) => entry.suggestion.status !== "pending");
   const visible = view === "pending" ? pending : processed;
   const savePendingEdits = async () => { for (const entry of pending) await saveHandlers.current.get(entry.suggestion.id)?.(); };
   const closeAfterSave = async () => { setError(""); try { await savePendingEdits(); onClose(); return true; } catch (reason) { setError(errorMessage(reason)); return false; } };
   const review = async (entry: MCPSuggestionEntry, decision: "accept" | "reject") => { setBusy(entry.suggestion.id); setError(""); try { await saveHandlers.current.get(entry.suggestion.id)?.(); await onReview(entry.book.id, entry.suggestion.id, decision); } catch (reason) { setError(errorMessage(reason)); } finally { setBusy(null); } };
+  const submitAll = async () => {
+    if (!pending.length || busy) return;
+    setBusy("all");
+    setError("");
+    try {
+      await savePendingEdits();
+      for (const entry of pending) await onReview(entry.book.id, entry.suggestion.id, "accept");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const beginEditing = (suggestionId: string) => setEditingSuggestionIds((ids) => new Set(ids).add(suggestionId));
+  const cancelEditing = (suggestionId: string) => setEditingSuggestionIds((ids) => { const next = new Set(ids); next.delete(suggestionId); return next; });
+  const confirmEditing = async (entry: MCPSuggestionEntry) => {
+    setBusy(entry.suggestion.id);
+    setError("");
+    try {
+      await saveHandlers.current.get(entry.suggestion.id)?.();
+      cancelEditing(entry.suggestion.id);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(null);
+    }
+  };
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mcp-suggestions-title" onMouseDown={(event) => { if (event.target === event.currentTarget) void closeAfterSave(); }}>
     <section className="export-modal mcp-suggestions-modal">
       <header className="modal-head"><div><h2 id="mcp-suggestions-title">{zh ? "Agent 提交" : "Agent submissions"}</h2><p>{zh ? "查看 Agent 提交的内容，确认后才会写入 Book。" : "Review Agent submissions before they change a Book."}</p></div><div className="mcp-suggestions-header-actions"><button className="secondary-button" onClick={async () => { if (await closeAfterSave()) onConnectAgent(); }} type="button"><Workflow aria-hidden="true" size={15} />{zh ? "连接 Agent" : "Connect an Agent"}</button><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={() => void closeAfterSave()} type="button"><X size={16} /></button></div></header>
@@ -1177,16 +1298,20 @@ function MCPSuggestionsModal({ isOpen, language, onClose, onConnectAgent, onLoad
         <button aria-selected={view === "processed"} className={view === "processed" ? "is-active" : ""} onClick={() => setView("processed")} role="tab" type="button">{zh ? "已处理" : "Processed"}<span>{processed.length}</span></button>
       </div>
       <div className="mcp-suggestions-list" role="tabpanel">
-        {visible.length ? visible.map((entry) => <article className="mcp-suggestion" key={entry.suggestion.id}>
-          <div className="mcp-suggestion-head"><div><strong>{suggestionTitle(entry.suggestion.kind, zh)}</strong><small>{entry.book.name} · {entry.suggestion.agentName} · {formatDateTime(entry.suggestion.createdAt)}</small></div><span className={`mcp-suggestion-status is-${entry.suggestion.status}`}>{suggestionStatus(entry.suggestion.status, zh)}</span></div>
-          <SuggestionPreview editing={entry.suggestion.status === "pending" && (entry.suggestion.kind === "import_local_file" || entry.suggestion.kind === "create_text_source")} entry={entry} zh={zh} />
-          {entry.suggestion.status === "pending" && (entry.suggestion.kind === "import_local_file" || entry.suggestion.kind === "create_text_source") ? <SuggestionEditFields entry={entry} onRegisterSave={(save) => saveHandlers.current.set(entry.suggestion.id, save)} onSave={(payload) => onUpdate(entry.book.id, entry.suggestion.id, payload)} zh={zh} /> : null}
-          {entry.suggestion.reviewError ? <p className="mcp-suggestion-error">{entry.suggestion.reviewError}</p> : null}
-          {entry.suggestion.status === "pending" ? <div className="mcp-suggestion-actions"><button className="text-button" disabled={busy === entry.suggestion.id} onClick={() => void review(entry, "reject")} type="button">{zh ? "拒绝" : "Reject"}</button><button className="primary-button" disabled={busy === entry.suggestion.id} onClick={() => void review(entry, "accept")} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "接受" : "Accept"}</button></div> : null}
-        </article>) : <p className="mcp-suggestions-empty">{view === "pending" ? (zh ? "没有待处理的提交。" : "No submissions need your review.") : (zh ? "暂无已处理提交。" : "No processed submissions yet.")}</p>}
+        {visible.length ? visible.map((entry) => {
+          const canEdit = entry.suggestion.status === "pending" && (entry.suggestion.kind === "import_local_file" || entry.suggestion.kind === "create_text_source");
+          const isEditing = canEdit && editingSuggestionIds.has(entry.suggestion.id);
+          return <article className="mcp-suggestion" key={entry.suggestion.id}>
+            <div className="mcp-suggestion-head"><div><strong>{suggestionTitle(entry.suggestion.kind, zh)}</strong><small>{entry.book.name} · {entry.suggestion.agentName} · {formatDateTime(entry.suggestion.createdAt)}</small></div><span className={`mcp-suggestion-status is-${entry.suggestion.status}`}>{suggestionStatus(entry.suggestion.status, zh)}</span></div>
+            <SuggestionPreview editing={isEditing} entry={entry} zh={zh} />
+            {isEditing ? <SuggestionEditFields entry={entry} onRegisterSave={(save) => saveHandlers.current.set(entry.suggestion.id, save)} onSave={(payload) => onUpdate(entry.book.id, entry.suggestion.id, payload)} zh={zh} /> : null}
+            {entry.suggestion.reviewError ? <p className="mcp-suggestion-error">{entry.suggestion.reviewError}</p> : null}
+            {entry.suggestion.status === "pending" ? <div className="mcp-suggestion-actions">{isEditing ? <><button className="text-button" disabled={busy !== null} onClick={() => cancelEditing(entry.suggestion.id)} onMouseDown={(event) => event.preventDefault()} type="button">{zh ? "取消" : "Cancel"}</button><button className="primary-button" disabled={busy !== null} onClick={() => void confirmEditing(entry)} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "确定" : "Confirm"}</button></> : <>{canEdit ? <button className="text-button" disabled={busy !== null} onClick={() => beginEditing(entry.suggestion.id)} type="button"><Pencil size={14} />{zh ? "编辑描述" : "Edit description"}</button> : null}<div className="mcp-suggestion-review-actions"><button className="text-button" disabled={busy !== null} onClick={() => void review(entry, "reject")} type="button">{zh ? "拒绝" : "Reject"}</button><button className="primary-button" disabled={busy !== null} onClick={() => void review(entry, "accept")} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "接受" : "Accept"}</button></div></>}</div> : null}
+          </article>;
+        }) : <p className="mcp-suggestions-empty">{view === "pending" ? (zh ? "没有待处理的提交。" : "No submissions need your review.") : (zh ? "暂无已处理提交。" : "No processed submissions yet.")}</p>}
         {error ? <p className="settings-inline-error" role="alert">{error}</p> : null}
       </div>
-      <footer className="modal-footer"><button className="secondary-button" onClick={() => void closeAfterSave()} type="button">{zh ? "完成" : "Done"}</button></footer>
+      {view === "pending" && pending.length ? <footer className="modal-footer"><button className="primary-button" disabled={busy !== null} onClick={() => void submitAll()} type="button">{busy === "all" ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{busy === "all" ? (zh ? "接受中…" : "Accepting…") : (zh ? "全部接受" : "Accept all")}</button></footer> : null}
     </section>
   </div>;
 }
@@ -1244,6 +1369,7 @@ function SuggestionEditFields({ entry, onRegisterSave, onSave, zh }: { entry: MC
 
 function suggestionTitle(kind: MCPSuggestion["kind"], zh: boolean) { return ({ create_text_source: zh ? "新增文本素材" : "Create text source", import_local_file: zh ? "导入本地文件" : "Import local file", update_source_metadata: zh ? "更新素材信息" : "Update source metadata", pack: zh ? "创建 Pack" : "Create Pack" })[kind]; }
 function suggestionStatus(status: MCPSuggestion["status"], zh: boolean) { return ({ pending: zh ? "待确认" : "Pending", accepted: zh ? "已接受" : "Accepted", rejected: zh ? "已拒绝" : "Rejected", stale: zh ? "无法应用" : "Could not apply" })[status]; }
+function SuggestionSummary({ note, title }: { note: unknown; title: string }) { return <div className="mcp-suggestion-summary"><h3>{title}</h3>{typeof note === "string" && note.trim() ? <div className="mcp-suggestion-note"><MarkdownContent compact value={note} /></div> : null}</div>; }
 function SuggestionPreview({ editing = false, entry, zh }: { editing?: boolean; entry: MCPSuggestionEntry; zh: boolean }) {
   const { suggestion, book } = entry;
   const payload = suggestion.payload;
@@ -1254,17 +1380,17 @@ function SuggestionPreview({ editing = false, entry, zh }: { editing?: boolean; 
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [expanded]);
-  if (suggestion.kind === "create_text_source") return <div className="mcp-suggestion-preview">{!editing ? <h3>{String(payload.title || (zh ? "未命名文本" : "Untitled text"))}</h3> : null}<div className="mcp-suggestion-markdown"><MarkdownContent compact value={String(payload.content || "")} /></div>{!editing && typeof payload.note === "string" && payload.note.trim() ? <div className="mcp-suggestion-note"><strong>{zh ? "备注" : "Note"}</strong><MarkdownContent compact value={payload.note} /></div> : null}</div>;
+  if (suggestion.kind === "create_text_source") return <div className="mcp-suggestion-preview"><div className="mcp-suggestion-markdown"><MarkdownContent compact value={String(payload.content || "")} /></div>{!editing ? <SuggestionSummary note={payload.note} title={String(payload.title || (zh ? "未命名文本" : "Untitled text"))} /> : null}</div>;
   if (suggestion.kind === "import_local_file") {
     const path = typeof payload.path === "string" ? payload.path : "";
     const name = path.split(/[\\/]/).filter(Boolean).pop() || (zh ? "本地文件" : "Local file");
     const mediaKind = /\.(?:png|jpe?g|webp|gif)$/i.test(name) ? "image" : /\.(?:mp4|mov|webm)$/i.test(name) ? "video" : /\.(?:mp3|wav|m4a|aac|flac|ogg)$/i.test(name) ? "audio" : null;
     const mediaUrl = `/api/mcp/suggestions/${encodeURIComponent(book.id)}/${encodeURIComponent(suggestion.id)}/preview`;
-    return <>
-      {!editing ? <div className="mcp-suggestion-preview"><h3>{String(payload.title || name)}</h3>{typeof payload.note === "string" && payload.note.trim() ? <div className="mcp-suggestion-note"><strong>{zh ? "备注" : "Note"}</strong><MarkdownContent compact value={payload.note} /></div> : null}</div> : null}
+    return <div className="mcp-suggestion-preview">
       <div className="mcp-suggestion-file"><div className="mcp-suggestion-file-icon">{mediaKind === "image" ? <Image size={22} /> : mediaKind === "video" ? <Video size={22} /> : mediaKind === "audio" ? <Music2 size={22} /> : <FileUp size={22} />}</div><div className="mcp-suggestion-file-details"><strong title={name}>{name}</strong><small title={path}>{path}</small></div>{mediaKind ? <SuggestionMediaThumbnail kind={mediaKind} name={name} onOpen={() => setExpanded(true)} url={mediaUrl} zh={zh} /> : null}</div>
+      {!editing ? <SuggestionSummary note={payload.note} title={String(payload.title || name)} /> : null}
       {expanded && mediaKind ? createPortal(<div aria-label={zh ? "Agent 提交媒体预览" : "Agent submission media preview"} aria-modal="true" className="media-preview-backdrop mcp-media-preview-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setExpanded(false)} role="dialog"><button aria-label={zh ? "关闭预览" : "Close preview"} className="media-preview-close" onClick={() => setExpanded(false)} type="button"><X size={18} /></button>{mediaKind === "image" ? <img alt={name} src={mediaUrl} /> : mediaKind === "video" ? <video autoPlay controls playsInline preload="metadata" src={mediaUrl} /> : <section className="media-preview-audio"><strong>{name}</strong><audio autoPlay controls src={mediaUrl} /></section>}</div>, document.body) : null}
-    </>;
+    </div>;
   }
   if (suggestion.kind === "update_source_metadata") {
     const changes = payload.changes && typeof payload.changes === "object" ? payload.changes as Record<string, unknown> : {};
@@ -1357,34 +1483,55 @@ function BatchNoteModal({ count, isOpen, onClose, onConfirm }: { count: number; 
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={copy.addNote} onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="export-modal batch-note-modal"><header className="modal-head"><div><h2>{copy.addNote}</h2><p>{summary}</p></div><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={16} /></button></header><div className="batch-note-body"><label htmlFor="batch-note">{copy.note}</label><textarea autoFocus id="batch-note" onChange={(event) => setNote(event.target.value)} placeholder={copy.addContext} value={note} /><p>{detail}</p></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={!note.trim()} onClick={() => onConfirm(note)} type="button"><MessageSquare size={15} />{copy.addNote}</button></footer></section></div>;
 }
 
-function PackPopover({ items, language, onClose, onCopyMaterials, onCopyPrompt }: { items: SourceItem[]; language: Language; onClose: () => void; onCopyMaterials: () => Promise<boolean>; onCopyPrompt: () => Promise<void> }) {
-  const copyableFiles = items.filter(hasCopyablePackFile).length;
-  const linkReferences = items.filter((item) => !hasCopyablePackFile(item) && Boolean(webLinkFor(item))).length;
-  const copy = language === "zh" ? {
-    title: "复制到剪贴板",
-    subtitle: copyableFiles ? "先复制文件并粘贴到 Agent，再复制提示词并粘贴。" : "复制提示词后粘贴到 Agent 对话中。",
-    materials: "复制文件",
-    prompt: "复制提示词",
-    localFiles: "个文件可直接粘贴。",
-    linkReferences: "个没有本地文件的素材会作为链接写入提示词。",
+function PackHandoffModal({ bookName, isOpen, items, language, onClose, onCopyMaterials, onCopyPrompt, onEditTemplate, promptTemplate }: { bookName: string; isOpen: boolean; items: SourceItem[]; language: Language; onClose: () => void; onCopyMaterials: () => Promise<boolean>; onCopyPrompt: (prompt: string) => Promise<void>; onEditTemplate: () => void; promptTemplate: string }) {
+  const [scopeOpen, setScopeOpen] = useState(true);
+  const [prompt, setPrompt] = useState("");
+  const files = items.filter(hasCopyablePackFile);
+  const links = items.filter((item) => !hasCopyablePackFile(item) && Boolean(webLinkFor(item)));
+  const selectionKey = items.map((item) => item.id).join(":");
+  const defaultPrompt = () => renderPromptTemplate(promptTemplate || defaultPromptTemplate(language), items, language, bookName);
+  useEffect(() => { if (isOpen) { setScopeOpen(true); setPrompt(defaultPrompt()); } }, [bookName, isOpen, language, promptTemplate, selectionKey]);
+  if (!isOpen) return null;
+  const zh = language === "zh";
+  const copy = zh ? {
+    title: "发送给 Agent", scope: "范围", scopeHelp: "文本与备注会作为文件复制", files: "文件", links: "链接", prompt: "提示词", editTemplate: "编辑模板", restore: "恢复默认", how: "如何使用", howDescription: "先复制文件并粘贴到 Agent 输入框，再复制并粘贴提示词。随后补充你的任务要求并发送。不同 Agent 支持的文件类型和数量不同；若上传失败，请重新选择素材并创建新的 Pack。", copyFiles: "复制文件", copyPrompt: "复制提示词", close: "关闭", textFile: "文本与备注会复制为文件", linkFallback: "此素材会作为链接写入提示词。",
   } : {
-    title: "Copy to Clipboard",
-    subtitle: copyableFiles ? "Paste copied files into your agent, then paste the copied prompt." : "Paste the copied prompt into your agent chat.",
-    materials: "Copy files",
-    prompt: "Copy prompt",
-    localFiles: ` file${copyableFiles === 1 ? "" : "s"} can be pasted directly.`,
-    linkReferences: ` source${linkReferences === 1 ? "" : "s"} without a local file will be included as links in the prompt.`,
+    title: "Send to Agent", scope: "Scope", scopeHelp: "Text and notes are copied as files", files: "Files", links: "Links", prompt: "Prompt", editTemplate: "Edit template", restore: "Restore default", how: "How it works", howDescription: "Copy files first and paste them into your agent input, then copy and paste the prompt. Add your task instructions and send. Each agent supports different file types and quantities; if uploading fails, select the materials again and create a new Pack.", copyFiles: "Copy files", copyPrompt: "Copy prompt", close: "Close", textFile: "Text and notes are copied as files", linkFallback: "This source will be included as a link in the prompt.",
   };
-  return <div className="pack-popover" role="dialog" aria-label={language === "zh" ? "发送给 Agent" : "Pack for agent"}>
-    <button aria-label={language === "zh" ? "关闭" : "Close"} className="pack-popover-close icon-button" data-tooltip={language === "zh" ? "关闭" : "Close"} onClick={onClose} type="button"><X size={14} /></button>
-    <div className="pack-popover-header"><h2>{copy.title}</h2><p>{copy.subtitle}</p></div>
-    <ul className="pack-popover-summary"><li><strong>{copyableFiles}</strong>{copy.localFiles}</li><li><strong>{linkReferences}</strong>{copy.linkReferences}</li></ul>
-    <div className="pack-popover-actions pack-sequence-actions">
-      <button className="primary-button" disabled={copyableFiles === 0} onClick={() => void onCopyMaterials()} type="button"><span aria-hidden="true" className="pack-step-number">1</span>{copy.materials}</button>
-      <span aria-hidden="true" className="pack-step-connector" />
-      <button className="primary-button" onClick={() => void onCopyPrompt()} type="button"><span aria-hidden="true" className="pack-step-number">2</span>{copy.prompt}</button>
-    </div>
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pack-handoff-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="export-modal pack-handoff-modal">
+      <header className="modal-head"><div><h2 id="pack-handoff-title">{copy.title}</h2></div><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} onClick={onClose} type="button"><X size={18} /></button></header>
+      <section className="pack-handoff-scope"><button aria-expanded={scopeOpen} className="pack-handoff-scope-toggle" onClick={() => setScopeOpen((open) => !open)} type="button"><span><strong>{copy.scope}</strong><small>{copy.scopeHelp}</small></span><span className="pack-handoff-counts">{copy.files}: {files.length}　{copy.links}: {links.length}</span><ChevronDown className={scopeOpen ? "is-open" : ""} size={18} /></button>{scopeOpen ? <div className="pack-handoff-scope-list"><section><h3>{copy.files}</h3>{files.length ? <ul>{files.map((item, index) => <li key={item.id}><FileText aria-hidden="true" size={17} /><span><strong>[{index + 1}] {item.itemTitle}</strong><small>{item.fileName || (item.modality === "text" || item.modality === "conversation" ? copy.textFile : item.mimeType || copy.textFile)}</small></span></li>)}</ul> : <p>—</p>}</section><section><h3>{copy.links}</h3>{links.length ? <ul>{links.map((item, index) => <li key={item.id}><Link2 aria-hidden="true" size={17} /><span><strong>[{index + 1}] {item.itemTitle}</strong><small>{webLinkFor(item) || copy.linkFallback}</small></span></li>)}</ul> : <p>—</p>}</section></div> : null}</section>
+      <section className="pack-handoff-prompt"><div className="pack-handoff-prompt-head"><h3>{copy.prompt}</h3><div><button className="text-button" onClick={onEditTemplate} type="button"><Pencil size={14} />{copy.editTemplate}</button><button className="secondary-button" onClick={() => setPrompt(defaultPrompt())} type="button">{copy.restore}</button></div></div><textarea aria-label={copy.prompt} onChange={(event) => setPrompt(event.target.value)} value={prompt} /></section>
+      <section className="pack-handoff-how"><h3>{copy.how}</h3><p>{copy.howDescription}</p></section>
+      <footer className="modal-footer pack-handoff-actions"><button className="primary-button" disabled={!files.length} onClick={() => void onCopyMaterials()} type="button"><Copy size={16} />{copy.copyFiles}</button><button className="primary-button" disabled={!prompt.trim()} onClick={() => void onCopyPrompt(prompt)} type="button"><Copy size={16} />{copy.copyPrompt}</button></footer>
+    </section>
   </div>;
+}
+
+function ClipboardImportModal({ busy, language, onClose, onConfirm, plan }: { busy: boolean; language: Language; onClose: () => void; onConfirm: () => void; plan: ClipboardPlan | null }) {
+  if (!plan) return null;
+  const zh = language === "zh";
+  const pendingCount = plan.items.filter((item) => item.status === "pending").length;
+  const total = plan.items.length;
+  const copy = zh ? {
+    title: "添加到 Book", scope: "本次内容", cancel: "取消", add: `添加 ${pendingCount} 项`, adding: "正在添加…", nothingToAdd: "无可添加项", close: "关闭", hiddenFiles: `还有 ${plan.hiddenFileCount} 个文件未显示：单次最多添加 ${clipboardFileLimit} 个文件。`,
+  } : {
+    title: "Add to Book", scope: "Pasted content", cancel: "Cancel", add: `Add ${pendingCount} item${pendingCount === 1 ? "" : "s"}`, adding: "Adding…", nothingToAdd: "Nothing to add", close: "Close", hiddenFiles: `${plan.hiddenFileCount} more file${plan.hiddenFileCount === 1 ? " is" : "s are"} not shown. Paste up to ${clipboardFileLimit} files at a time.`,
+  };
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="clipboard-import-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <section aria-busy={busy} className="export-modal pack-handoff-modal clipboard-import-modal">
+      <header className="modal-head"><div><h2 id="clipboard-import-title">{copy.title}</h2><p>{plan.bookName}</p></div><button aria-label={copy.close} className="icon-button" data-tooltip={copy.close} disabled={busy} onClick={onClose} type="button"><X size={18} /></button></header>
+      <section className="pack-handoff-scope clipboard-import-scope"><div className="clipboard-import-scope-heading"><strong>{copy.scope}</strong><span className="pack-handoff-counts">{total}</span></div><ul className="clipboard-import-item-list">{plan.items.map((item) => <ClipboardImportListItem item={item} key={item.id} language={language} />)}</ul>{plan.hiddenFileCount ? <p className="clipboard-import-limit-note">{copy.hiddenFiles}</p> : null}</section>
+      <footer className="modal-footer pack-handoff-actions"><button className="text-button" disabled={busy} onClick={onClose} type="button">{copy.cancel}</button><button className="primary-button" disabled={busy || !pendingCount} onClick={onConfirm} type="button">{busy ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}{busy ? copy.adding : pendingCount ? copy.add : copy.nothingToAdd}</button></footer>
+    </section>
+  </div>;
+}
+
+function ClipboardImportListItem({ item, language }: { item: ClipboardItem; language: Language }) {
+  const Icon = clipboardCardIcon[item.modality];
+  const statusLabel = item.status === "imported" ? (language === "zh" ? "已添加" : "Added") : item.status === "importing" ? (language === "zh" ? "正在添加" : "Adding") : item.reason || item.detail;
+  return <li className={`is-${item.modality} is-${item.status}`}><Icon aria-hidden="true" size={17} /><span><strong title={item.title}>{item.title}</strong><small title={statusLabel}>{statusLabel}</small></span>{item.status === "importing" ? <span className="clipboard-import-status"><LoaderCircle aria-label={statusLabel} className="spin" size={17} /></span> : null}{item.status === "imported" ? <span className="clipboard-import-status"><CircleCheck aria-label={statusLabel} size={18} /></span> : null}{(item.status === "unsupported" || item.status === "failed") ? <span className="clipboard-import-status"><CircleX aria-label={statusLabel} size={18} /></span> : null}</li>;
 }
 
 function BookTransferPopover({ books, count, isTransferring, onClose, onTransfer }: { books: Book[]; count: number; isTransferring: boolean; onClose: () => void; onTransfer: (bookId: string, mode: "copy" | "move") => void }) {
@@ -1641,8 +1788,88 @@ function failurePreviewItems(bookId: string): SourceItem[] {
   ];
 }
 function matchesDate(value: string, filter: DateFilter, startValue: string, endValue: string) { const date = new Date(value); if (Number.isNaN(date.getTime()) || filter === "all") return filter === "all"; const now = new Date(); const startOfDay = (input: Date) => new Date(input.getFullYear(), input.getMonth(), input.getDate()); const today = startOfDay(now); if (filter === "today") return date >= today; if (filter === "yesterday") { const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1); return date >= yesterday && date < today; } if (filter === "week") { const weekStart = new Date(today); weekStart.setDate(today.getDate() - 6); return date >= weekStart; } if (filter === "custom") { const start = startValue ? new Date(`${startValue}T00:00:00`) : null; const end = endValue ? new Date(`${endValue}T23:59:59.999`) : null; return (!start || date >= start) && (!end || date <= end); } return true; }
+function isEditablePasteTarget(target: EventTarget | null) { if (!(target instanceof Element)) return false; return Boolean(target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']")); }
+function parseClipboardPayload(clipboard: DataTransfer) {
+  const plain = clipboard.getData("text/plain").trim();
+  const uriList = clipboard.getData("text/uri-list");
+  const html = clipboard.getData("text/html");
+  const uriLinks = uriList.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#") && isClipboardLink(line));
+  const plainLinks = plain.split(/\s+/).map((part) => part.trim()).filter(isClipboardLink);
+  const onlyLinks = plain !== "" && plain.split(/\s+/).filter(Boolean).length === plainLinks.length;
+  const links = [...new Set(uriLinks.length ? uriLinks : onlyLinks ? plainLinks : [])];
+  const text = links.length && onlyLinks ? "" : plain || clipboardHtmlToText(html);
+  const ignoredTypes = [...clipboard.types].filter((type) => !["Files", "text/plain", "text/html", "text/uri-list"].includes(type));
+  return { links, text, ignoredTypes };
+}
+function clipboardBrowserEntries(clipboard: DataTransfer) {
+  const files: File[] = [];
+  const folderNames: string[] = [];
+  let sawFileItem = false;
+  for (const item of Array.from(clipboard.items)) {
+    if (item.kind !== "file") continue;
+    sawFileItem = true;
+    const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => { isDirectory: boolean; name: string } | null }).webkitGetAsEntry?.();
+    if (entry?.isDirectory) {
+      if (entry.name) folderNames.push(entry.name);
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  // Older webviews can expose `files` without corresponding `items`. Keep the
+  // browser fallback intact there; the native probe will still replace it when
+  // it can provide the safer one-time desktop snapshot.
+  return { files: sawFileItem ? files : Array.from(clipboard.files), folderNames: [...new Set(folderNames)] };
+}
+const clipboardCardIcon = { image: Image, video: Video, audio: Music2, file: FileText, link: Link2, text: AlignLeft } satisfies Record<ClipboardScopeModality, typeof FileText>;
+function clipboardFileModality(name: string, mimeType = ""): ClipboardFileModality {
+  const normalizedMimeType = mimeType.toLowerCase();
+  if (normalizedMimeType.startsWith("image/")) return "image";
+  if (normalizedMimeType.startsWith("audio/")) return "audio";
+  if (normalizedMimeType.startsWith("video/")) return "video";
+  const extension = name.trim().toLowerCase().split(".").pop() || "";
+  if (["jpg", "jpeg", "png", "webp", "gif", "svg", "avif", "heic", "heif", "tif", "tiff", "bmp", "ico"].includes(extension)) return "image";
+  if (["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff", "wma"].includes(extension)) return "audio";
+  if (["mp4", "mov", "webm", "mkv", "avi", "m4v", "3gp", "ogv"].includes(extension)) return "video";
+  return "file";
+}
+function isClipboardLink(value: string) { try { const url = new URL(value); return url.protocol === "http:" || url.protocol === "https:"; } catch { return false; } }
+function clipboardHtmlToText(html: string) { if (!html.trim()) return ""; const document = new DOMParser().parseFromString(html, "text/html"); return (document.body.textContent || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim(); }
+function displayClipboardLink(value: string) { try { const url = new URL(value); return url.hostname + (url.pathname === "/" ? "" : url.pathname); } catch { return value; } }
+function previewClipboardText(value: string) { const singleLine = value.replace(/\s+/g, " ").trim(); return singleLine.length > 96 ? singleLine.slice(0, 96) + "…" : singleLine; }
+function clipboardItemID(prefix: string, index: number) { return `${prefix}-${index}-${Math.random().toString(36).slice(2, 9)}`; }
+function buildClipboardPlan({ activeBookId, bookName, browserFiles, browserFolderNames, ignoredTypes, language, links, nativeFiles, needsNativeProbe, text, token }: { activeBookId: string; bookName: string; browserFiles: File[]; browserFolderNames: string[]; ignoredTypes: string[]; language: Language; links: string[]; nativeFiles: ClipboardFile[]; needsNativeProbe: boolean; text: string; token: string }): ClipboardPlan {
+  const localItems: ClipboardItem[] = nativeFiles.length ? nativeFiles.map((file, index) => {
+    const modality = file.modality || clipboardFileModality(file.name, file.mimeType);
+    const unsupported = file.unsupportedReason;
+    return { id: clipboardItemID("native", index), kind: unsupported ? "unsupported" as const : "native-file" as const, modality, title: file.name, detail: file.size === undefined ? kindLabel(modality, language) : `${kindLabel(modality, language)} · ${formatBytes(file.size, language)}`, nativeFileId: file.id, status: unsupported ? "unsupported" as const : "pending" as const, reason: unsupported ? clipboardFileUnsupportedReason(unsupported, language) : undefined };
+  }) : browserFiles.map((file, index) => ({ id: clipboardItemID("browser", index), kind: "browser-file", modality: clipboardFileModality(file.name, file.type), title: file.name || (language === "zh" ? "粘贴的文件" : "Pasted file"), detail: `${kindLabel(clipboardFileModality(file.name, file.type), language)} · ${formatBytes(file.size, language)}`, file, status: "pending" }));
+  const hiddenFileCount = Math.max(0, localItems.length - clipboardFileLimit);
+  const limitedLocalItems = localItems.slice(0, clipboardFileLimit);
+  const contentItems: ClipboardItem[] = [
+    ...limitedLocalItems,
+    ...(needsNativeProbe ? [{ id: clipboardItemID("native-probe", 0), kind: "native-probe" as const, modality: "file" as const, title: language === "zh" ? "本机文件剪贴板" : "Local file clipboard", detail: language === "zh" ? "点击添加后检查本机文件。" : "Checked after you choose Add.", status: "pending" as const }] : []),
+    ...links.map((link, index) => ({ id: clipboardItemID("link", index), kind: "link" as const, modality: "link" as const, title: displayClipboardLink(link), detail: link, status: "pending" as const, value: link })),
+    ...(text ? [{ id: clipboardItemID("text", 0), kind: "text" as const, modality: "text" as const, title: language === "zh" ? "文本" : "Text", detail: language === "zh" ? `将作为一条文本素材保存：${previewClipboardText(text)}` : `Saved as one text source: ${previewClipboardText(text)}`, status: "pending" as const, value: text }] : []),
+    ...browserFolderNames.map((name, index) => ({ id: clipboardItemID("folder", index), kind: "unsupported" as const, modality: "file" as const, title: name, detail: language === "zh" ? "文件夹" : "Folder", status: "unsupported" as const, reason: clipboardFileUnsupportedReason("folder", language) })),
+    ...ignoredTypes.map((type, index) => ({ id: clipboardItemID("unsupported", index), kind: "unsupported" as const, modality: "file" as const, title: type, detail: language === "zh" ? "剪贴板格式" : "Clipboard format", status: "unsupported" as const, reason: language === "zh" ? "此格式暂不支持导入。" : "This clipboard format is not supported." })),
+  ];
+  if (!contentItems.length) contentItems.push({ id: clipboardItemID("unsupported", 0), kind: "unsupported", modality: "file", title: language === "zh" ? "剪贴板内容" : "Clipboard content", detail: "", status: "unsupported", reason: language === "zh" ? "没有识别到可导入的内容。" : "No importable content was found." });
+  return { bookId: activeBookId, bookName, token, items: contentItems, hiddenFileCount, browserFiles, browserFolderNames, ignoredTypes, links, text, needsNativeProbe };
+}
+function clipboardFileUnsupportedReason(reason: NonNullable<ClipboardFile["unsupportedReason"]>, language: Language) {
+  if (reason === "folder") return language === "zh" ? "文件夹暂不支持导入。请选择其中的文件。" : "Folders cannot be imported. Select the files inside instead.";
+  if (reason === "unreadable") return language === "zh" ? "此文件已不可读取，已跳过。" : "This file is no longer readable and was skipped.";
+  return language === "zh" ? "此本地项目暂不支持导入。" : "This local item is not supported for import.";
+}
+function clipboardErrorReason(message: string, language: Language) {
+  if (/unexpected EOF|EOF/i.test(message)) return language === "zh" ? "文件传输中断。请重新粘贴后再试。" : "The file transfer was interrupted. Paste again and retry.";
+  return language === "zh" ? "导入未完成。请重新粘贴后再试。" : "The import did not finish. Paste again and retry.";
+}
 function bookPath(path: string, bookId: string | undefined) { if (!bookId || !path.startsWith("/api/")) return path; return `${path}${path.includes("?") ? "&" : "?"}bookId=${encodeURIComponent(bookId)}`; }
 async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(); let value = ""; const bytes = new Uint8Array(buffer); for (let index = 0; index < bytes.length; index += 0x8000) value += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(value); }
 async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
+async function requestFormData<T = unknown>(path: string, body: FormData): Promise<T> { const response = await fetch(path, { method: "POST", body }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
+function isAbortedRequest(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || error instanceof Error && error.name === "AbortError"; }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Something went wrong. Try again."; }

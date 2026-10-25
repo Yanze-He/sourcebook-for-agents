@@ -2,6 +2,23 @@
 
 All notable user-facing changes are documented here.
 
+## Unreleased
+
+- Make **Load more** cancellable when switching Books. A late page response can no longer append its old Book's items after the switch, and a stalled local request returns to a retryable state after 20 seconds.
+- Add a system **Open** action for every Source with a cached local file. Use it from the card toolbar or the file-detail preview to open the original in the operating system’s default app; details consistently show the Book-relative saved location with a Finder or Explorer reveal action.
+- Refine the stored-file detail preview: it now has space below the title area, uses one flat file-identity row instead of nested rounded frames, and places its default-app open icon at the far right.
+- Add **Accept all** to the Agent submissions review window. It saves all pending edits first, then accepts the pending suggestions in order; while it runs, other review and close actions are unavailable.
+- Keep editable Agent submissions compact by default: their preview comes first, followed by title and note without an extra label. A lower-left **Edit description** action opens fields with **Cancel** and **Confirm** in place of the review actions; leaving a field saves its changes automatically.
+- Tighten the **Paste to Book** review window into one scrollable list. Its icons now match each Source’s final type—image, video, audio, file, link, or text—without leaving an empty column or stretching the dialog.
+- Open the **Paste to Book** review window immediately without probing the native clipboard. Browser-recognized folders are excluded from the browser-file fallback, so a folder appears exactly once as an unsupported item instead of being duplicated as a file. An embedded browser that exposes only a Files marker defers its native clipboard probe until the user chooses **Add**, so the initial paste never waits or disables confirmation.
+- Stream every supported pasted local file directly into its Book instead of Base64-encoding a browser request. Files have no size ceiling; only the first 20 files of a paste are shown and eligible to add; the review window states how many further files were not shown or added. Folders, unreadable paths, non-regular entries, and unsupported clipboard formats are dimmed before confirmation; errors discovered only during import are dimmed per item and never prevent neighboring files, links, or text from importing. Windows accepts the native clipboard helper's single-file and multi-file JSON formats. Successful items receive a check, and the disabled confirmation action reads **Nothing to add** when no pending item remains.
+- Separate Sourcebook Desktop from the Agent Plugin completely: Desktop installers no longer include, copy, or update a Plugin. The Plugin starts Desktop on first use when possible, reports exact local-access recovery steps, and can refresh only its own Codex installation when Desktop requires a newer Plugin.
+- Make the local-file marker on Source cards reveal its file in Finder or Explorer. Source details now show the Book-relative saved location with the same reveal action, while the file preview continues to open the file itself.
+- Add **Paste to Book**: use Cmd/Ctrl+V outside an editor to review and add copied local files, links, screenshots, HTML-as-text, or plain text. Desktop reads copied local-file paths only into a short-lived, one-time import snapshot; it never exposes those paths to the page. A paste may contain up to 20 files and is never silently truncated.
+- Replace Pack's small copy popover with a full **Send to Agent** dialog: inspect files and links, tailor the one-off prompt, restore its configured default, and jump directly to prompt-template settings.
+- Let local Agents resolve a named Book in one call, create a Book only after an explicit request with retry protection, and rename a Book without overwriting a newer Desktop rename.
+- Let Agents submit multiple confirmed Source changes as one review batch. Each batch has a stable status lookup and opens Sourcebook directly to its matching **Agent submissions** review window.
+
 ## 0.1.2 — 2026-10-23
 
 - Save source notes when the detail panel loses focus or closes.

@@ -11,8 +11,8 @@ running and that **Settings → Connect an Agent → Local access** is enabled. 
 Desktop is missing, direct the user to https://sourcebook.online and stop.
 
 If the Agent documents a supported local MCP configuration, add a user-level
-stdio MCP server named `sourcebook` using the platform-appropriate bundled
-helper:
+stdio MCP server named `sourcebook` using the platform-appropriate helper in
+this independently installed Plugin:
 
 ```text
 <directory containing this guide>/.agents/plugins/sourcebook/bin/sourcebook-mcp
@@ -20,7 +20,7 @@ helper:
 
 Use no command arguments and do not add a pairing credential. Set
 `SOURCEBOOK_AGENT_NAME` only if the Agent documents support for environment
-variables. Install the bundled Skill only if that Agent documents a compatible
+variables. Install this Plugin's Skill only if that Agent documents a compatible
 user-level Skills directory. Preserve unrelated settings and restart the Agent
 or start a new local session after setup.
 

@@ -2,7 +2,17 @@
 
 The local service is intentionally loopback-only and is not a general-purpose local integration API. It accepts requests from the local Sources page plus the approved downloadable and Chrome Web Store Picker builds; other websites and browser extensions are rejected. Do not write SQLite files directly.
 
-Sourcebook MCP uses a separate paired bridge API, not these browser routes. The native `sourcebook-mcp` helper is bundled with Sourcebook Desktop, requires an explicit Book selection for every MCP session, and can only read data or create pending user-reviewed suggestions. See [Connect Sourcebook to an Agent](connect-agents.md).
+Sourcebook MCP uses a separate paired bridge API, not these browser routes. The native `sourcebook-mcp` helper is supplied by the independently installed Sourcebook Agent Plugin, requires an explicit Book selection for every MCP session, and can read data, explicitly create or rename Books, or create pending user-reviewed suggestions. Multi-item suggestions are stored as one durable review batch; they are never applied to a Book until the user accepts them in Sourcebook. See [Connect Sourcebook to an Agent](connect-agents.md).
+
+## Paste to the current Book
+
+The Sources page handles a user-initiated Cmd/Ctrl+V outside editable controls. Before anything is saved, it immediately presents one confirmation view containing every recognized and unsupported pasted item; it does not probe the native clipboard at paste time. `POST /api/clipboard/files` is an internal Desktop-only helper that reads copied local file references and returns display metadata plus a short-lived, one-time token only after the user confirms a fallback “local file clipboard” item in a browser that exposes no `File` objects. It never returns file paths to the page. Browser-recognized folders are excluded from the browser-file fallback, so a folder is listed only once as unsupported. Confirming streams each supported item to `POST /api/books/:bookId/clipboard-import`; the response records an imported or failed result per item, so the dialog can keep successful items checked and failed items visible with a recovery reason.
+
+There is a limit of 20 files per paste. The confirmation view shows the first 20 files only and states how many additional files were not shown or added. Folders, unreadable paths, non-regular filesystem entries, and unsupported clipboard formats are shown as unsupported before confirmation and skipped, never blocking neighboring files. Any condition that can only be discovered while importing (for example, a file disappearing, an interrupted transfer, or an invalid link) is returned as an item-level failure while the remaining items continue. File imports from the native token and browser-exposed clipboard files are streamed into the Book after confirmation; they may use any extension or size and are not Base64-encoded or held as a full request in page memory. Browser and embedded-agent clipboard policies can still prevent a host from exposing a local file at all; that case is shown as an item-level reason rather than silently discarding the file. On Windows, both the single-path and multi-path JSON shapes returned by the native FileDropList helper are accepted.
+
+## Open stored local files
+
+Sources with a cached local file expose two local-only actions. `POST /api/sources/:sourceItemId/open-local?bookId=...` opens the original with the operating system's default application. `POST /api/sources/:sourceItemId/reveal-local?bookId=...` reveals its containing folder in Finder or Explorer. The page receives only the Book-relative saved location; neither action transmits the file.
 
 ## Create a Source
 

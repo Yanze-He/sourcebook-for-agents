@@ -16,8 +16,9 @@
 | --- | --- |
 | **Books** | 按项目整理素材，以瀑布流浏览参考资料和创作进展。 |
 | **Pick** | 从网页、图片、帖子和 AI 对话中收集素材，并保留来源。 |
+| **粘贴** | 向当前 Book 粘贴文件、链接、截图或文本；确认前先查看本次会添加的内容。 |
 | **Connect** | 让兼容的本地 Agent 搜索选定的 Book，并提交建议供你审核。 |
-| **Pack** | 多选素材、添加创作备注，复制上下文到你选择的 AI 工具。 |
+| **Pack** | 多选素材、查看文件和链接范围、调整提示词，再复制上下文到你选择的 AI 工具。 |
 | **备份** | 使用 `.sourcebook-backup` 文件导出和恢复 Book。 |
 
 ## 从浏览器收集素材
@@ -40,7 +41,7 @@ Picker 会尽可能在本地保存图片。部分网站会限制下载；视频�
 
 ## 把项目素材放在一起
 
-每个项目创建一本 Book，以瀑布流浏览素材。导入本地文档和媒体、编写记录、添加备注、搜索筛选，并随时回到原始来源。
+每个项目创建一本 Book，以瀑布流浏览素材。导入本地文档和媒体；粘贴文件、链接、截图或文本并在确认前查看范围；编写记录、添加备注、搜索筛选，并随时回到原始来源。
 
 <p align="center">
   <img src="docs/images/sourcebook-desktop-features-v7.png" alt="Sourcebook Desktop 中的 Book、素材检索和 Pack 操作。" width="100%" />
@@ -50,7 +51,7 @@ Picker 会尽可能在本地保存图片。部分网站会限制下载；视频�
 
 | Connect 本地 Agent | Pack 到任意 AI 工具 |
 | --- | --- |
-| 兼容 MCP 的 Agent——包括 Codex、Claude Code、WorkBuddy 和 Grokbot——可以搜索和读取你选定的 Book。Agent 可准备上下文文件并提交建议，由你在 Sourcebook 中审核。 | 多选当前任务需要的素材，添加备注，再复制提示词以及可用文件或链接。粘贴到 Codex、Claude Code、Figma、Lovable 或其他 AI 工具中继续工作。 |
+| 兼容 MCP 的 Agent——包括 Codex、Claude Code、WorkBuddy 和 Grokbot——可以搜索和读取你选定的 Book。Agent 可准备上下文文件并提交建议，由你在 Sourcebook 中审核。 | 多选当前任务需要的素材，查看 Pack 中的文件和链接，按需调整提示词，再复制提示词和可用文件。粘贴到 Codex、Claude Code、Figma、Lovable 或其他 AI 工具中继续工作。 |
 
 Agent 不会直接修改或删除 Book 内容。哪些内容要保存、分享给谁，由你决定。
 
@@ -67,7 +68,7 @@ Books 和文件保存在你的电脑上。Sourcebook 不需要账号，也不提
 1. 从 [Sourcebook Desktop Releases](https://github.com/Yanze-He/sourcebook-for-agents/releases) 下载并安装 Desktop。
 2. 从 [Chrome Web Store 安装 Sourcebook Picker](https://chromewebstore.google.com/detail/picker-for-agent/pkglhngkfkjblabnhgcioindjgffgfpf?hl=zh-CN)。
 3. 启动 Desktop，打开 Picker 并选择一个 Book。
-4. 如需连接 Agent，在 Desktop 中打开 **Settings → Connect an Agent**，按提示完成设置。使用 Pack 时，多选素材并添加备注，然后选择 **Pack for agent**。
+4. 如需连接 Agent，在 Desktop 中打开 **Settings → Connect an Agent**，按提示完成设置。使用 Pack 时，多选素材并选择 **Pack for agent**；查看范围后，可编辑提示词或进入模板设置，再复制文件和提示词。
 
 当前 beta 支持 Apple 芯片 macOS 和 Windows x64。Picker 支持 Chrome 和 Edge。安装与故障排查请看[快速开始](docs/getting-started.md)。
 

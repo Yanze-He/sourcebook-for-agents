@@ -7,15 +7,16 @@ package main
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +39,7 @@ type mcpActivity struct {
 
 type mcpSuggestion struct {
 	ID            string         `json:"id"`
+	BatchID       string         `json:"batchId,omitempty"`
 	Kind          string         `json:"kind"`
 	Payload       map[string]any `json:"payload"`
 	SourceItemIDs []string       `json:"sourceItemIds"`
@@ -46,6 +48,15 @@ type mcpSuggestion struct {
 	Status        string         `json:"status"`
 	ReviewedAt    string         `json:"reviewedAt,omitempty"`
 	ReviewError   string         `json:"reviewError,omitempty"`
+}
+
+type mcpSubmissionBatch struct {
+	ID          string          `json:"id"`
+	BookID      string          `json:"bookId"`
+	AgentName   string          `json:"agentName"`
+	CreatedAt   string          `json:"createdAt"`
+	Suggestions []mcpSuggestion `json:"suggestions"`
+	ReviewURL   string          `json:"reviewUrl"`
 }
 
 func (server *Server) getMCPSettings(response http.ResponseWriter) error {
@@ -58,72 +69,16 @@ func (server *Server) getMCPSettings(response http.ResponseWriter) error {
 }
 
 func (server *Server) mcpSettingsPayload(settings desktopSettings) map[string]any {
-	resources, installReady := verifiedMCPInstallResources()
 	return map[string]any{
 		"enabled":      settings.MCPEnabled,
 		"enabledAt":    settings.MCPEnabledAt,
 		"serviceReady": settings.MCPEnabled && settings.MCPToken != "",
 		"guideUrl":     "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md",
-		// Installation is fetched from the independent Agent Plugin release.
-		// Bundled resources are kept only as an offline fallback and version hint.
-		"installReady":          true,
-		"bundledResourcesReady": installReady,
-		"agentVersion":          resources.version,
-		"installGuides": map[string]string{
-			"codex":     resources.codexGuide,
-			"workbuddy": resources.workbuddyGuide,
-			"generic":   resources.genericGuide,
-		},
-		// The credential is intentionally absent. The bundled helper reads it
-		// from the owner-only Desktop settings file when it starts.
+		// Agent Plugin distribution is independent from Desktop. This endpoint
+		// only confirms that the local bridge can be paired; it never exposes a
+		// bundled binary, an installation path, or a pairing credential.
+		"installReady": true,
 	}
-}
-
-type mcpInstallResources struct {
-	codexGuide     string
-	workbuddyGuide string
-	genericGuide   string
-	version        string
-}
-
-// verifiedMCPInstallResources only exposes local guides when Desktop has
-// synchronized a complete, user-level Agent bundle. The bundle stays in the
-// user's application-support directory, so its paths do not depend on where
-// Sourcebook Desktop itself was installed.
-func verifiedMCPInstallResources() (mcpInstallResources, bool) {
-	root := strings.TrimSpace(os.Getenv("SOURCEBOOK_AGENT_PLUGIN_DIR"))
-	if root == "" {
-		return mcpInstallResources{}, false
-	}
-	helper := filepath.Join(root, ".agents", "plugins", "sourcebook", "bin", "sourcebook-mcp")
-	if runtime.GOOS == "windows" {
-		helper += ".exe"
-	}
-	skill := filepath.Join(root, ".agents", "plugins", "sourcebook", "skills", "sourcebook", "SKILL.md")
-	resources := mcpInstallResources{
-		codexGuide:     filepath.Join(root, "INSTALL-CODEX.md"),
-		workbuddyGuide: filepath.Join(root, "INSTALL-WORKBUDDY.md"),
-		genericGuide:   filepath.Join(root, "INSTALL-MCP.md"),
-	}
-	versionPath := filepath.Join(root, "agent-version.json")
-	for _, path := range []string{helper, skill, filepath.Join(root, ".agents", "plugins", "marketplace.json"), resources.codexGuide, resources.workbuddyGuide, resources.genericGuide, versionPath} {
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() {
-			return mcpInstallResources{}, false
-		}
-	}
-	contents, err := os.ReadFile(versionPath)
-	if err != nil {
-		return mcpInstallResources{}, false
-	}
-	var manifest struct {
-		Version string `json:"version"`
-	}
-	if json.Unmarshal(contents, &manifest) != nil || strings.TrimSpace(manifest.Version) == "" {
-		return mcpInstallResources{}, false
-	}
-	resources.version = manifest.Version
-	return resources, true
 }
 
 func (server *Server) enableMCP(response http.ResponseWriter, request *http.Request) error {
@@ -191,11 +146,25 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 		return &apiError{status: http.StatusUnauthorized, code: "MCP_PAIRING_REQUIRED", message: "Sourcebook local-agent access is not paired. Open Sourcebook Settings to connect or re-authorize it."}
 	}
 	if request.Method == http.MethodGet && request.URL.Path == mcpBridgePrefix+"/status" {
-		writeJSON(response, http.StatusOK, map[string]any{"ok": true, "apiVersion": "1", "appVersion": appVersion})
+		writeJSON(response, http.StatusOK, map[string]any{
+			"ok":               true,
+			"apiVersion":       "1",
+			"bridgeVersionMin": 1,
+			"bridgeVersionMax": 1,
+			"appVersion":       appVersion,
+			"appBuild":         appBuild,
+			"capabilities":     []string{"books", "sources", "context-files", "submissions", "submission-batches", "navigation"},
+		})
 		return nil
 	}
 	if request.Method == http.MethodGet && request.URL.Path == mcpBridgePrefix+"/books" {
 		return server.mcpListBooks(response, request, settings)
+	}
+	if request.Method == http.MethodGet && request.URL.Path == mcpBridgePrefix+"/books/resolve" {
+		return server.mcpResolveBook(response, request, settings)
+	}
+	if request.Method == http.MethodPost && request.URL.Path == mcpBridgePrefix+"/books" {
+		return server.mcpCreateBook(response, request, settings)
 	}
 	parts := strings.Split(strings.TrimPrefix(request.URL.Path, mcpBridgePrefix+"/"), "/")
 	if len(parts) >= 2 && parts[0] == "books" && sourceBookPattern.MatchString(parts[1]) {
@@ -203,6 +172,8 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 		switch {
 		case len(parts) == 2 && request.Method == http.MethodGet:
 			return server.mcpSelectBook(response, request, settings, bookID)
+		case len(parts) == 2 && request.Method == http.MethodPatch:
+			return server.mcpRenameBook(response, request, settings, bookID)
 		case len(parts) == 3 && parts[2] == "sources" && request.Method == http.MethodGet:
 			return server.mcpSearchSources(response, request, settings, bookID)
 		case len(parts) == 4 && parts[2] == "sources" && parts[3] == "get" && request.Method == http.MethodPost:
@@ -211,6 +182,10 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 			return server.mcpPrepareContextFiles(response, request, settings, bookID)
 		case len(parts) == 3 && parts[2] == "proposals" && request.Method == http.MethodPost:
 			return server.mcpCreateSuggestion(response, request, settings, bookID)
+		case len(parts) == 3 && parts[2] == "proposal-batches" && request.Method == http.MethodPost:
+			return server.mcpCreateSubmissionBatch(response, request, settings, bookID)
+		case len(parts) == 4 && parts[2] == "proposal-batches" && request.Method == http.MethodGet:
+			return server.mcpGetSubmissionBatch(response, request, settings, bookID, parts[3])
 		}
 	}
 	return &apiError{status: http.StatusNotFound, code: "MCP_NOT_FOUND", message: "Unknown Sourcebook MCP bridge endpoint"}
@@ -232,7 +207,7 @@ func (server *Server) mcpListBooks(response http.ResponseWriter, request *http.R
 		if err := ctx.DB.QueryRow("SELECT COUNT(*),COALESCE(MAX(created_at),'') FROM source_items").Scan(&count, &last); err != nil {
 			return err
 		}
-		books = append(books, map[string]any{"id": book.ID, "name": book.Name, "sourceCount": count, "lastActivityAt": last})
+		books = append(books, map[string]any{"id": book.ID, "name": book.Name, "revision": book.Revision, "sourceCount": count, "lastActivityAt": last})
 	}
 	server.recordMCPActivity(&settings, request, "", "list_books", "ok")
 	writeJSON(response, http.StatusOK, map[string]any{"books": books})
@@ -250,7 +225,72 @@ func (server *Server) mcpSelectBook(response http.ResponseWriter, request *http.
 		return err
 	}
 	server.recordMCPActivity(&settings, request, bookID, "select_book", "ok")
-	writeJSON(response, http.StatusOK, map[string]any{"book": map[string]any{"id": ctx.Book.ID, "name": ctx.Book.Name, "sourceCount": count, "lastActivityAt": last}})
+	writeJSON(response, http.StatusOK, map[string]any{"book": map[string]any{"id": ctx.Book.ID, "name": ctx.Book.Name, "revision": ctx.Book.Revision, "sourceCount": count, "lastActivityAt": last}})
+	return nil
+}
+
+// mcpResolveBook deliberately does not select or create a Book. It gives the
+// Agent one bounded lookup so a named Book does not require list + model-side
+// matching + select on every task.
+func (server *Server) mcpResolveBook(response http.ResponseWriter, request *http.Request, settings desktopSettings) error {
+	name := strings.TrimSpace(request.URL.Query().Get("name"))
+	if name == "" {
+		return &apiError{status: http.StatusBadRequest, code: "MCP_BOOK_NAME_REQUIRED", message: "A Book name is required."}
+	}
+	manifest, err := server.library.List()
+	if err != nil {
+		return err
+	}
+	matches := []map[string]any{}
+	for _, book := range manifest.Books {
+		if strings.EqualFold(strings.TrimSpace(book.Name), name) {
+			matches = append(matches, map[string]any{"id": book.ID, "name": book.Name, "revision": book.Revision})
+		}
+	}
+	server.recordMCPActivity(&settings, request, "", "resolve_book", "ok")
+	writeJSON(response, http.StatusOK, map[string]any{"name": name, "matches": matches, "found": len(matches) == 1, "ambiguous": len(matches) > 1})
+	return nil
+}
+
+func (server *Server) mcpCreateBook(response http.ResponseWriter, request *http.Request, settings desktopSettings) error {
+	value, err := readBody(request)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimSpace(stringValue(value["idempotencyKey"]))
+	if len(key) < 8 || len(key) > 200 {
+		return &apiError{status: http.StatusBadRequest, code: "MCP_IDEMPOTENCY_KEY_INVALID", message: "idempotency_key must be 8–200 characters."}
+	}
+	book, reused, err := server.library.CreateBookForMCP(stringValue(value["name"]), key)
+	if err != nil {
+		return err
+	}
+	if _, err := server.library.Context(book.ID); err != nil {
+		return err
+	}
+	server.recordMCPActivity(&settings, request, book.ID, "create_book", map[bool]string{true: "reused", false: "ok"}[reused])
+	writeJSON(response, http.StatusCreated, map[string]any{"book": book, "reused": reused})
+	return nil
+}
+
+func (server *Server) mcpRenameBook(response http.ResponseWriter, request *http.Request, settings desktopSettings, bookID string) error {
+	value, err := readBody(request)
+	if err != nil {
+		return err
+	}
+	expected, ok := intValue(value["expectedRevision"])
+	if !ok || expected < 0 {
+		return &apiError{status: http.StatusBadRequest, code: "MCP_BOOK_REVISION_REQUIRED", message: "expected_revision is required."}
+	}
+	book, err := server.library.RenameBookIfRevision(bookID, stringValue(value["name"]), expected)
+	if err != nil {
+		if errors.Is(err, errBookRevisionConflict) {
+			return &apiError{status: http.StatusConflict, code: "MCP_BOOK_REVISION_CONFLICT", message: err.Error()}
+		}
+		return err
+	}
+	server.recordMCPActivity(&settings, request, book.ID, "rename_book", "ok")
+	writeJSON(response, http.StatusOK, map[string]any{"book": book})
 	return nil
 }
 
@@ -547,13 +587,168 @@ func (server *Server) mcpCreateSuggestion(response http.ResponseWriter, request 
 	suggestion := mcpSuggestion{ID: "agent-suggestion-" + newID(), Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"}
 	payloadJSON, _ := json.Marshal(payload)
 	idsJSON, _ := json.Marshal(ids)
-	if _, err = ctx.DB.Exec("INSERT INTO agent_suggestions (id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?)", suggestion.ID, kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
+	if _, err = ctx.DB.Exec("INSERT INTO agent_suggestions (id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?)", suggestion.ID, "", kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
 		return err
 	}
 	server.publishSourceChange(bookID)
 	server.recordMCPActivity(&settings, request, bookID, "propose_"+kind, "pending")
 	writeJSON(response, http.StatusAccepted, map[string]any{"suggestion": suggestion, "message": "Saved as a Sourcebook suggestion. It will not change this Book unless the user accepts it in Sourcebook."})
 	return nil
+}
+
+// mcpCreateSubmissionBatch validates the whole request before opening a
+// transaction, then records every proposal with one stable batch ID. This is
+// the fast path for a task that has several confirmed things to save.
+func (server *Server) mcpCreateSubmissionBatch(response http.ResponseWriter, request *http.Request, settings desktopSettings, bookID string) error {
+	value, err := readBody(request)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimSpace(stringValue(value["idempotencyKey"]))
+	if len(key) < 8 || len(key) > 200 {
+		return &apiError{status: http.StatusBadRequest, code: "MCP_IDEMPOTENCY_KEY_INVALID", message: "idempotency_key must be 8–200 characters."}
+	}
+	rawItems, ok := value["items"].([]any)
+	if !ok || len(rawItems) == 0 || len(rawItems) > 50 {
+		return &apiError{status: http.StatusBadRequest, code: "MCP_BATCH_ITEMS_INVALID", message: "A batch needs 1–50 proposal items."}
+	}
+	ctx, err := server.context(bookID, true)
+	if err != nil {
+		return err
+	}
+	if existing, err := server.mcpSubmissionBatch(ctx, bookID, "", key, request.Host); err == nil {
+		server.recordMCPActivity(&settings, request, bookID, "propose_source_bundle", "reused")
+		writeJSON(response, http.StatusAccepted, map[string]any{"batch": existing, "reused": true})
+		return nil
+	} else if !isNoRows(err) {
+		return err
+	}
+	agent := truncate(strings.TrimSpace(request.Header.Get("X-Sourcebook-Agent")), 80)
+	if agent == "" {
+		agent = "Local agent"
+	}
+	batchID := "agent-batch-" + newID()
+	suggestions := make([]mcpSuggestion, 0, len(rawItems))
+	for _, raw := range rawItems {
+		item, ok := objectValue(raw)
+		if !ok {
+			return &apiError{status: http.StatusBadRequest, code: "MCP_BATCH_ITEM_INVALID", message: "Every batch item must be an object."}
+		}
+		kind := stringValue(item["kind"])
+		payload, ok := objectValue(item["payload"])
+		if !ok || !allowedSuggestionKind(kind) {
+			return &apiError{status: http.StatusBadRequest, code: "MCP_BATCH_ITEM_INVALID", message: "Every batch item needs a supported kind and payload."}
+		}
+		ids := stringSlice(item["sourceItemIds"])
+		if ids == nil {
+			ids = []string{}
+		}
+		if len(ids) > 50 || validateSuggestion(kind, payload, ids) != nil {
+			return &apiError{status: http.StatusBadRequest, code: "MCP_BATCH_ITEM_INVALID", message: "One batch item is incomplete or invalid."}
+		}
+		if err := ensureSuggestionSources(ctx, ids); err != nil {
+			return err
+		}
+		if kind == "import_local_file" {
+			fileName := filepath.Base(stringValue(payload["path"]))
+			defaultTitle := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+			payload["title"] = truncate(strings.TrimSpace(firstString(stringValue(payload["title"]), defaultTitle, fileName)), 180)
+			payload["note"] = truncate(firstString(stringValue(payload["note"]), "Imported by Agent: "+fileName), 500)
+		}
+		if kind == "update_source_metadata" {
+			base, err := sourceMetadataSnapshot(ctx, ids[0])
+			if err != nil {
+				return err
+			}
+			payload["base"] = base
+		}
+		suggestions = append(suggestions, mcpSuggestion{ID: "agent-suggestion-" + newID(), BatchID: batchID, Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"})
+	}
+	tx, err := ctx.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.Exec("INSERT INTO agent_submission_batches (id,idempotency_key,agent_name,created_at) VALUES (?,?,?,?)", batchID, key, agent, now()); err != nil {
+		return err
+	}
+	for _, suggestion := range suggestions {
+		payloadJSON, _ := json.Marshal(suggestion.Payload)
+		idsJSON, _ := json.Marshal(suggestion.SourceItemIDs)
+		if _, err = tx.Exec("INSERT INTO agent_suggestions (id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?)", suggestion.ID, batchID, suggestion.Kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	batch, err := server.mcpSubmissionBatch(ctx, bookID, batchID, "", request.Host)
+	if err != nil {
+		return err
+	}
+	server.publishSourceChange(bookID)
+	server.recordMCPActivity(&settings, request, bookID, "propose_source_bundle", "pending")
+	writeJSON(response, http.StatusAccepted, map[string]any{"batch": batch, "reused": false, "message": "Saved as Sourcebook suggestions. They will not change this Book unless the user accepts them in Sourcebook."})
+	return nil
+}
+
+func (server *Server) mcpGetSubmissionBatch(response http.ResponseWriter, request *http.Request, settings desktopSettings, bookID, batchID string) error {
+	ctx, err := server.context(bookID, true)
+	if err != nil {
+		return err
+	}
+	batch, err := server.mcpSubmissionBatch(ctx, bookID, batchID, "", request.Host)
+	if err != nil {
+		return err
+	}
+	server.recordMCPActivity(&settings, request, bookID, "get_submission_batch", "ok")
+	writeJSON(response, http.StatusOK, map[string]any{"batch": batch})
+	return nil
+}
+
+func (server *Server) mcpSubmissionBatch(ctx *BookContext, bookID, batchID, key, host string) (mcpSubmissionBatch, error) {
+	var batch mcpSubmissionBatch
+	var query string
+	var argument string
+	if batchID != "" {
+		query, argument = "SELECT id,agent_name,created_at FROM agent_submission_batches WHERE id=?", batchID
+	} else {
+		query, argument = "SELECT id,agent_name,created_at FROM agent_submission_batches WHERE idempotency_key=?", key
+	}
+	if err := ctx.DB.QueryRow(query, argument).Scan(&batch.ID, &batch.AgentName, &batch.CreatedAt); err != nil {
+		return batch, err
+	}
+	batch.BookID = bookID
+	batch.ReviewURL = "http://" + host + "/?bookId=" + url.QueryEscape(bookID) + "&panel=agent-submissions&batchId=" + url.QueryEscape(batch.ID)
+	rows, err := ctx.DB.Query("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE batch_id=? ORDER BY created_at,id", batch.ID)
+	if err != nil {
+		return batch, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		suggestion, err := scanSuggestion(rows)
+		if err != nil {
+			return batch, err
+		}
+		batch.Suggestions = append(batch.Suggestions, suggestion)
+	}
+	return batch, rows.Err()
+}
+
+func isNoRows(err error) bool { return errors.Is(err, sql.ErrNoRows) }
+
+func intValue(value any) (int, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return int(typed), typed == float64(int(typed))
+	case int:
+		return typed, true
+	case json.Number:
+		result, err := typed.Int64()
+		return int(result), err == nil
+	default:
+		return 0, false
+	}
 }
 
 func (server *Server) updateMCPSuggestion(response http.ResponseWriter, request *http.Request, bookID, suggestionID string) error {
@@ -565,7 +760,7 @@ func (server *Server) updateMCPSuggestion(response http.ResponseWriter, request 
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	suggestion, err := scanSuggestion(row)
 	if err != nil {
 		return err
@@ -660,7 +855,7 @@ func ensureSuggestionSources(ctx *BookContext, ids []string) error {
 	return nil
 }
 
-func (server *Server) listMCPSuggestions(response http.ResponseWriter) error {
+func (server *Server) listMCPSuggestions(response http.ResponseWriter, batchID string) error {
 	manifest, err := server.library.List()
 	if err != nil {
 		return err
@@ -671,7 +866,14 @@ func (server *Server) listMCPSuggestions(response http.ResponseWriter) error {
 		if err != nil {
 			return err
 		}
-		rows, err := ctx.DB.Query(`SELECT id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions ORDER BY created_at DESC`)
+		query := `SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions`
+		args := []any{}
+		if batchID != "" {
+			query += " WHERE batch_id=?"
+			args = append(args, batchID)
+		}
+		query += " ORDER BY created_at DESC"
+		rows, err := ctx.DB.Query(query, args...)
 		if err != nil {
 			return err
 		}
@@ -697,7 +899,7 @@ type suggestionRow interface{ Scan(...any) error }
 func scanSuggestion(row suggestionRow) (mcpSuggestion, error) {
 	var s mcpSuggestion
 	var payload, ids string
-	if err := row.Scan(&s.ID, &s.Kind, &payload, &ids, &s.AgentName, &s.CreatedAt, &s.Status, &s.ReviewedAt, &s.ReviewError); err != nil {
+	if err := row.Scan(&s.ID, &s.BatchID, &s.Kind, &payload, &ids, &s.AgentName, &s.CreatedAt, &s.Status, &s.ReviewedAt, &s.ReviewError); err != nil {
 		return s, err
 	}
 	s.Payload = map[string]any{}
@@ -719,7 +921,7 @@ func (server *Server) previewMCPSuggestion(response http.ResponseWriter, request
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	suggestion, err := scanSuggestion(row)
 	if err != nil || suggestion.Kind != "import_local_file" {
 		return &apiError{status: http.StatusNotFound, code: "MCP_PREVIEW_UNAVAILABLE", message: "Image preview is unavailable."}
@@ -765,7 +967,7 @@ func (server *Server) reviewMCPSuggestion(response http.ResponseWriter, request 
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	s, err := scanSuggestion(row)
 	if err != nil {
 		return err

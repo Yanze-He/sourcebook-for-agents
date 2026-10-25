@@ -174,14 +174,59 @@ func copyFilesToSystemClipboard(paths []string) error {
 	}
 }
 
+// clipboardFilePaths returns only files the user has explicitly placed on the
+// system clipboard. It never accepts a path from the browser, which prevents a
+// web page from using this helper to probe arbitrary local files.
+func clipboardFilePaths() ([]string, error) {
+	var output string
+	var err error
+	switch runtime.GOOS {
+	case "darwin":
+		script := `ObjC.import("AppKit"); const board=$.NSPasteboard.generalPasteboard; const classes=$.NSArray.arrayWithObject($.NSURL.class); const urls=board.readObjectsForClassesOptions(classes, null); const paths=[]; if (urls) { const count=Number(ObjC.unwrap(urls.count)); for (let i=0;i<count;i++) { const value=urls.objectAtIndex(i); if (ObjC.unwrap(value.isFileURL)) paths.push(ObjC.unwrap(value.path)); } } JSON.stringify(paths);`
+		output, err = runCommandOutput("osascript", "-l", "JavaScript", "-e", script)
+	case "windows":
+		script := "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Windows.Forms; if (-not [System.Windows.Forms.Clipboard]::ContainsFileDropList()) { '[]' } else { $paths = @([System.Windows.Forms.Clipboard]::GetFileDropList() | ForEach-Object { $_.ToString() }); ConvertTo-Json -InputObject $paths -Compress }"
+		output, err = runCommandOutput("powershell.exe", "-NoProfile", "-STA", "-Command", script)
+	default:
+		return nil, &apiError{status: 501, code: "FILE_CLIPBOARD_UNSUPPORTED", message: "当前系统不支持读取本地文件剪贴板。"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return parseClipboardFilePaths(output)
+}
+
+// parseClipboardFilePaths accepts both output shapes emitted by PowerShell's
+// ConvertTo-Json. A FileDropList with several paths is encoded as a JSON
+// array, while some Windows / PowerShell combinations encode a single path as
+// one JSON string. Treating the latter as an error made a valid one-file paste
+// look like a failed whole batch.
+func parseClipboardFilePaths(output string) ([]string, error) {
+	value := strings.TrimSpace(output)
+	paths := []string{}
+	if err := json.Unmarshal([]byte(value), &paths); err == nil {
+		return paths, nil
+	}
+	var path string
+	if err := json.Unmarshal([]byte(value), &path); err == nil && path != "" {
+		return []string{path}, nil
+	}
+	return nil, fmt.Errorf("无法读取系统剪贴板中的文件")
+}
+
 func runCommand(name string, args ...string) error {
+	_, err := runCommandOutput(name, args...)
+	return err
+}
+
+func runCommandOutput(name string, args ...string) (string, error) {
 	output, err := exec.Command(name, args...).CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(output))
 		if message == "" {
 			message = err.Error()
 		}
-		return fmt.Errorf("无法访问系统剪贴板：%s", message)
+		return "", fmt.Errorf("无法访问系统剪贴板：%s", message)
 	}
-	return nil
+	return string(output), nil
 }

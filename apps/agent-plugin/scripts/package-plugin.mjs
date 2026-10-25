@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { stampAgentBundleVersion } from "./stamp-version.mjs";
@@ -12,7 +12,7 @@ const desktopRoot = join(repositoryRoot, "apps", "desktop");
 const platform = process.env.SOURCEBOOK_AGENT_PLUGIN_PLATFORM || (process.platform === "win32" ? "windows-x64" : "macos-arm64");
 const version = (process.env.SOURCEBOOK_AGENT_PLUGIN_VERSION || JSON.parse(readFileSync(join(pluginRoot, "plugin.json"), "utf8")).version).replace(/^v/, "");
 const build = process.env.SOURCEBOOK_BUILD?.trim() || "";
-const outputRoot = process.env.SOURCEBOOK_AGENT_PLUGIN_OUTPUT_DIR || join(repositoryRoot, "release", "agent-plugin");
+const outputRoot = process.env.SOURCEBOOK_AGENT_PLUGIN_OUTPUT_DIR ? resolve(process.env.SOURCEBOOK_AGENT_PLUGIN_OUTPUT_DIR) : join(repositoryRoot, "release", "agent-plugin");
 const archiveName = `sourcebook-agent-plugin-${platform}-v${version}${build ? `-${build}` : ""}`;
 const stagingRoot = join(outputRoot, archiveName);
 const marketplaceRoot = join(stagingRoot, ".agents", "plugins");
@@ -46,9 +46,7 @@ const command = isWindows ? ".\\bin\\sourcebook-mcp.exe" : "./bin/sourcebook-mcp
 const mcpConfig = { mcpServers: { sourcebook: { command, args: [], cwd: ".", env: { SOURCEBOOK_AGENT_NAME: "Codex" } } } };
 writeFileSync(join(pluginDestination, ".mcp.json"), `${JSON.stringify(mcpConfig, null, 2)}\n`);
 writeFileSync(join(pluginDestination, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: `${"${PLUGIN_ROOT}"}/bin/${binaryName}`, args: [] } } }, null, 2)}\n`);
-// Keep the existing marketplace identity so an independent update replaces the
-// Desktop-seeded Sourcebook Plugin rather than creating a second installation.
-writeFileSync(join(marketplaceRoot, "marketplace.json"), `${JSON.stringify({ name: "sourcebook-bundled", interface: { displayName: "Sourcebook" }, plugins: [{ name: "sourcebook", source: { source: "local", path: "./.agents/plugins/sourcebook" }, policy: { installation: "AVAILABLE" }, category: "Productivity" }] }, null, 2)}\n`);
+writeFileSync(join(marketplaceRoot, "marketplace.json"), `${JSON.stringify({ name: "sourcebook-plugin", interface: { displayName: "Sourcebook" }, plugins: [{ name: "sourcebook", source: { source: "local", path: "./.agents/plugins/sourcebook" }, policy: { installation: "AVAILABLE" }, category: "Productivity" }] }, null, 2)}\n`);
 
 const archivePath = join(outputRoot, `${archiveName}.zip`);
 rmSync(archivePath, { force: true });

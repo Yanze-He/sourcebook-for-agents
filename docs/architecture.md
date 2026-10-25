@@ -35,7 +35,7 @@ Each Book has its own SQLite database and asset directory. New Books receive a r
 
 Picker sends `POST /api/picks`. Sources is read through `GET /api/sources?bookId=…`; edits, local file operations, transfers, backups, and Packs use the matching `/api` routes. The application does not expose a cloud API in this release.
 
-MCP uses a separate, versioned loopback bridge (`/api/mcp/v1`) with an owner-only pairing credential. It is not part of the browser API and rejects requests with a browser origin. Every MCP session explicitly selects one Book before reading sources or submitting a suggestion. MCP write-shaped tools only persist a pending suggestion; Sourcebook applies it through the same local transaction path after the user accepts it.
+MCP uses a separate, versioned loopback bridge (`/api/mcp/v1`) with an owner-only pairing credential. It is not part of the browser API and rejects requests with a browser origin. A named Book can be resolved without changing session scope; a Book is only created or renamed after an explicit Agent call. Every MCP session explicitly selects one Book before reading sources or submitting a suggestion. MCP Source changes persist only pending suggestions; multi-item saves are stored in one durable submission batch and Sourcebook applies each suggestion through the same local transaction path after the user accepts it. A batch returns a deep link carrying its Book and review identity; the Agent host, not MCP, is responsible for presenting that link in a visible browser panel.
 
 ```text
 Codex / local Agent
@@ -48,4 +48,4 @@ The extension should only expose collection controls when the local application 
 
 ## Packaging
 
-Desktop packages embed the Sources build, local service, and Sourcebook Agent Plugin. The bundled `sourcebook-mcp` runs over stdio against the loopback service. Users explicitly connect an Agent from Desktop; Desktop never silently changes an Agent configuration.
+Desktop packages embed the Sources build and local service. The independently installed Sourcebook Agent Plugin supplies `sourcebook-mcp`, which runs over stdio against the loopback service. Users explicitly connect an Agent from Desktop; Desktop never silently changes an Agent configuration or installs, copies, or updates a Plugin.

@@ -51,6 +51,20 @@ type Server struct {
 	changeMu           sync.Mutex
 	changeSubscribers  map[string]map[chan struct{}]struct{}
 	mcpMu              sync.Mutex
+	clipboardMu        sync.Mutex
+	clipboardSnapshots map[string]clipboardSnapshot
+}
+
+type clipboardSnapshot struct {
+	files     []clipboardSnapshotFile
+	createdAt time.Time
+}
+
+// clipboardSnapshotFile is intentionally kept only in the local service. The
+// browser gets its opaque ID and display metadata, never the original path.
+type clipboardSnapshotFile struct {
+	id   string
+	path string
 }
 
 type apiError struct {
@@ -69,7 +83,7 @@ func NewServer(library *Library, webRoot string) http.Handler {
 		// successful library migration.
 		settingsRoot = filepath.Dir(library.locationConfigPath)
 	}
-	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}}
+	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}, clipboardSnapshots: map[string]clipboardSnapshot{}}
 	server.cleanupExpiredMCPContextFiles()
 	return server
 }
@@ -142,7 +156,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"ok": true, "app": "sourcebook-for-agents", "version": appVersion, "build": appBuild, "apiVersion": "3",
-			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync", "prompt-settings"},
+			"capabilities": []string{"picks", "sources", "source-packs", "books", "backup", "picker-auto-sync", "prompt-settings", "clipboard-import"},
 			"connection":   map[string]any{"protocolVersion": 1, "origin": "http://" + request.Host},
 			"library":      manifest,
 		})
@@ -185,7 +199,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 		return server.revokeMCP(response)
 	}
 	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
-		return server.listMCPSuggestions(response)
+		return server.listMCPSuggestions(response, request.URL.Query().Get("batchId"))
 	}
 	if request.Method == http.MethodPut && path == "/api/settings/update" {
 		return server.updateUpdateSettings(response, request)
@@ -226,6 +240,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if request.Method == http.MethodPost && path == "/api/source-packs/copy-materials" {
 		return server.copyPackMaterials(response, request)
 	}
+	if request.Method == http.MethodPost && path == "/api/clipboard/files" {
+		return server.clipboardFiles(response)
+	}
 
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "books" && sourceBookPattern.MatchString(parts[2]) {
@@ -243,6 +260,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 		}
 		if len(parts) == 4 && parts[3] == "import" && request.Method == http.MethodPost {
 			return server.importFile(response, request, bookID)
+		}
+		if len(parts) == 4 && parts[3] == "clipboard-import" && request.Method == http.MethodPost {
+			return server.importClipboard(response, request, bookID)
 		}
 		if len(parts) == 5 && parts[3] == "media" && request.Method == http.MethodGet {
 			return server.serveMedia(response, bookID, parts[4])
@@ -1014,7 +1034,7 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 		item := map[string]any{
 			"id": itemID, "resourceId": resourceID, "itemTitle": itemTitle, "userNote": note, "status": status, "pickedAt": pickedAt,
 			"favorite": favorite != 0, "resourceSummary": summary, "modality": effectiveModality, "pickType": pickType, "metadata": metadata,
-			"assetCacheState": nullableString(cacheState), "linkState": link, "mimeType": nullableString(mimeType), "fileName": nullableString(fileName), "contentUrl": nullableString(contentURL),
+			"assetId": nullableString(assetID), "assetCacheState": nullableString(cacheState), "linkState": link, "mimeType": nullableString(mimeType), "fileName": nullableString(fileName), "contentUrl": nullableString(contentURL),
 			"thumbnailUrl": thumbnail, "sourceUrl": nullableString(sourceURL), "sourceTitle": nullableString(sourceTitle), "bookId": ctx.Book.ID,
 			"sourceOrigin": originOf(sourceURL.String), "faviconUrl": nullableAny(metadata["faviconUrl"]), "localPath": nil, "fileSize": fileSize,
 		}
@@ -2113,6 +2133,7 @@ func localImportFormat(name string) (string, string, bool) {
 	format, ok := formats[strings.ToLower(filepath.Ext(name))]
 	return format[0], format[1], ok
 }
+
 func imageType(bytes []byte) (string, string, error) {
 	if len(bytes) >= 8 && string(bytes[:8]) == "\x89PNG\r\n\x1a\n" {
 		return "image/png", ".png", nil

@@ -16,8 +16,9 @@ Organize each project in its own Book. Collect references, files, links, posts, 
 | --- | --- |
 | **Books** | Keep a visual, project-based feed of references and work in progress. |
 | **Pick** | Collect web content, images, posts, and selected AI chat messages with their sources. |
+| **Paste** | Paste files, links, screenshots, or text into the current Book; review exactly what will be added before confirming. |
 | **Connect** | Let a compatible local agent search a selected Book and submit suggestions for your review. |
-| **Pack** | Select materials, add creative notes, and copy context for the AI tool you choose. |
+| **Pack** | Select materials, review the files and links, tailor the prompt, and copy context for the AI tool you choose. |
 | **Back up** | Export and restore Books with a `.sourcebook-backup` archive. |
 
 ## Pick from the browser
@@ -40,7 +41,7 @@ Picker tries to save images locally when possible. Some sites restrict downloads
 
 ## Keep a project together
 
-Create a Book for each project and browse its materials in a visual feed. Import local documents and media, write your own records, add notes, search, filter, and revisit original sources.
+Create a Book for each project and browse its materials in a visual feed. Import local documents and media, paste files, links, screenshots, or text with a review step, write your own records, add notes, search, filter, and revisit original sources.
 
 <p align="center">
   <img src="docs/images/sourcebook-desktop-features-v7.png" alt="Sourcebook Desktop for organizing Books, finding materials, and preparing a Pack." width="100%" />
@@ -50,7 +51,7 @@ Create a Book for each project and browse its materials in a visual feed. Import
 
 | Connect a local agent | Pack for any AI tool |
 | --- | --- |
-| Compatible MCP agents—including Codex, Claude Code, WorkBuddy, and Grokbot—can search and read a selected Book. They can prepare context files and submit suggestions; you review every suggestion in Sourcebook. | Select materials, add notes, then copy the prompt and available files or links. Paste them into Codex, Claude Code, Figma, Lovable, or another AI tool. |
+| Compatible MCP agents—including Codex, Claude Code, WorkBuddy, and Grokbot—can search and read a selected Book. They can prepare context files and submit suggestions; you review every suggestion in Sourcebook. | Select materials, review the Pack's files and links, adjust its prompt when needed, then copy the prompt and available files. Paste them into Codex, Claude Code, Figma, Lovable, or another AI tool. |
 
 Sourcebook agents do not directly change or delete Book content. You choose what is saved and what is shared.
 
@@ -67,7 +68,7 @@ Export one, several, or all Books to a `.sourcebook-backup` archive, then import
 1. Download and install [Sourcebook Desktop](https://github.com/Yanze-He/sourcebook-for-agents/releases).
 2. Install [Sourcebook Picker from the Chrome Web Store](https://chromewebstore.google.com/detail/sourcebook-picker/pkglhngkfkjblabnhgcioindjgffgfpf?hl=en-US&utm_source=github_agents_readme&utm_medium=referral&utm_campaign=picker_install).
 3. Start Desktop, open Picker, and choose a Book.
-4. To connect an agent, open **Settings → Connect an Agent** and follow the setup prompt. To Pack, select materials, add notes, and choose **Pack for agent**.
+4. To connect an agent, open **Settings → Connect an Agent** and follow the setup prompt. To Pack, select materials and choose **Pack for agent**; review the scope, optionally edit the prompt or its template, then copy the files and prompt.
 
 The current beta supports Apple silicon macOS and Windows x64. Picker works with Chrome and Edge. See [Getting Started](docs/getting-started.md) for setup and troubleshooting.
 

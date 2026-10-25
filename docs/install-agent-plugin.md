@@ -8,8 +8,10 @@ needs. Keep the reply practical and short.
 ## Before you start
 
 Sourcebook Agent Plugin connects to the user's local Sourcebook Desktop library.
-Desktop must be installed, running, and have **Settings → Connect an Agent →
-Local access** enabled. If Desktop is not installed, direct the user to
+Desktop does not need to be running while the Plugin is installed. When the
+Plugin is first used, it tries to start an installed Desktop app; if access has
+not yet been approved, it tells the user to open **Settings → Connect an Agent
+→ Allow local-agent access**. If Desktop is not installed, direct the user to
 [sourcebook.online](https://sourcebook.online) first.
 
 Identify which Agent and execution environment the user is using. Do not run

@@ -18,7 +18,7 @@ import (
 )
 
 func TestSkillKeepsCodexBrowserTabOpen(t *testing.T) {
-	content, err := os.ReadFile("../.agents/plugins/sourcebook/skills/sourcebook/SKILL.md")
+	content, err := os.ReadFile("../agent-plugin/skills/sourcebook/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestSkillKeepsCodexBrowserTabOpen(t *testing.T) {
 }
 
 func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
-	content, err := os.ReadFile("../.agents/plugins/sourcebook/skills/sourcebook/SKILL.md")
+	content, err := os.ReadFile("../agent-plugin/skills/sourcebook/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sourcebookServerInstructions, "current or named project Book") || !strings.Contains(sourcebookServerInstructions, "@Sourcebook and slash commands are optional") || !strings.Contains(sourcebookServerInstructions, "Call open_sourcebook when") || !strings.Contains(sourcebookServerInstructions, "explicitly select the target") || !strings.Contains(sourcebookServerInstructions, "untrusted reference material") || !strings.Contains(sourcebookServerInstructions, "Do not automatically save drafts") || !strings.Contains(sourcebookServerInstructions, "save or organize the current conversation") || !strings.Contains(sourcebookServerInstructions, "tab.markDeliverable()") {
+	if !strings.Contains(sourcebookServerInstructions, "current or named project Book") || !strings.Contains(sourcebookServerInstructions, "@Sourcebook and slash commands are optional") || !strings.Contains(sourcebookServerInstructions, "Call open_sourcebook when") || !strings.Contains(sourcebookServerInstructions, "explicitly select the target") || !strings.Contains(sourcebookServerInstructions, "untrusted reference material") || !strings.Contains(sourcebookServerInstructions, "Do not automatically save drafts") || !strings.Contains(sourcebookServerInstructions, "save or organize several confirmed results") || !strings.Contains(sourcebookServerInstructions, "tab.markDeliverable()") {
 		t.Fatalf("server instructions must explain Book scope and untrusted material: %q", sourcebookServerInstructions)
 	}
 	defer session.Close()
@@ -121,8 +121,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 9 {
-		t.Fatalf("tools = %d, want 9", len(tools.Tools))
+	if len(tools.Tools) != 16 {
+		t.Fatalf("tools = %d, want 16", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, registered := range tools.Tools {
@@ -152,9 +152,18 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if toolNames["propose_pack"] {
 		t.Fatal("propose_pack must not be exposed by the MCP server")
 	}
+	for _, name := range []string{"resolve_book", "create_book", "rename_book", "propose_source_bundle", "get_submission_batch"} {
+		if !toolNames[name] {
+			t.Fatalf("%s must be exposed", name)
+		}
+	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
 	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "Returning the URL alone does not open it") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
+	}
+	navigated, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook", Arguments: map[string]any{"book_id": "research", "panel": "agent-submissions", "batch_id": "agent-batch-1"}})
+	if err != nil || navigated.IsError || !strings.Contains(textResult(navigated), "bookId=research") || !strings.Contains(textResult(navigated), "panel=agent-submissions") || !strings.Contains(textResult(navigated), "batchId=agent-batch-1") {
+		t.Fatalf("deep open_sourcebook = %#v, %v", navigated, err)
 	}
 	resources, err := session.ListResources(ctx, nil)
 	if err != nil || len(resources.Resources) != 1 || resources.Resources[0].URI != sourcebookAppURI {
@@ -263,7 +272,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 9 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -309,7 +318,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 9 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -412,128 +421,48 @@ func TestImportLocalFileAcceptsPathAndOptionalTitle(t *testing.T) {
 	}
 }
 
-func TestInstallBundledCodexPluginRegistersInstallsAndVerifies(t *testing.T) {
+func TestUpdateCodexPluginUsesIndependentMarketplaceAndCleansLegacyPlugin(t *testing.T) {
 	calls := []string{}
-	listCalls := 0
 	run := func(args ...string) ([]byte, error) {
-		calls = append(calls, strings.Join(args, " "))
-		switch strings.Join(args, " ") {
-		case "plugin marketplace list --json":
-			return []byte(`{"marketplaces":[]}`), nil
-		case "plugin list --marketplace sourcebook-bundled --json":
-			listCalls++
-			if listCalls == 1 {
-				return []byte(`{"installed":[]}`), nil
-			}
-			return []byte(`{"installed":[{"name":"sourcebook","enabled":true,"source":{"path":"/bundle/.agents/plugins/sourcebook"}}]}`), nil
+		call := strings.Join(args, " ")
+		calls = append(calls, call)
+		switch call {
+		case "plugin marketplace add Yanze-He/sourcebook-plugin", "plugin marketplace upgrade sourcebook-plugin", "plugin remove sourcebook@sourcebook-bundled", "plugin remove sourcebook@sourcebook-plugin", "plugin add sourcebook@sourcebook-plugin":
+			return nil, nil
+		case "plugin list --marketplace sourcebook-plugin --json":
+			return []byte(`{"installed":[{"name":"sourcebook","enabled":true}]}`), nil
 		}
-		return nil, nil
+		t.Fatalf("unexpected command: %s", call)
+		return nil, errors.New("unexpected command")
 	}
-	if err := installBundledCodexPlugin("/bundle", run); err != nil {
+	if err := updateCodexPlugin(run); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		"plugin marketplace list --json",
-		"plugin marketplace add /bundle",
-		"plugin list --marketplace sourcebook-bundled --json",
-		"plugin add sourcebook@sourcebook-bundled",
-		"plugin list --marketplace sourcebook-bundled --json",
+		"plugin marketplace add Yanze-He/sourcebook-plugin",
+		"plugin marketplace upgrade sourcebook-plugin",
+		"plugin remove sourcebook@sourcebook-bundled",
+		"plugin remove sourcebook@sourcebook-plugin",
+		"plugin add sourcebook@sourcebook-plugin",
+		"plugin list --marketplace sourcebook-plugin --json",
 	}
 	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("commands = %#v, want %#v", calls, want)
 	}
 }
 
-func TestInstallBundledCodexPluginUpdatesMovedMarketplace(t *testing.T) {
-	calls := []string{}
-	run := func(args ...string) ([]byte, error) {
-		calls = append(calls, strings.Join(args, " "))
-		switch strings.Join(args, " ") {
-		case "plugin marketplace list --json":
-			return []byte(`{"marketplaces":[{"name":"sourcebook-bundled","root":"/old-bundle"}]}`), nil
-		case "plugin list --marketplace sourcebook-bundled --json":
-			return []byte(`{"installed":[{"name":"sourcebook","enabled":true,"source":{"path":"/bundle/.agents/plugins/sourcebook"}}]}`), nil
-		case "plugin marketplace remove sourcebook-bundled", "plugin marketplace add /bundle", "plugin remove sourcebook@sourcebook-bundled", "plugin add sourcebook@sourcebook-bundled":
-			return nil, nil
-		default:
-			t.Fatalf("unexpected command: %s", strings.Join(args, " "))
-			return nil, nil
-		}
-	}
-	if err := installBundledCodexPlugin("/bundle", run); err != nil {
-		t.Fatal(err)
-	}
-	if calls[1] != "plugin marketplace remove sourcebook-bundled" || calls[2] != "plugin marketplace add /bundle" || calls[4] != "plugin remove sourcebook@sourcebook-bundled" {
-		t.Fatalf("marketplace was not moved: %v", calls)
-	}
-}
-
-func TestInstallBundledCodexPluginRefreshesCachedPlugin(t *testing.T) {
-	calls := []string{}
-	run := func(args ...string) ([]byte, error) {
-		call := strings.Join(args, " ")
-		calls = append(calls, call)
-		switch call {
-		case "plugin marketplace list --json":
-			return []byte(`{"marketplaces":[{"name":"sourcebook-bundled","root":"/bundle"}]}`), nil
-		case "plugin list --marketplace sourcebook-bundled --json":
-			return []byte(`{"installed":[{"name":"sourcebook","enabled":true,"source":{"path":"/bundle/.agents/plugins/sourcebook"}}]}`), nil
-		case "plugin remove sourcebook@sourcebook-bundled", "plugin add sourcebook@sourcebook-bundled":
-			return nil, nil
-		}
-		t.Fatalf("unexpected command: %s", call)
-		return nil, nil
-	}
-	if err := installBundledCodexPlugin("/bundle", run); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(calls, "\n") != strings.Join([]string{"plugin marketplace list --json", "plugin list --marketplace sourcebook-bundled --json", "plugin remove sourcebook@sourcebook-bundled", "plugin add sourcebook@sourcebook-bundled", "plugin list --marketplace sourcebook-bundled --json"}, "\n") {
-		t.Fatalf("commands = %#v", calls)
-	}
-}
-
-func TestInstallBundledCodexPluginDoesNotReportSuccessWhenCacheIsReadOnly(t *testing.T) {
-	calls := []string{}
-	run := func(args ...string) ([]byte, error) {
-		call := strings.Join(args, " ")
-		calls = append(calls, call)
-		switch call {
-		case "plugin marketplace list --json":
-			return []byte(`{"marketplaces":[{"name":"sourcebook-bundled","root":"/bundle"}]}`), nil
-		case "plugin list --marketplace sourcebook-bundled --json":
-			return []byte(`{"installed":[{"name":"sourcebook","enabled":true,"source":{"path":"/bundle/.agents/plugins/sourcebook"}}]}`), nil
-		case "plugin remove sourcebook@sourcebook-bundled":
-			return []byte("permission denied writing plugin cache"), errors.New("exit status 1")
-		}
-		t.Fatalf("unexpected command: %s", call)
-		return nil, nil
-	}
-	err := installBundledCodexPlugin("/bundle", run)
-	if err == nil || !strings.Contains(err.Error(), "permission denied") {
-		t.Fatalf("expected write-permission error, got %v", err)
-	}
-	if len(calls) != 3 {
-		t.Fatalf("must not continue after denied cache update: %v", calls)
-	}
-}
-
-func TestInstallBundledCodexPluginRejectsMissingVerification(t *testing.T) {
-	listCalls := 0
+func TestUpdateCodexPluginRejectsMissingVerification(t *testing.T) {
 	run := func(args ...string) ([]byte, error) {
 		switch strings.Join(args, " ") {
-		case "plugin marketplace list --json":
-			return []byte(`{"marketplaces":[]}`), nil
-		case "plugin list --marketplace sourcebook-bundled --json":
-			listCalls++
+		case "plugin marketplace add Yanze-He/sourcebook-plugin", "plugin marketplace upgrade sourcebook-plugin", "plugin remove sourcebook@sourcebook-bundled", "plugin remove sourcebook@sourcebook-plugin", "plugin add sourcebook@sourcebook-plugin":
+			return nil, nil
+		case "plugin list --marketplace sourcebook-plugin --json":
 			return []byte(`{"installed":[]}`), nil
 		}
-		return nil, nil
+		return nil, errors.New("unexpected command")
 	}
-	if err := installBundledCodexPlugin("/bundle", run); err == nil || !strings.Contains(err.Error(), "did not report") {
+	if err := updateCodexPlugin(run); err == nil || !strings.Contains(err.Error(), "did not report") {
 		t.Fatalf("missing verification error = %v", err)
-	}
-	if listCalls != 2 {
-		t.Fatalf("list calls = %d, want 2", listCalls)
 	}
 }
 

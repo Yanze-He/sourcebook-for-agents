@@ -4,19 +4,19 @@ Last updated: October 7, 2026
 
 ## Local-first data handling
 
-Sourcebook for Agents collects content only after a user-triggered Pick action. The core product stores picked Sources, notes, media copies, and exported Packs on the user's computer. It does not require an account and does not operate a cloud synchronization service.
+Sourcebook for Agents collects content only after a user-triggered Pick or paste action. The core product stores picked Sources, notes, media copies, and exported Packs on the user's computer. It does not require an account and does not operate a cloud synchronization service.
 
 The browser extension may store pending Picks and recent Pick summaries in the browser's local extension storage while the local Desktop is unavailable. When the Desktop is running, it stores Sources in a local SQLite database and media copies in the user's Sourcebook data directory.
 
 ## Data that may be picked
 
-Depending on the user's action, Picked data can include selected webpage text, URLs, page titles and metadata, image URLs or image bytes, loaded chat messages, user notes, and Pick timestamps. The extension does not intentionally collect password fields or browser-internal pages.
+Depending on the user's action, Picked data can include selected webpage text, URLs, page titles and metadata, image URLs or image bytes, loaded chat messages, user notes, and Pick timestamps. A Cmd/Ctrl+V action in Sourcebook can add the current clipboard's plain text, links, screenshots, or copied files after an in-product review and confirmation. For copied local files, Desktop holds only a short-lived, one-time file-path snapshot; local paths are not exposed to the Sources page or sent to a Sourcebook cloud service. The extension does not intentionally collect password fields or browser-internal pages.
 
 ## Sharing
 
 Sourcebook for Agents does not transmit picked content to a Sourcebook-operated cloud service. Users may manually download a Pack or paste its contents into a third-party AI service. Those services are governed by their own terms and privacy policies.
 
-If a user explicitly enables **Connect local agent** and connects the MCP helper bundled with Sourcebook Desktop, Sourcebook can provide a local Agent such as Codex with Book data through Sourcebook MCP. The Agent must explicitly choose a Book for its session. Read content may be sent to the model service used by that Agent, so users should enable access only when that sharing is appropriate. MCP suggestions remain pending until the user accepts or rejects them in Sourcebook.
+If a user explicitly enables **Connect local agent** and connects the independently installed Sourcebook Agent Plugin, Sourcebook can provide a local Agent such as Codex with Book data through Sourcebook MCP. The Agent must explicitly choose a Book for its session. Read content may be sent to the model service used by that Agent, so users should enable access only when that sharing is appropriate. MCP suggestions remain pending until the user accepts or rejects them in Sourcebook.
 
 ## Security and retention
 

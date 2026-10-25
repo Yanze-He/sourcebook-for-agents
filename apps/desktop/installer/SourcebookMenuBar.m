@@ -157,7 +157,6 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
 
   NSURL *resources = [[NSBundle mainBundle] resourceURL];
   if (!resources) return;
-  NSURL *agentPlugin = [self synchronizedAgentPluginWithResources:resources];
 
   NSTask *task = [[NSTask alloc] init];
   NSURL *bundle = [[NSBundle mainBundle] bundleURL];
@@ -165,7 +164,6 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
 
   NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithDictionary:[NSProcessInfo processInfo].environment];
   environment[@"SOURCEBOOK_SOURCES_WEB_DIR"] = [resources URLByAppendingPathComponent:@"sources"].path;
-  if (agentPlugin != nil) environment[@"SOURCEBOOK_AGENT_PLUGIN_DIR"] = agentPlugin.path;
   task.environment = environment;
   task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
   task.standardError = [NSFileHandle fileHandleWithNullDevice];
@@ -184,58 +182,6 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
   } else {
     [NSApp requestUserAttention:NSCriticalRequest];
   }
-}
-
-// Agent install resources must not live only inside the app bundle: users can
-// place Sourcebook on another volume, rename it, or replace it during an
-// update. Keep an atomically refreshed copy beside the user-level settings so
-// copied installation requests always point to a stable location.
-- (NSURL *)synchronizedAgentPluginWithResources:(NSURL *)resources {
-  NSFileManager *manager = [NSFileManager defaultManager];
-  NSURL *source = [resources URLByAppendingPathComponent:@"agent-plugin" isDirectory:YES];
-  BOOL sourceIsDirectory = NO;
-  if (![manager fileExistsAtPath:source.path isDirectory:&sourceIsDirectory] || !sourceIsDirectory) return nil;
-
-  NSError *error = nil;
-  NSURL *applicationSupport = [manager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
-  if (applicationSupport == nil || error != nil) return nil;
-  NSURL *parent = [applicationSupport URLByAppendingPathComponent:@"Sourcebook for Agents" isDirectory:YES];
-  if (![manager createDirectoryAtURL:parent withIntermediateDirectories:YES attributes:nil error:&error]) return nil;
-
-  NSURL *destination = [parent URLByAppendingPathComponent:@"agent-plugin" isDirectory:YES];
-  NSURL *staging = [parent URLByAppendingPathComponent:@"agent-plugin.next" isDirectory:YES];
-  NSURL *backup = [parent URLByAppendingPathComponent:@"agent-plugin.previous" isDirectory:YES];
-  [manager removeItemAtURL:staging error:nil];
-  [manager removeItemAtURL:backup error:nil];
-  if (![manager copyItemAtURL:source toURL:staging error:&error]) return nil;
-
-  NSArray<NSURL *> *required = @[
-    [staging URLByAppendingPathComponent:@".agents/plugins/sourcebook/bin/sourcebook-mcp"],
-    [staging URLByAppendingPathComponent:@".agents/plugins/marketplace.json"],
-    [staging URLByAppendingPathComponent:@".agents/plugins/sourcebook/skills/sourcebook/SKILL.md"],
-    [staging URLByAppendingPathComponent:@"INSTALL-CODEX.md"],
-    [staging URLByAppendingPathComponent:@"INSTALL-WORKBUDDY.md"],
-    [staging URLByAppendingPathComponent:@"INSTALL-MCP.md"],
-    [staging URLByAppendingPathComponent:@"agent-version.json"],
-  ];
-  for (NSURL *path in required) {
-    if (![manager fileExistsAtPath:path.path]) {
-      [manager removeItemAtURL:staging error:nil];
-      return nil;
-    }
-  }
-
-  BOOL hadDestination = [manager fileExistsAtPath:destination.path];
-  if (hadDestination && ![manager moveItemAtURL:destination toURL:backup error:&error]) {
-    [manager removeItemAtURL:staging error:nil];
-    return nil;
-  }
-  if (![manager moveItemAtURL:staging toURL:destination error:&error]) {
-    if (hadDestination) [manager moveItemAtURL:backup toURL:destination error:nil];
-    return nil;
-  }
-  [manager removeItemAtURL:backup error:nil];
-  return destination;
 }
 
 - (void)existingSourcebookHealth:(void (^)(NSString *version, NSString *build))completion {

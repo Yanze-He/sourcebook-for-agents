@@ -8,55 +8,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestVerifiedMCPInstallResourcesRequireBundledHelperAndSkill(t *testing.T) {
-	root := t.TempDir()
-	helper := filepath.Join(root, ".agents", "plugins", "sourcebook", "bin", "sourcebook-mcp")
-	skill := filepath.Join(root, ".agents", "plugins", "sourcebook", "skills", "sourcebook")
-	if err := os.WriteFile(helper, []byte("helper"), 0o700); err != nil {
-		if err := os.MkdirAll(filepath.Dir(helper), 0o700); err != nil {
-			t.Fatal(err)
+func TestMCPSettingsExposeIndependentPluginGuideWithoutBundlePaths(t *testing.T) {
+	payload := (&Server{}).mcpSettingsPayload(desktopSettings{MCPEnabled: true, MCPToken: "paired"})
+	if payload["guideUrl"] != "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md" || payload["installReady"] != true || payload["serviceReady"] != true {
+		t.Fatalf("independent plugin payload = %v", payload)
+	}
+	for _, legacy := range []string{"agentVersion", "installGuides", "bundledResourcesReady"} {
+		if _, exists := payload[legacy]; exists {
+			t.Fatalf("must not expose Desktop-bundled Plugin field %q: %v", legacy, payload)
 		}
-		if err := os.WriteFile(helper, []byte("helper"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.MkdirAll(skill, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("---\nname: sourcebook\n---"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, ".agents", "plugins", "marketplace.json"), []byte(`{"name":"sourcebook-bundled","plugins":[]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, guide := range []string{"INSTALL-CODEX.md", "INSTALL-WORKBUDDY.md", "INSTALL-MCP.md"} {
-		if err := os.WriteFile(filepath.Join(root, guide), []byte("guide"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(root, "agent-version.json"), []byte(`{"version":"0.1.1-beta.6+build.010"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SOURCEBOOK_AGENT_PLUGIN_DIR", root)
-	resources, ready := verifiedMCPInstallResources()
-	if !ready || resources.codexGuide != filepath.Join(root, "INSTALL-CODEX.md") || resources.version != "0.1.1-beta.6+build.010" {
-		t.Fatalf("verified resources = %#v, %t", resources, ready)
-	}
-	if payload := (&Server{}).mcpSettingsPayload(desktopSettings{}); payload["agentVersion"] != resources.version {
-		t.Fatalf("settings payload agentVersion = %v", payload["agentVersion"])
-	}
-	if payload := (&Server{}).mcpSettingsPayload(desktopSettings{}); payload["guideUrl"] != "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md" || payload["installReady"] != true {
-		t.Fatalf("remote install guide payload = %v", payload)
-	}
-	if err := os.Remove(filepath.Join(root, "INSTALL-MCP.md")); err != nil {
-		t.Fatal(err)
-	}
-	resources, ready = verifiedMCPInstallResources()
-	if ready || resources != (mcpInstallResources{}) {
-		t.Fatalf("unverified resources must not be exposed: %#v, %t", resources, ready)
 	}
 }
 
@@ -87,6 +51,25 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 	settings, err := server.readDesktopSettings()
 	if err != nil || settings.MCPToken == "" {
 		t.Fatalf("pairing token was not saved: %v", err)
+	}
+	status := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/status", nil)
+	status.Host = "127.0.0.1:4177"
+	status.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	statusResult := httptest.NewRecorder()
+	server.ServeHTTP(statusResult, status)
+	if statusResult.Code != http.StatusOK {
+		t.Fatalf("bridge status = %d: %s", statusResult.Code, statusResult.Body.String())
+	}
+	var bridgeStatus struct {
+		BridgeVersionMin int      `json:"bridgeVersionMin"`
+		BridgeVersionMax int      `json:"bridgeVersionMax"`
+		Capabilities     []string `json:"capabilities"`
+	}
+	if err := json.NewDecoder(statusResult.Body).Decode(&bridgeStatus); err != nil {
+		t.Fatal(err)
+	}
+	if bridgeStatus.BridgeVersionMin != 1 || bridgeStatus.BridgeVersionMax != 1 || len(bridgeStatus.Capabilities) == 0 {
+		t.Fatalf("bridge compatibility status = %#v", bridgeStatus)
 	}
 
 	list := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/books", nil)
@@ -163,6 +146,88 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 	}
 	if sourceCount != 1 {
 		t.Fatalf("accepted suggestion did not create a source: %d", sourceCount)
+	}
+}
+
+func TestMCPBookOperationsAndSubmissionBatchAreRetrySafe(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	enable := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/settings/mcp", nil)
+	enable.Host = "127.0.0.1:4177"
+	server.ServeHTTP(httptest.NewRecorder(), enable)
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path string, body any) (int, map[string]any) {
+		var reader *bytes.Reader
+		if body == nil {
+			reader = bytes.NewReader(nil)
+		} else {
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader = bytes.NewReader(encoded)
+		}
+		request := httptest.NewRequest(method, "http://127.0.0.1:4177"+path, reader)
+		request.Host = "127.0.0.1:4177"
+		request.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		result := map[string]any{}
+		_ = json.Unmarshal(response.Body.Bytes(), &result)
+		return response.Code, result
+	}
+	status, created := call(http.MethodPost, "/api/mcp/v1/books", map[string]any{"name": "Brand", "idempotencyKey": "create-brand-0001"})
+	if status != http.StatusCreated {
+		t.Fatalf("create Book status=%d payload=%#v", status, created)
+	}
+	book := created["book"].(map[string]any)
+	bookID := book["id"].(string)
+	if book["revision"].(float64) != 1 {
+		t.Fatalf("initial revision=%#v", book)
+	}
+	status, retried := call(http.MethodPost, "/api/mcp/v1/books", map[string]any{"name": "Brand", "idempotencyKey": "create-brand-0001"})
+	if status != http.StatusCreated || retried["reused"] != true || retried["book"].(map[string]any)["id"] != bookID {
+		t.Fatalf("create retry=%d %#v", status, retried)
+	}
+	status, resolved := call(http.MethodGet, "/api/mcp/v1/books/resolve?name=brand", nil)
+	if status != http.StatusOK || resolved["found"] != true || resolved["matches"].([]any)[0].(map[string]any)["id"] != bookID {
+		t.Fatalf("resolve=%d %#v", status, resolved)
+	}
+	status, renamed := call(http.MethodPatch, "/api/mcp/v1/books/"+bookID, map[string]any{"name": "Brand 2026", "expectedRevision": 1})
+	if status != http.StatusOK || renamed["book"].(map[string]any)["revision"].(float64) != 2 {
+		t.Fatalf("rename=%d %#v", status, renamed)
+	}
+	status, _ = call(http.MethodPatch, "/api/mcp/v1/books/"+bookID, map[string]any{"name": "Stale overwrite", "expectedRevision": 1})
+	if status != http.StatusConflict {
+		t.Fatalf("stale rename status=%d, want conflict error", status)
+	}
+	items := []map[string]any{
+		{"kind": "create_text_source", "payload": map[string]any{"title": "Summary", "content": "Confirmed outcome", "note": "From the user-approved task."}},
+		{"kind": "create_text_source", "payload": map[string]any{"title": "Decisions", "content": "Keep the review step.", "note": "From the user-approved task."}},
+	}
+	status, proposed := call(http.MethodPost, "/api/mcp/v1/books/"+bookID+"/proposal-batches", map[string]any{"idempotencyKey": "bundle-brand-0001", "items": items})
+	if status != http.StatusAccepted {
+		t.Fatalf("batch status=%d payload=%#v", status, proposed)
+	}
+	batch := proposed["batch"].(map[string]any)
+	batchID := batch["id"].(string)
+	if len(batch["suggestions"].([]any)) != 2 || !strings.Contains(batch["reviewUrl"].(string), "panel=agent-submissions") {
+		t.Fatalf("batch=%#v", batch)
+	}
+	status, retriedBatch := call(http.MethodPost, "/api/mcp/v1/books/"+bookID+"/proposal-batches", map[string]any{"idempotencyKey": "bundle-brand-0001", "items": items})
+	if status != http.StatusAccepted || retriedBatch["reused"] != true || retriedBatch["batch"].(map[string]any)["id"] != batchID {
+		t.Fatalf("batch retry=%d %#v", status, retriedBatch)
+	}
+	status, fetched := call(http.MethodGet, "/api/mcp/v1/books/"+bookID+"/proposal-batches/"+batchID, nil)
+	if status != http.StatusOK || fetched["batch"].(map[string]any)["id"] != batchID {
+		t.Fatalf("batch fetch=%d %#v", status, fetched)
 	}
 }
 

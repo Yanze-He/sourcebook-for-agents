@@ -389,6 +389,9 @@ func TestSourceItemsExposeCachedFileName(t *testing.T) {
 	if got := items[0]["assetCacheState"]; got != "cached" {
 		t.Fatalf("expected cached asset state, got %#v", got)
 	}
+	if got := items[0]["assetId"]; got != "asset-image" {
+		t.Fatalf("expected asset ID %q, got %#v", "asset-image", got)
+	}
 	if got := items[0]["thumbnailUrl"]; got != "/api/books/sourcebook/media/asset-image" {
 		t.Fatalf("expected local media URL, got %#v", got)
 	}

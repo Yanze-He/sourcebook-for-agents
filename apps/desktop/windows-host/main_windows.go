@@ -274,15 +274,8 @@ func startService() bool {
 		return false
 	}
 	root := filepath.Dir(executable)
-	agentPlugin, err := synchronizeAgentPlugin(root)
-	if err != nil {
-		agentPlugin = ""
-	}
 	command := exec.Command(filepath.Join(root, "sourcebook-service.exe"))
 	environment := append(os.Environ(), "SOURCEBOOK_SOURCES_WEB_DIR="+filepath.Join(root, "resources", "sources"))
-	if agentPlugin != "" {
-		environment = append(environment, "SOURCEBOOK_AGENT_PLUGIN_DIR="+agentPlugin)
-	}
 	command.Env = environment
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if command.Start() == nil {
@@ -290,85 +283,6 @@ func startService() bool {
 		return true
 	}
 	return false
-}
-
-func synchronizeAgentPlugin(root string) (string, error) {
-	source := filepath.Join(root, "resources", "agent-plugin")
-	if info, err := os.Stat(source); err != nil || !info.IsDir() {
-		return "", os.ErrNotExist
-	}
-	config, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	parent := filepath.Join(config, "Sourcebook for Agents")
-	destination := filepath.Join(parent, "agent-plugin")
-	staging := destination + ".next"
-	backup := destination + ".previous"
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return "", err
-	}
-	_ = os.RemoveAll(staging)
-	_ = os.RemoveAll(backup)
-	if err := copyDirectory(source, staging); err != nil {
-		_ = os.RemoveAll(staging)
-		return "", err
-	}
-	for _, path := range []string{
-		filepath.Join(staging, ".agents", "plugins", "sourcebook", "bin", "sourcebook-mcp.exe"),
-		filepath.Join(staging, ".agents", "plugins", "marketplace.json"),
-		filepath.Join(staging, ".agents", "plugins", "sourcebook", "skills", "sourcebook", "SKILL.md"),
-		filepath.Join(staging, "INSTALL-CODEX.md"),
-		filepath.Join(staging, "INSTALL-WORKBUDDY.md"),
-		filepath.Join(staging, "INSTALL-MCP.md"),
-		filepath.Join(staging, "agent-version.json"),
-	} {
-		if info, err := os.Stat(path); err != nil || info.IsDir() {
-			_ = os.RemoveAll(staging)
-			return "", os.ErrNotExist
-		}
-	}
-	_, destinationErr := os.Stat(destination)
-	hadDestination := destinationErr == nil
-	if hadDestination {
-		if err := os.Rename(destination, backup); err != nil {
-			_ = os.RemoveAll(staging)
-			return "", err
-		}
-	}
-	if err := os.Rename(staging, destination); err != nil {
-		if hadDestination {
-			_ = os.Rename(backup, destination)
-		}
-		return "", err
-	}
-	_ = os.RemoveAll(backup)
-	return destination, nil
-}
-
-func copyDirectory(source, destination string) error {
-	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(destination, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o700)
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, contents, info.Mode())
-	})
 }
 
 func stopService() {

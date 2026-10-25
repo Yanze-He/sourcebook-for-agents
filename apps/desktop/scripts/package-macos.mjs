@@ -1,10 +1,9 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import appdmg from "appdmg";
-import { stampAgentBundleVersion } from "../../agent-plugin/scripts/stamp-version.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -14,15 +13,13 @@ const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
-const mcpRoot = join(repositoryRoot, "apps", "mcp-go");
-const agentPluginRoot = join(repositoryRoot, "apps", "agent-plugin");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
 const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
 const installerFileName = `sourcebook-desktop-installer-v${appVersion}.dmg`;
 const prebuiltApp = process.env.SOURCEBOOK_PREBUILT_APP?.trim() || "";
 // Release packaging uses release/macos. A separate output is useful for a
 // candidate build so it never overwrites an already published DMG.
-const outputRoot = process.env.SOURCEBOOK_MACOS_OUTPUT_DIR || join(repositoryRoot, "release", "macos");
+const outputRoot = process.env.SOURCEBOOK_MACOS_OUTPUT_DIR ? resolve(process.env.SOURCEBOOK_MACOS_OUTPUT_DIR) : join(repositoryRoot, "release", "macos");
 const appRoot = join(outputRoot, "Sourcebook Desktop.app");
 const contents = join(appRoot, "Contents");
 const resources = join(contents, "Resources");
@@ -34,7 +31,7 @@ const fileIconSetterSource = join(desktopRoot, "installer", "SetFileIcon.m");
 
 const packageInputs = prebuiltApp
   ? [prebuiltApp, installerIconSource, fileIconSetterSource]
-  : [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), join(mcpRoot, "go.mod"), join(agentPluginRoot, "plugin.json"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource];
+  : [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource];
 for (const path of packageInputs) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
 }
@@ -64,7 +61,6 @@ if (prebuiltApp) {
 
   cpSync(join(sourcesRoot, "dist"), join(resources, "sources"), { recursive: true });
   buildService(join(contents, "MacOS", "sourcebook-service"));
-  bundleAgentPlugin(resources);
   createIcon(appIconSource, join(resources, "SourcebookDesktop.icns"), "SourcebookDesktop");
   createMenuBarHost(join(contents, "MacOS", "Sourcebook Desktop"));
   writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
@@ -106,32 +102,6 @@ function buildService(destination) {
     stdio: "inherit",
   });
   chmodSync(destination, 0o755);
-}
-
-function bundleAgentPlugin(resourcesRoot) {
-  const marketplaceRoot = join(resourcesRoot, "agent-plugin");
-  const pluginRoot = join(marketplaceRoot, ".agents", "plugins", "sourcebook");
-  const binary = join(pluginRoot, "bin", "sourcebook-mcp");
-  mkdirSync(join(pluginRoot, "bin"), { recursive: true });
-  cpSync(agentPluginRoot, pluginRoot, {
-    recursive: true,
-    filter: (source) => !source.includes(`${join("scripts")}`) && !source.includes(`${join("bin")}`),
-  });
-  for (const guide of ["INSTALL-CODEX.md", "INSTALL-WORKBUDDY.md", "INSTALL-MCP.md"]) {
-    copyFileSync(join(agentPluginRoot, guide), join(marketplaceRoot, guide));
-  }
-  const agentVersion = JSON.parse(readFileSync(join(agentPluginRoot, "plugin.json"), "utf8")).version;
-  const bundleVersion = stampAgentBundleVersion(marketplaceRoot, agentVersion);
-  const linkerFlags = ["-s", "-w", `-X main.bridgeVersion=${bundleVersion}`].join(" ");
-  execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", binary, "."], {
-    cwd: mcpRoot,
-    env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
-    stdio: "inherit",
-  });
-  chmodSync(binary, 0o755);
-  writeFileSync(join(pluginRoot, ".mcp.json"), `${JSON.stringify({ mcpServers: { sourcebook: { command: "./bin/sourcebook-mcp", args: [], cwd: ".", env: { SOURCEBOOK_AGENT_NAME: "Codex" } } } }, null, 2)}\n`);
-  writeFileSync(join(pluginRoot, "mcp.json"), `${JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: { sourcebook: { type: "stdio", command: "${PLUGIN_ROOT}/bin/sourcebook-mcp", args: [] } } }, null, 2)}\n`);
-  writeFileSync(join(marketplaceRoot, ".agents", "plugins", "marketplace.json"), `${JSON.stringify({ name: "sourcebook-bundled", interface: { displayName: "Sourcebook Desktop" }, plugins: [{ name: "sourcebook", source: { source: "local", path: "./.agents/plugins/sourcebook" }, policy: { installation: "AVAILABLE" }, category: "Productivity" }] }, null, 2)}\n`);
 }
 
 function createIcon(source, destination, name) {

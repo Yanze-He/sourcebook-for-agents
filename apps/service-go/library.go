@@ -35,7 +35,15 @@ type Book struct {
 	// renames a Book, while the folder remains understandable in Finder/Explorer.
 	Directory string `json:"directory,omitempty"`
 	CreatedAt string `json:"createdAt"`
+	// Revision prevents an Agent from silently overwriting a rename that was
+	// made in the Desktop UI after the Agent last read this Book.
+	Revision int `json:"revision"`
+	// MCPCreateKey is an opaque client-supplied key used only to make an
+	// explicit create_book retry safe. It is never used to resolve a Book.
+	MCPCreateKey string `json:"mcpCreateKey,omitempty"`
 }
+
+var errBookRevisionConflict = errors.New("Book was renamed after it was last read")
 
 type Manifest struct {
 	Version       int      `json:"version"`
@@ -298,6 +306,49 @@ func (library *Library) Context(bookID string) (*BookContext, error) {
 }
 
 func (library *Library) CreateBook(name string) (Book, error) {
+	return library.createBook(name, "")
+}
+
+// CreateBookForMCP creates a Book exactly once for a caller-supplied retry
+// key. A repeated key with a different name is rejected rather than creating
+// an unexpected second Book.
+func (library *Library) CreateBookForMCP(name, key string) (Book, bool, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return Book{}, false, errors.New("idempotency_key is required")
+	}
+	clean := cleanBookName(name)
+	if clean == "" {
+		return Book{}, false, errors.New("Book 名称不能为空")
+	}
+	library.mu.Lock()
+	defer library.mu.Unlock()
+	manifest, err := library.readManifest()
+	if err != nil {
+		return Book{}, false, err
+	}
+	for _, book := range manifest.Books {
+		if book.MCPCreateKey != key {
+			continue
+		}
+		if book.Name != clean {
+			return Book{}, false, errors.New("This idempotency key was already used for a different Book name.")
+		}
+		return book, true, nil
+	}
+	id, err := uniqueBookID(manifest.Books)
+	if err != nil {
+		return Book{}, false, err
+	}
+	book := Book{ID: id, Name: clean, Directory: nextBookDirectory(clean, manifest.Books, ""), CreatedAt: now(), Revision: 1, MCPCreateKey: key}
+	manifest.Books = append(manifest.Books, book)
+	if err := library.writeManifest(manifest); err != nil {
+		return Book{}, false, err
+	}
+	return book, false, nil
+}
+
+func (library *Library) createBook(name, key string) (Book, error) {
 	clean := cleanBookName(name)
 	if clean == "" {
 		return Book{}, errors.New("Book 名称不能为空")
@@ -312,7 +363,7 @@ func (library *Library) CreateBook(name string) (Book, error) {
 	if err != nil {
 		return Book{}, err
 	}
-	book := Book{ID: id, Name: clean, Directory: nextBookDirectory(clean, manifest.Books, ""), CreatedAt: now()}
+	book := Book{ID: id, Name: clean, Directory: nextBookDirectory(clean, manifest.Books, ""), CreatedAt: now(), Revision: 1, MCPCreateKey: key}
 	manifest.Books = append(manifest.Books, book)
 	if err := library.writeManifest(manifest); err != nil {
 		return Book{}, err
@@ -321,6 +372,14 @@ func (library *Library) CreateBook(name string) (Book, error) {
 }
 
 func (library *Library) RenameBook(bookID, name string) (Book, error) {
+	return library.renameBook(bookID, name, nil)
+}
+
+func (library *Library) RenameBookIfRevision(bookID, name string, expectedRevision int) (Book, error) {
+	return library.renameBook(bookID, name, &expectedRevision)
+}
+
+func (library *Library) renameBook(bookID, name string, expectedRevision *int) (Book, error) {
 	clean := cleanBookName(name)
 	if clean == "" {
 		return Book{}, errors.New("Book 名称不能为空")
@@ -337,6 +396,9 @@ func (library *Library) RenameBook(bookID, name string) (Book, error) {
 		}
 
 		book := &manifest.Books[index]
+		if expectedRevision != nil && book.Revision != *expectedRevision {
+			return Book{}, fmt.Errorf("%w. Resolve it again before retrying.", errBookRevisionConflict)
+		}
 		previousDirectory := bookDirectory(*book)
 		nextDirectory := nextBookDirectory(clean, manifest.Books, book.ID)
 		previousRoot := library.bookRoot(*book)
@@ -364,6 +426,7 @@ func (library *Library) RenameBook(bookID, name string) (Book, error) {
 
 		book.Name = clean
 		book.Directory = nextDirectory
+		book.Revision++
 		if err := library.writeManifest(manifest); err != nil {
 			if previousDirectory != nextDirectory {
 				_ = os.Rename(nextRoot, previousRoot)
@@ -1122,12 +1185,16 @@ func schema(db *sql.DB) error {
 		// Agent suggestions are intentionally separate from source mutations. They
 		// contain a proposed change only; Sourcebook applies it after review.
 		"CREATE TABLE IF NOT EXISTS agent_suggestions (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL, source_item_ids_json TEXT NOT NULL, agent_name TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', review_error TEXT NOT NULL DEFAULT '')",
+		"CREATE TABLE IF NOT EXISTS agent_submission_batches (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, agent_name TEXT NOT NULL, created_at TEXT NOT NULL)",
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
 			return err
 		}
 	}
+	// Existing libraries predate submission batches. The best-effort migration
+	// keeps their pending suggestions readable and assigns no batch to them.
+	_, _ = db.Exec("ALTER TABLE agent_suggestions ADD COLUMN batch_id TEXT NOT NULL DEFAULT ''")
 	// Keep a per-Book full-text index current so MCP searches do not scan every
 	// source row and every text body on each request.
 	searchStatements := []string{
