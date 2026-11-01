@@ -119,6 +119,11 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "codex-status":
+			status := codexConnectionStatus(runCodexPluginCommand)
+			encoded, _ := json.Marshal(status)
+			fmt.Println(string(encoded))
+			return
 		case "check-desktop":
 			if err := checkDesktopInstalled(); err != nil {
 				fmt.Fprintln(os.Stderr, "Sourcebook MCP:", err)
@@ -136,7 +141,7 @@ func main() {
 			fmt.Println(bridgeVersion)
 			return
 		case "--help", "-h", "help":
-			fmt.Println("Sourcebook MCP\n\nCommands:\n  sourcebook-mcp check-desktop  Verify Sourcebook Desktop is installed\n  sourcebook-mcp install-codex  Register the stable Desktop launcher with Codex\n  sourcebook-mcp remove-codex   Remove only Desktop-managed Codex registration\n  sourcebook-mcp diagnose       Verify the local Sourcebook connection\n  sourcebook-mcp version        Print the installed MCP version\n  sourcebook-mcp                Run the stdio MCP server")
+			fmt.Println("Sourcebook MCP\n\nCommands:\n  sourcebook-mcp check-desktop  Verify Sourcebook Desktop is installed\n  sourcebook-mcp install-codex  Register the stable Desktop launcher with Codex\n  sourcebook-mcp remove-codex   Remove only Desktop-managed Codex registration\n  sourcebook-mcp codex-status   Inspect only the Sourcebook connection in Codex\n  sourcebook-mcp diagnose       Verify the local Sourcebook connection\n  sourcebook-mcp version        Print the installed MCP version\n  sourcebook-mcp                Run the stdio MCP server")
 			return
 		}
 	}
@@ -941,6 +946,11 @@ type codexMCPConfig struct {
 	} `json:"transport"`
 }
 
+type codexConnection struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
 func desktopLauncherPath() (string, error) {
 	contents, err := os.ReadFile(filepath.Join(sourcebookDataDirectory(), "desktop-install.json"))
 	if err != nil {
@@ -1019,6 +1029,28 @@ func removeCodex() error {
 		return fmt.Errorf("could not remove the Desktop-managed Codex connection: %w", err)
 	}
 	return nil
+}
+
+func codexConnectionStatus(run codexCommandRunner) codexConnection {
+	output, err := run("mcp", "get", "sourcebook", "--json")
+	if err != nil {
+		if codexMCPNotFound(string(output)) {
+			return codexConnection{Status: "not_connected"}
+		}
+		return codexConnection{Status: "unavailable", Message: "Codex connection could not be checked."}
+	}
+	var current codexMCPConfig
+	if json.Unmarshal(output, &current) != nil {
+		return codexConnection{Status: "unavailable", Message: "Codex returned an unreadable Sourcebook connection."}
+	}
+	if !isDesktopOwnedCodexMCP(current.Transport.Command) {
+		return codexConnection{Status: "protected", Message: "Codex has a user-managed Sourcebook connection that Desktop will not change."}
+	}
+	launcher, launcherErr := desktopLauncherPath()
+	if launcherErr != nil || filepath.Clean(current.Transport.Command) != filepath.Clean(launcher) || current.Transport.Env["SOURCEBOOK_AGENT_NAME"] != "Codex" {
+		return codexConnection{Status: "repairable", Message: "This is an older Desktop-managed Sourcebook connection. Repair it to use the current launcher."}
+	}
+	return codexConnection{Status: "connected", Message: "Desktop manages this Codex connection."}
 }
 
 func isDesktopOwnedCodexMCP(command string) bool {

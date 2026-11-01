@@ -61,6 +61,12 @@ type mcpSubmissionBatch struct {
 	ReviewURL   string          `json:"reviewUrl"`
 }
 
+type codexMCPStatus struct {
+	Status    string `json:"status"`
+	Message   string `json:"message,omitempty"`
+	ManagedBy string `json:"managedBy"`
+}
+
 func (server *Server) getMCPSettings(response http.ResponseWriter) error {
 	settings, err := server.readDesktopSettings()
 	if err != nil {
@@ -77,7 +83,7 @@ func (server *Server) mcpSettingsPayload(settings desktopSettings) map[string]an
 		"serviceReady": settings.MCPEnabled && settings.MCPToken != "",
 		"guideUrl":     "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md",
 		"installReady": true,
-		"codex":        map[string]any{"managedBy": "desktop"},
+		"codex":        server.codexMCPStatus(),
 		"workbuddy":    server.workBuddyMCPStatus(),
 	}
 }
@@ -95,9 +101,35 @@ func (server *Server) connectCodexMCP(response http.ResponseWriter) error {
 		return &apiError{status: http.StatusBadGateway, code: "CODEX_CONNECTION_FAILED", message: conciseMCPCommandError(output, err)}
 	}
 	payload := server.mcpSettingsPayload(settings)
-	payload["codex"] = map[string]any{"managedBy": "desktop", "status": "connected", "message": strings.TrimSpace(output)}
+	payload["codex"] = codexMCPStatus{Status: "connected", ManagedBy: "desktop", Message: strings.TrimSpace(output)}
 	writeJSON(response, http.StatusOK, payload)
 	return nil
+}
+
+func (server *Server) removeCodexMCP(response http.ResponseWriter) error {
+	output, err := runBundledMCPCommand("remove-codex")
+	if err != nil {
+		return &apiError{status: http.StatusBadGateway, code: "CODEX_REMOVE_FAILED", message: conciseMCPCommandError(output, err)}
+	}
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		return err
+	}
+	writeJSON(response, http.StatusOK, server.mcpSettingsPayload(settings))
+	return nil
+}
+
+func (server *Server) codexMCPStatus() codexMCPStatus {
+	output, err := runBundledMCPCommand("codex-status")
+	if err != nil {
+		return codexMCPStatus{Status: "unavailable", ManagedBy: "desktop", Message: "Codex connection could not be checked."}
+	}
+	var status codexMCPStatus
+	if json.Unmarshal([]byte(output), &status) != nil || status.Status == "" {
+		return codexMCPStatus{Status: "unavailable", ManagedBy: "desktop", Message: "Codex connection could not be checked."}
+	}
+	status.ManagedBy = "desktop"
+	return status
 }
 
 func runBundledMCPCommand(argument string) (string, error) {
