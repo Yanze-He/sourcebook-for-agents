@@ -771,9 +771,12 @@ export default function SourcebookSources() {
     : <>Use the <button className="empty-action-link" onClick={openPickerInstall} type="button">Picker extension</button> to collect web content or <button className="empty-action-link" onClick={() => localImportInputRef.current?.click()} type="button">{copy.importLocalFiles}</button>.</>;
 
   const hasUnreadBooks = unreadBookIds.some((bookId) => bookId !== activeBookId && books.some((book) => book.id === bookId));
+  const agentPageHost = agentSessionIdRef.current ? new URLSearchParams(window.location.search).get("sourcebookHost") : null;
+  const agentPageName = agentPageHost === "workbuddy" ? "WorkBuddy" : agentPageHost === "codex" ? "Codex" : (agentPageHost || "Agent");
 
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className="sources-page sources-surface public-sources-surface" aria-label="Sources">
+      {agentSessionIdRef.current ? <div className="agent-page-banner" role="status"><span className="agent-page-banner-mark">{agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><strong>{agentPageName}</strong><span>{language === "zh" ? "已连接 · 此页面的 Book 会与当前对话同步" : "Connected · This page's Book stays with this conversation"}</span></div> : null}
       <header className="panel-head">
         <div className="panel-title-block">
           <div className="book-title-row">
