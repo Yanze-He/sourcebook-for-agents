@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,6 +49,57 @@ func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
 		if schema["properties"].(map[string]any)["note"].(map[string]any)["maxLength"] != 300 {
 			t.Fatalf("note length not bounded: %#v", schema)
 		}
+	}
+}
+
+func TestSourcebookNavigationReusesOrReplacesOnlyThePageToken(t *testing.T) {
+	registered := []map[string]any{}
+	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/mcp/v1/agent-sessions" || request.Method != http.MethodPost {
+			http.NotFound(response, request)
+			return
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		registered = append(registered, payload)
+		_ = json.NewEncoder(response).Encode(map[string]any{"ok": true})
+	}))
+	defer bridge.Close()
+	client := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
+	state := &sessionState{}
+	first, err := sourcebookNavigationURL(client, state, bridge.URL, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reused, err := sourcebookNavigationURL(client, state, bridge.URL, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := sourcebookNavigationURL(client, state, bridge.URL, map[string]any{"replace_page": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parse := func(raw string) url.Values {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed.Query()
+	}
+	firstQuery, reusedQuery, replacedQuery := parse(first), parse(reused), parse(replaced)
+	if firstQuery.Get("agentSession") == "" || firstQuery.Get("agentSessionToken") == "" {
+		t.Fatalf("first URL lacks page credentials: %s", first)
+	}
+	if firstQuery.Get("agentSession") != reusedQuery.Get("agentSession") || firstQuery.Get("agentSessionToken") != reusedQuery.Get("agentSessionToken") {
+		t.Fatalf("ordinary open must reuse current page: first=%s reused=%s", first, reused)
+	}
+	if firstQuery.Get("agentSession") != replacedQuery.Get("agentSession") || firstQuery.Get("agentSessionToken") == replacedQuery.Get("agentSessionToken") {
+		t.Fatalf("replacement must keep session but rotate token: first=%s replaced=%s", first, replaced)
+	}
+	if len(registered) != 3 || registered[0]["sessionId"] != registered[2]["sessionId"] || registered[0]["pageToken"] == registered[2]["pageToken"] {
+		t.Fatalf("registrations = %#v", registered)
 	}
 }
 

@@ -56,4 +56,29 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	if scope["bookId"] != "sourcebook" {
 		t.Fatalf("scope = %#v", scope)
 	}
+
+	replace := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions", bytes.NewBufferString(`{"sessionId":"session-test","pageToken":"replaced-token-123456789012","agentName":"WorkBuddy"}`))
+	replace.Host = "127.0.0.1:4177"
+	replace.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	replaceResult := httptest.NewRecorder()
+	server.ServeHTTP(replaceResult, replace)
+	if replaceResult.Code != http.StatusOK {
+		t.Fatalf("replace session = %d: %s", replaceResult.Code, replaceResult.Body.String())
+	}
+
+	oldPage := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/session-test/scope", bytes.NewBufferString(`{"pageToken":"123456789012345678901234","bookId":"sourcebook"}`))
+	oldPage.Host = "127.0.0.1:4177"
+	oldPageResult := httptest.NewRecorder()
+	server.ServeHTTP(oldPageResult, oldPage)
+	if oldPageResult.Code != http.StatusUnauthorized {
+		t.Fatalf("old page scope = %d: %s", oldPageResult.Code, oldPageResult.Body.String())
+	}
+
+	newPage := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/session-test/scope", bytes.NewBufferString(`{"pageToken":"replaced-token-123456789012","bookId":"sourcebook"}`))
+	newPage.Host = "127.0.0.1:4177"
+	newPageResult := httptest.NewRecorder()
+	server.ServeHTTP(newPageResult, newPage)
+	if newPageResult.Code != http.StatusOK {
+		t.Fatalf("new page scope = %d: %s", newPageResult.Code, newPageResult.Body.String())
+	}
 }

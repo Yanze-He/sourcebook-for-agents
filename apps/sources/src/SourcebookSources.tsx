@@ -172,6 +172,7 @@ export default function SourcebookSources() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lastSelectedIdsByBook, setLastSelectedIdsByBook] = useState<Record<string, string[]>>({});
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
+  const [agentPageConnection, setAgentPageConnection] = useState<"connected" | "disconnected">("connected");
   const [density, setDensity] = useState<CardDensity>(() => (window.localStorage.getItem("sourcebook-card-density") as CardDensity) || "standard");
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -324,11 +325,15 @@ export default function SourcebookSources() {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
     if (!sessionId || !pageToken || !activeBookId) return;
-    void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, { method: "PUT", body: JSON.stringify({ pageToken, bookId: activeBookId }) }).catch(() => {
-      // The page remains a usable local library if its owning Agent session has
-      // ended or Desktop restarted. The Agent receives that state on its next
-      // scoped MCP read instead of the browser repeatedly surfacing an error.
+    let disposed = false;
+    const syncAgentPage = () => void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, { method: "PUT", body: JSON.stringify({ pageToken, bookId: activeBookId }) }).then(() => {
+      if (!disposed) setAgentPageConnection("connected");
+    }).catch((error) => {
+      if (!disposed && /Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
     });
+    syncAgentPage();
+    const interval = window.setInterval(syncAgentPage, 4000);
+    return () => { disposed = true; window.clearInterval(interval); };
   }, [activeBookId]);
   useEffect(() => () => loadMoreAbortRef.current?.abort(), []);
   useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
@@ -773,10 +778,11 @@ export default function SourcebookSources() {
   const hasUnreadBooks = unreadBookIds.some((bookId) => bookId !== activeBookId && books.some((book) => book.id === bookId));
   const agentPageHost = agentSessionIdRef.current ? new URLSearchParams(window.location.search).get("sourcebookHost") : null;
   const agentPageName = agentPageHost === "workbuddy" ? "WorkBuddy" : agentPageHost === "codex" ? "Codex" : (agentPageHost || "Agent");
+  const agentPageDisconnected = Boolean(agentSessionIdRef.current && agentPageConnection === "disconnected");
 
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className="sources-page sources-surface public-sources-surface" aria-label="Sources">
-      {agentSessionIdRef.current ? <div className="agent-page-banner" role="status"><span className="agent-page-banner-mark">{agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageName}</strong><span>{language === "zh" ? "已连接 · 此页面的 Book 会与当前对话同步" : "Connected · This page's Book stays with this conversation"}</span></div><div aria-label={language === "zh" ? "页面模式" : "Page mode"} className="agent-page-mode" role="group"><button aria-pressed={!isBatchSelecting} onClick={() => setIsBatchSelecting(false)} type="button"><Eye size={14} />{language === "zh" ? "浏览" : "Browse"}</button><button aria-pressed={isBatchSelecting} onClick={() => setIsBatchSelecting(true)} type="button"><ListChecks size={14} />{language === "zh" ? "选择" : "Select"}</button></div></div> : null}
+      {agentSessionIdRef.current ? agentPageDisconnected ? <div className="agent-page-banner is-disconnected" role="status"><span className="agent-page-banner-mark"><Link2Off size={15} /></span><div className="agent-page-banner-copy"><strong>{language === "zh" ? "本标签页已断联" : "Disconnected"}</strong><span>{language === "zh" ? "请查看其他标签页或让 Agent 重连。" : "Check other tab or ask Agent to reconnect."}</span></div></div> : <div className="agent-page-banner" role="status"><span className="agent-page-banner-mark">{agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageName}</strong><span>{language === "zh" ? "已连接 · 此页面的 Book 会与当前对话同步" : "Connected · This page's Book stays with this conversation"}</span></div><div aria-label={language === "zh" ? "页面模式" : "Page mode"} className="agent-page-mode" role="group"><button aria-pressed={!isBatchSelecting} onClick={() => setIsBatchSelecting(false)} type="button"><Eye size={14} />{language === "zh" ? "浏览" : "Browse"}</button><button aria-pressed={isBatchSelecting} onClick={() => setIsBatchSelecting(true)} type="button"><ListChecks size={14} />{language === "zh" ? "选择" : "Select"}</button></div></div> : null}
       <header className="panel-head">
         <div className="panel-title-block">
           <div className="book-title-row">
