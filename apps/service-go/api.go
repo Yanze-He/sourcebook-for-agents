@@ -198,6 +198,15 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if request.Method == http.MethodDelete && path == "/api/settings/mcp" {
 		return server.revokeMCP(response)
 	}
+	if request.Method == http.MethodPost && path == "/api/settings/mcp/codex" {
+		return server.connectCodexMCP(response)
+	}
+	if request.Method == http.MethodPost && path == "/api/settings/mcp/workbuddy" {
+		return server.setWorkBuddyMCP(response, false)
+	}
+	if request.Method == http.MethodDelete && path == "/api/settings/mcp/workbuddy" {
+		return server.setWorkBuddyMCP(response, true)
+	}
 	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
 		return server.listMCPSuggestions(response, request.URL.Query().Get("batchId"))
 	}

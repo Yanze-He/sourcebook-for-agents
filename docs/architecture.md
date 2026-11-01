@@ -14,7 +14,7 @@ The public-ready local loop is **Pick -> Sources -> Pack**.
 - **Sources** (`apps/sources`) is the web interface for browsing, editing, selecting, importing, and preparing Sources.
 - **Desktop** (`apps/desktop`) starts the local service, owns the library location, opens Sources in the default browser, and packages the macOS and Windows application.
 - **Local service** (`apps/service-go`) owns Book databases, file copies, backups, imports, transfer operations, Pack assembly, and the protected MCP bridge.
-- **Sourcebook MCP** (`apps/mcp-go`) is a native stdio helper released as an independently versioned Agent Plugin; Desktop also embeds a fallback copy. The Agent installs or updates the verified GitHub package in a separate user-level directory, which Desktop never overwrites. Desktop records its actual installation path so the helper can find it on another disk. The helper uses the stable `sourcebook` namespace with compatible local Agents and only the local service's paired bridge API; it never opens Book SQLite files or asset folders. Compatible MCP Apps hosts may render the local Sources page in their internal panel. `apps/agent-plugin` supplies the install guides and optional Codex convenience integration.
+- **Sourcebook MCP** (`apps/mcp-go`) is a native stdio helper packaged only with Desktop. Desktop also installs a small, fixed-path bootstrapper (`apps/mcp-launcher-go`) in its private data directory. Codex and WorkBuddy register that bootstrapper once; it reads Desktop's current installation marker and starts the current packaged helper, so ordinary Desktop updates do not change an Agent configuration. The helper uses the stable `sourcebook` namespace and only the local service's paired bridge API; it never opens Book SQLite files or asset folders. `apps/agent-plugin` supplies portable Skills, not another MCP implementation.
 
 ## Local Storage
 
@@ -38,8 +38,9 @@ Picker sends `POST /api/picks`. Sources is read through `GET /api/sources?bookId
 MCP uses a separate, versioned loopback bridge (`/api/mcp/v1`) with an owner-only pairing credential. It is not part of the browser API and rejects requests with a browser origin. A named Book can be resolved without changing session scope; a Book is only created or renamed after an explicit Agent call. Every MCP session explicitly selects one Book before reading sources or submitting a suggestion. MCP Source changes persist only pending suggestions; multi-item saves are stored in one durable submission batch and Sourcebook applies each suggestion through the same local transaction path after the user accepts it. A batch returns a deep link carrying its Book and review identity; the Agent host, not MCP, is responsible for presenting that link in a visible browser panel.
 
 ```text
-Codex / local Agent
-  → stdio → sourcebook-mcp
+Codex / WorkBuddy
+  → stdio → fixed Sourcebook launcher
+  → current Desktop sourcebook-mcp
   → paired loopback bridge → Sourcebook Desktop service
   → controlled Book API → SQLite and managed source files
 ```
@@ -48,4 +49,4 @@ The extension should only expose collection controls when the local application 
 
 ## Packaging
 
-Desktop packages embed the Sources build and local service. The independently installed Sourcebook Agent Plugin supplies `sourcebook-mcp`, which runs over stdio against the loopback service. Users explicitly connect an Agent from Desktop; Desktop never silently changes an Agent configuration or installs, copies, or updates a Plugin.
+Desktop packages the Sources build, service, MCP helper, and stable bootstrapper. Users explicitly connect an Agent from Desktop. Codex registration is added only when the same-named server is Desktop-managed; WorkBuddy changes only `mcpServers.sourcebook`, preserves all other entries, and always requires the user's first Trust approval.

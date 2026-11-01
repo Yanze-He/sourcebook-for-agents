@@ -16,7 +16,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,11 +76,233 @@ func (server *Server) mcpSettingsPayload(settings desktopSettings) map[string]an
 		"enabledAt":    settings.MCPEnabledAt,
 		"serviceReady": settings.MCPEnabled && settings.MCPToken != "",
 		"guideUrl":     "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md",
-		// Agent Plugin distribution is independent from Desktop. This endpoint
-		// only confirms that the local bridge can be paired; it never exposes a
-		// bundled binary, an installation path, or a pairing credential.
 		"installReady": true,
+		"codex":        map[string]any{"managedBy": "desktop"},
+		"workbuddy":    server.workBuddyMCPStatus(),
 	}
+}
+
+func (server *Server) connectCodexMCP(response http.ResponseWriter) error {
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		return err
+	}
+	if !settings.MCPEnabled || settings.MCPToken == "" {
+		return &apiError{status: http.StatusConflict, code: "MCP_PAIRING_REQUIRED", message: "Allow local-agent access before connecting Codex."}
+	}
+	output, err := runBundledMCPCommand("install-codex")
+	if err != nil {
+		return &apiError{status: http.StatusBadGateway, code: "CODEX_CONNECTION_FAILED", message: conciseMCPCommandError(output, err)}
+	}
+	payload := server.mcpSettingsPayload(settings)
+	payload["codex"] = map[string]any{"managedBy": "desktop", "status": "connected", "message": strings.TrimSpace(output)}
+	writeJSON(response, http.StatusOK, payload)
+	return nil
+}
+
+func runBundledMCPCommand(argument string) (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	var helper string
+	if runtime.GOOS == "darwin" {
+		helper = filepath.Join(filepath.Dir(executable), "..", "Resources", "sourcebook-mcp")
+	} else if runtime.GOOS == "windows" {
+		helper = filepath.Join(filepath.Dir(executable), "sourcebook-mcp.exe")
+	} else {
+		return "", errors.New("local MCP connection is unavailable on this platform")
+	}
+	output, err := exec.Command(helper, argument).CombinedOutput()
+	return string(output), err
+}
+
+func conciseMCPCommandError(output string, err error) string {
+	message := strings.TrimSpace(output)
+	if message == "" {
+		message = err.Error()
+	}
+	if len(message) > 700 {
+		message = message[:700]
+	}
+	return message
+}
+
+type workBuddyMCPStatus struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+func (server *Server) workBuddyMCPStatus() workBuddyMCPStatus {
+	path, err := workBuddyMCPConfigPath()
+	if err != nil {
+		return workBuddyMCPStatus{Status: "unavailable", Message: "WorkBuddy configuration location is unavailable."}
+	}
+	document, err := readWorkBuddyMCPDocument(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return workBuddyMCPStatus{Status: "not_ready", Message: "Open WorkBuddy once before connecting it."}
+	}
+	if err != nil {
+		return workBuddyMCPStatus{Status: "unavailable", Message: "WorkBuddy configuration could not be read."}
+	}
+	serverConfig, exists := workBuddySourcebookConfig(document)
+	if !exists {
+		return workBuddyMCPStatus{Status: "not_connected"}
+	}
+	if !isDesktopManagedWorkBuddyConfig(serverConfig) {
+		return workBuddyMCPStatus{Status: "protected", Message: "A user-managed Sourcebook connection was left unchanged."}
+	}
+	if boolValue(serverConfig["disabled"]) {
+		return workBuddyMCPStatus{Status: "disabled", Message: "Reconnect to enable it for new WorkBuddy conversations."}
+	}
+	return workBuddyMCPStatus{Status: "connected", Message: "If WorkBuddy asks, approve Sourcebook once in MCP service management."}
+}
+
+func (server *Server) setWorkBuddyMCP(response http.ResponseWriter, disabled bool) error {
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		return err
+	}
+	if !settings.MCPEnabled || settings.MCPToken == "" {
+		return &apiError{status: http.StatusConflict, code: "MCP_PAIRING_REQUIRED", message: "Allow local-agent access before connecting WorkBuddy."}
+	}
+	path, err := workBuddyMCPConfigPath()
+	if err != nil {
+		return err
+	}
+	document, err := readWorkBuddyMCPDocument(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return &apiError{status: http.StatusConflict, code: "WORKBUDDY_NOT_READY", message: "Open WorkBuddy once before connecting it."}
+	}
+	if err != nil {
+		return &apiError{status: http.StatusBadGateway, code: "WORKBUDDY_CONFIG_UNREADABLE", message: "WorkBuddy configuration could not be read."}
+	}
+	launcher, err := desktopMCPLauncherPath()
+	if err != nil {
+		return &apiError{status: http.StatusBadGateway, code: "DESKTOP_LAUNCHER_UNAVAILABLE", message: err.Error()}
+	}
+	current, exists := workBuddySourcebookConfig(document)
+	if exists && !isDesktopManagedWorkBuddyConfig(current) {
+		return &apiError{status: http.StatusConflict, code: "WORKBUDDY_CONFIG_PROTECTED", message: "WorkBuddy already has a user-managed Sourcebook connection. Sourcebook Desktop did not overwrite it."}
+	}
+	servers := document["mcpServers"].(map[string]any)
+	servers["sourcebook"] = map[string]any{
+		"type":          "stdio",
+		"command":       launcher,
+		"args":          []string{},
+		"env":           map[string]string{"SOURCEBOOK_AGENT_NAME": "WorkBuddy"},
+		"disabled":      disabled,
+		"defer_loading": true,
+	}
+	if err := writeWorkBuddyMCPDocument(path, document); err != nil {
+		return &apiError{status: http.StatusBadGateway, code: "WORKBUDDY_CONFIG_WRITE_FAILED", message: "WorkBuddy connection could not be saved."}
+	}
+	payload := server.mcpSettingsPayload(settings)
+	if disabled {
+		payload["workbuddy"] = workBuddyMCPStatus{Status: "disabled", Message: "Disconnected for new WorkBuddy conversations. Existing conversations keep their current MCP process."}
+	} else {
+		payload["workbuddy"] = workBuddyMCPStatus{Status: "awaiting_trust", Message: "Open WorkBuddy MCP service management and approve Sourcebook once, then use a new conversation."}
+	}
+	writeJSON(response, http.StatusOK, payload)
+	return nil
+}
+
+func desktopMCPLauncherPath() (string, error) {
+	contents, err := os.ReadFile(filepath.Join(sourcebookDataDirectory(), "desktop-install.json"))
+	if err != nil {
+		return "", errors.New("reopen Sourcebook Desktop to prepare its local MCP launcher")
+	}
+	var marker struct {
+		LauncherPath string `json:"launcherPath"`
+	}
+	if err := json.Unmarshal(contents, &marker); err != nil || marker.LauncherPath == "" {
+		return "", errors.New("update and reopen Sourcebook Desktop to prepare its local MCP launcher")
+	}
+	path := filepath.Clean(marker.LauncherPath)
+	if !filepath.IsAbs(path) || !isDesktopMCPLauncherPath(path) {
+		return "", errors.New("Sourcebook local MCP launcher is invalid")
+	}
+	if info, err := os.Stat(path); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		return "", errors.New("Sourcebook local MCP launcher is unavailable; reopen Desktop")
+	}
+	return path, nil
+}
+
+func isDesktopMCPLauncherPath(path string) bool {
+	expected := filepath.Join(sourcebookDataDirectory(), "sourcebook-mcp-launcher")
+	if runtime.GOOS == "windows" {
+		expected += ".exe"
+		return strings.EqualFold(filepath.Clean(path), filepath.Clean(expected))
+	}
+	return filepath.Clean(path) == filepath.Clean(expected)
+}
+
+func workBuddyMCPConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".workbuddy", "mcp.json"), nil
+}
+
+func readWorkBuddyMCPDocument(path string) (map[string]any, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var document map[string]any
+	if err := json.Unmarshal(contents, &document); err != nil {
+		return nil, err
+	}
+	if document == nil {
+		document = map[string]any{}
+	}
+	if servers, ok := document["mcpServers"].(map[string]any); !ok || servers == nil {
+		document["mcpServers"] = map[string]any{}
+	}
+	return document, nil
+}
+
+func writeWorkBuddyMCPDocument(path string, document map[string]any) error {
+	contents, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	// WorkBuddy watches the existing inode. Write in place rather than using a
+	// temp-and-rename helper, and retain its original permissions.
+	return os.WriteFile(path, append(contents, '\n'), info.Mode().Perm())
+}
+
+func workBuddySourcebookConfig(document map[string]any) (map[string]any, bool) {
+	servers, _ := document["mcpServers"].(map[string]any)
+	config, ok := servers["sourcebook"].(map[string]any)
+	return config, ok
+}
+
+func isDesktopManagedWorkBuddyConfig(config map[string]any) bool {
+	command, _ := config["command"].(string)
+	path := filepath.Clean(command)
+	if isDesktopMCPLauncherPath(path) {
+		return true
+	}
+	contents, err := os.ReadFile(filepath.Join(sourcebookDataDirectory(), "desktop-install.json"))
+	if err != nil {
+		return false
+	}
+	var marker struct {
+		MCPPath string `json:"mcpPath"`
+	}
+	if json.Unmarshal(contents, &marker) != nil || marker.MCPPath == "" || !filepath.IsAbs(marker.MCPPath) {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(path, filepath.Clean(marker.MCPPath))
+	}
+	return path == filepath.Clean(marker.MCPPath)
 }
 
 func (server *Server) enableMCP(response http.ResponseWriter, request *http.Request) error {

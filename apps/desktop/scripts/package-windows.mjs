@@ -9,13 +9,15 @@ const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
+const mcpRoot = join(repositoryRoot, "apps", "mcp-go");
+const mcpLauncherRoot = join(repositoryRoot, "apps", "mcp-launcher-go");
 const windowsHostRoot = join(desktopRoot, "windows-host");
 const outputRoot = join(repositoryRoot, "release", "windows", "Sourcebook Desktop");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
 const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
 const shortcutIconSource = join(desktopRoot, "installer", "sourcebook-app-icon-256.png");
 
-for (const path of [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), join(windowsHostRoot, "go.mod"), shortcutIconSource]) {
+for (const path of [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), join(mcpRoot, "go.mod"), join(mcpLauncherRoot, "go.mod"), join(windowsHostRoot, "go.mod"), shortcutIconSource]) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
 }
 
@@ -23,6 +25,8 @@ rmSync(outputRoot, { force: true, recursive: true });
 mkdirSync(join(outputRoot, "resources"), { recursive: true });
 cpSync(join(sourcesRoot, "dist"), join(outputRoot, "resources", "sources"), { recursive: true });
 buildService(join(outputRoot, "sourcebook-service.exe"));
+buildMCP(join(outputRoot, "sourcebook-mcp.exe"));
+buildMCPLauncher(join(outputRoot, "sourcebook-mcp-launcher.exe"));
 writeWindowsIcon(shortcutIconSource, join(outputRoot, "SourcebookDesktop.ico"));
 buildDesktopHost(join(outputRoot, "Sourcebook Desktop.exe"));
 console.log(`Created ${outputRoot}`);
@@ -32,6 +36,24 @@ function buildService(destination) {
   const linkerFlags = ["-s", "-w", `-X main.appVersion=${appVersion}`, ...(appBuild ? [`-X main.appBuild=${appBuild}`] : [])].join(" ");
   execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", destination, "."], {
     cwd: serviceRoot,
+    env: { ...process.env, GOOS: "windows", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
+    stdio: "inherit",
+  });
+}
+
+function buildMCP(destination) {
+  console.log("Building the Desktop-owned MCP server for Windows…");
+  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -X main.bridgeVersion=${appVersion}`, "-o", destination, "."], {
+    cwd: mcpRoot,
+    env: { ...process.env, GOOS: "windows", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
+    stdio: "inherit",
+  });
+}
+
+function buildMCPLauncher(destination) {
+  console.log("Building the stable MCP launcher for Windows…");
+  execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w", "-o", destination, "."], {
+    cwd: mcpLauncherRoot,
     env: { ...process.env, GOOS: "windows", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",
   });

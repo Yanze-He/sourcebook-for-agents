@@ -34,11 +34,39 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
   if (![manager createDirectoryAtURL:folder withIntermediateDirectories:YES attributes:nil error:nil]) return;
   NSString *path = [NSBundle mainBundle].bundleURL.path;
   if (!path) return;
-  NSData *data = [NSJSONSerialization dataWithJSONObject:@{ @"path": path } options:0 error:nil];
+  NSURL *resources = [NSBundle mainBundle].resourceURL;
+  NSString *mcpPath = [resources URLByAppendingPathComponent:@"sourcebook-mcp"].path;
+  NSString *launcherPath = [self installMCPLauncherInFolder:folder];
+  if (!mcpPath || !launcherPath) return;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:@{ @"path": path, @"mcpPath": mcpPath, @"launcherPath": launcherPath } options:0 error:nil];
   NSURL *marker = [folder URLByAppendingPathComponent:@"desktop-install.json"];
   if ([data writeToURL:marker atomically:YES]) {
     [manager setAttributes:@{ NSFilePosixPermissions: @0600 } ofItemAtPath:marker.path error:nil];
   }
+}
+
+// Agent hosts register this stable, user-data path once. It is only a small
+// bootstrapper: every MCP session is immediately delegated to the helper in
+// the currently installed Desktop bundle recorded above.
+- (NSString *)installMCPLauncherInFolder:(NSURL *)folder {
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSURL *source = [[NSBundle mainBundle].resourceURL URLByAppendingPathComponent:@"sourcebook-mcp-launcher"];
+  if (![manager isExecutableFileAtPath:source.path]) return nil;
+  NSURL *destination = [folder URLByAppendingPathComponent:@"sourcebook-mcp-launcher"];
+  NSURL *temporary = [folder URLByAppendingPathComponent:@".sourcebook-mcp-launcher-new"];
+  [manager removeItemAtURL:temporary error:nil];
+  if (![manager copyItemAtURL:source toURL:temporary error:nil]) return nil;
+  [manager setAttributes:@{ NSFilePosixPermissions: @0700 } ofItemAtPath:temporary.path error:nil];
+  if ([manager fileExistsAtPath:destination.path]) {
+    if (![manager replaceItemAtURL:destination withItemAtURL:temporary backupItemName:nil options:0 resultingItemURL:nil error:nil]) {
+      [manager removeItemAtURL:temporary error:nil];
+      return nil;
+    }
+  } else if (![manager moveItemAtURL:temporary toURL:destination error:nil]) {
+    [manager removeItemAtURL:temporary error:nil];
+    return nil;
+  }
+  return [manager isExecutableFileAtPath:destination.path] ? destination.path : nil;
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)hasVisibleWindows {

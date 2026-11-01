@@ -1,6 +1,6 @@
 # Sourcebook Agent Plugin
 
-Use your Sourcebook Books while working with an Agent. This plugin connects **Codex** or **WorkBuddy** to [Sourcebook Desktop](https://sourcebook.online) through a local MCP server and a workflow Skill. You can ask naturally—no `@` or `/` command is required.
+Use your Sourcebook Books while working with an Agent. This package provides the workflow Skill for **Codex** and **WorkBuddy**; the local MCP server is installed and updated by [Sourcebook Desktop](https://sourcebook.online). You can ask naturally—no `@` or `/` command is required.
 
 > **Beta · v0.1.2-beta.4** · macOS (Apple silicon) and Windows x64 · [Install guide](INSTALL.md) · [Latest plugin release](https://github.com/Yanze-He/sourcebook-plugin/releases)
 
@@ -40,16 +40,16 @@ Both are available in **Settings**. Backups contain Book data and local files, n
 
 ## Get started
 
-1. Install and open [Sourcebook Desktop](https://sourcebook.online). In **Settings → Connect an Agent**, turn on local Agent access.
-2. Follow the [Codex or WorkBuddy installation steps](INSTALL.md). The plugin includes both MCP and the Skill; you do not need to install them separately.
+1. Install and open [Sourcebook Desktop](https://sourcebook.online). In **Settings → Connect an Agent**, turn on local Agent access, then connect Codex or WorkBuddy there.
+2. Follow the [Codex or WorkBuddy Skill installation steps](INSTALL.md). The marketplace package adds the Skill only; Desktop supplies the MCP connection.
 3. Start a new Agent conversation and say **“Open Sourcebook.”** Then choose the Book you want it to use.
 
 Desktop must be running while you use the plugin. The Agent must select a Book before reading its sources. It cannot directly edit your library: additions and metadata changes stay pending until you approve them in Desktop. Material the Agent reads may be sent to the model service used by that Agent.
 
-For updates, install the newest plugin through the same marketplace, restart the Agent, and check the reported version. Plugin and Desktop have separate version numbers. See [installation, update, and troubleshooting details](INSTALL.md).
+For updates, install the newest Skill package through the same marketplace when its workflow changes. Desktop releases update the MCP server for both hosts automatically. See [installation, update, and troubleshooting details](INSTALL.md).
 
 ## For developers
 
-This repository contains the versioned Codex/WorkBuddy marketplace package, the native Go MCP server, and the shared Skill. The [Sourcebook Desktop repository](https://github.com/Yanze-He/sourcebook-for-agents) contains the application and local bridge. The website source is private and is not part of this repository.
+This repository contains the versioned Codex/WorkBuddy marketplace Skills. The [Sourcebook Desktop repository](https://github.com/Yanze-He/sourcebook-for-agents) contains the application, MCP server, and local bridge. The website source is private and is not part of this repository.
 
 Licensed under [MIT](LICENSE). [Report a problem](https://sourcebook.online/feedback/).

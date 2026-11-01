@@ -11,12 +11,9 @@ running and that **Settings → Connect an Agent → Local access** is enabled. 
 Desktop is missing, direct the user to https://sourcebook.online and stop.
 
 If the Agent documents a supported local MCP configuration, add a user-level
-stdio MCP server named `sourcebook` using the platform-appropriate helper in
-this independently installed Plugin:
-
-```text
-<directory containing this guide>/.agents/plugins/sourcebook/bin/sourcebook-mcp
-```
+stdio MCP server named `sourcebook` using Sourcebook Desktop's stable local
+launcher. Open **Sourcebook Desktop → Settings → Connect an Agent** first;
+the required path is owned by Desktop and must not be copied into a plugin.
 
 Use no command arguments and do not add a pairing credential. Set
 `SOURCEBOOK_AGENT_NAME` only if the Agent documents support for environment

@@ -4,6 +4,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -211,11 +213,58 @@ func writeDesktopInstallMarker() {
 	if os.MkdirAll(folder, 0o700) != nil {
 		return
 	}
-	contents, err := json.Marshal(map[string]string{"path": executable})
+	launcherPath, err := installMCPLauncher(filepath.Dir(executable), folder)
+	if err != nil {
+		return
+	}
+	contents, err := json.Marshal(map[string]string{
+		"path":         executable,
+		"mcpPath":      filepath.Join(filepath.Dir(executable), "sourcebook-mcp.exe"),
+		"launcherPath": launcherPath,
+	})
 	if err != nil {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(folder, "desktop-install.json"), contents, 0o600)
+}
+
+func installMCPLauncher(appDirectory, dataDirectory string) (string, error) {
+	source := filepath.Join(appDirectory, "sourcebook-mcp-launcher.exe")
+	if info, err := os.Stat(source); err != nil || info.IsDir() {
+		return "", errors.New("missing Sourcebook MCP launcher")
+	}
+	destination := filepath.Join(dataDirectory, "sourcebook-mcp-launcher.exe")
+	temporary := destination + ".new"
+	if err := copyFile(source, temporary); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporary, destination); err != nil {
+		// Windows does not replace an existing executable through Rename. The
+		// prior stable launcher remains valid if a WorkBuddy session is using it.
+		_ = os.Remove(temporary)
+		if _, statErr := os.Stat(destination); statErr != nil {
+			return "", err
+		}
+	}
+	return destination, nil
+}
+
+func copyFile(source, destination string) error {
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(destination, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(output, input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
 
 func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uintptr) uintptr {

@@ -16,7 +16,7 @@ Depending on the user's action, Picked data can include selected webpage text, U
 
 Sourcebook for Agents does not transmit picked content to a Sourcebook-operated cloud service. Users may manually download a Pack or paste its contents into a third-party AI service. Those services are governed by their own terms and privacy policies.
 
-If a user explicitly enables **Connect local agent** and connects the independently installed Sourcebook Agent Plugin, Sourcebook can provide a local Agent such as Codex with Book data through Sourcebook MCP. The Agent must explicitly choose a Book for its session. Read content may be sent to the model service used by that Agent, so users should enable access only when that sharing is appropriate. MCP suggestions remain pending until the user accepts or rejects them in Sourcebook.
+If a user explicitly enables **Connect local agent** and connects an Agent such as Codex or WorkBuddy, Sourcebook can provide Book data through its Desktop-packaged local MCP server. The Agent must explicitly choose a Book for its session. Read content may be sent to the model service used by that Agent, so users should enable access only when that sharing is appropriate. MCP suggestions remain pending until the user accepts or rejects them in Sourcebook.
 
 ## Security and retention
 

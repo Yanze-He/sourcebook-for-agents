@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -418,51 +417,6 @@ func TestImportLocalFileAcceptsPathAndOptionalTitle(t *testing.T) {
 	properties, ok := schema["properties"].(map[string]any)
 	if !ok || len(properties) != 3 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
 		t.Fatalf("import schema must expose path, optional title, and note without related source IDs: %#v", schema)
-	}
-}
-
-func TestUpdateCodexPluginUsesIndependentMarketplaceAndCleansLegacyPlugin(t *testing.T) {
-	calls := []string{}
-	run := func(args ...string) ([]byte, error) {
-		call := strings.Join(args, " ")
-		calls = append(calls, call)
-		switch call {
-		case "plugin marketplace add Yanze-He/sourcebook-plugin", "plugin marketplace upgrade sourcebook-plugin", "plugin remove sourcebook@sourcebook-bundled", "plugin remove sourcebook@sourcebook-plugin", "plugin add sourcebook@sourcebook-plugin":
-			return nil, nil
-		case "plugin list --marketplace sourcebook-plugin --json":
-			return []byte(`{"installed":[{"name":"sourcebook","enabled":true}]}`), nil
-		}
-		t.Fatalf("unexpected command: %s", call)
-		return nil, errors.New("unexpected command")
-	}
-	if err := updateCodexPlugin(run); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{
-		"plugin marketplace add Yanze-He/sourcebook-plugin",
-		"plugin marketplace upgrade sourcebook-plugin",
-		"plugin remove sourcebook@sourcebook-bundled",
-		"plugin remove sourcebook@sourcebook-plugin",
-		"plugin add sourcebook@sourcebook-plugin",
-		"plugin list --marketplace sourcebook-plugin --json",
-	}
-	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("commands = %#v, want %#v", calls, want)
-	}
-}
-
-func TestUpdateCodexPluginRejectsMissingVerification(t *testing.T) {
-	run := func(args ...string) ([]byte, error) {
-		switch strings.Join(args, " ") {
-		case "plugin marketplace add Yanze-He/sourcebook-plugin", "plugin marketplace upgrade sourcebook-plugin", "plugin remove sourcebook@sourcebook-bundled", "plugin remove sourcebook@sourcebook-plugin", "plugin add sourcebook@sourcebook-plugin":
-			return nil, nil
-		case "plugin list --marketplace sourcebook-plugin --json":
-			return []byte(`{"installed":[]}`), nil
-		}
-		return nil, errors.New("unexpected command")
-	}
-	if err := updateCodexPlugin(run); err == nil || !strings.Contains(err.Error(), "did not report") {
-		t.Fatalf("missing verification error = %v", err)
 	}
 }
 

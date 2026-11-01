@@ -13,6 +13,8 @@ const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(desktopRoot));
 const sourcesRoot = join(repositoryRoot, "apps", "sources");
 const serviceRoot = join(repositoryRoot, "apps", "service-go");
+const mcpRoot = join(repositoryRoot, "apps", "mcp-go");
+const mcpLauncherRoot = join(repositoryRoot, "apps", "mcp-launcher-go");
 const appVersion = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version).replace(/^v/, "");
 const appBuild = process.env.SOURCEBOOK_BUILD?.trim() || "";
 const installerFileName = `sourcebook-desktop-installer-v${appVersion}.dmg`;
@@ -31,7 +33,7 @@ const fileIconSetterSource = join(desktopRoot, "installer", "SetFileIcon.m");
 
 const packageInputs = prebuiltApp
   ? [prebuiltApp, installerIconSource, fileIconSetterSource]
-  : [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource];
+  : [join(sourcesRoot, "dist", "index.html"), join(serviceRoot, "go.mod"), join(mcpRoot, "go.mod"), join(mcpLauncherRoot, "go.mod"), appIconSource, installerIconSource, menuBarHostSource, fileIconSetterSource];
 for (const path of packageInputs) {
   if (!existsSync(path)) throw new Error(`Missing package input: ${path}`);
 }
@@ -61,6 +63,8 @@ if (prebuiltApp) {
 
   cpSync(join(sourcesRoot, "dist"), join(resources, "sources"), { recursive: true });
   buildService(join(contents, "MacOS", "sourcebook-service"));
+  buildMCP(join(resources, "sourcebook-mcp"));
+  buildMCPLauncher(join(resources, "sourcebook-mcp-launcher"));
   createIcon(appIconSource, join(resources, "SourcebookDesktop.icns"), "SourcebookDesktop");
   createMenuBarHost(join(contents, "MacOS", "Sourcebook Desktop"));
   writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
@@ -98,6 +102,26 @@ function buildService(destination) {
   const linkerFlags = ["-s", "-w", `-X main.appVersion=${appVersion}`, ...(appBuild ? [`-X main.appBuild=${appBuild}`] : [])].join(" ");
   execFileSync("go", ["build", "-trimpath", `-ldflags=${linkerFlags}`, "-o", destination, "."], {
     cwd: serviceRoot,
+    env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
+    stdio: "inherit",
+  });
+  chmodSync(destination, 0o755);
+}
+
+function buildMCP(destination) {
+  console.log(`Building the Desktop-owned MCP server for macOS ${process.arch}…`);
+  execFileSync("go", ["build", "-trimpath", `-ldflags=-s -w -X main.bridgeVersion=${appVersion}`, "-o", destination, "."], {
+    cwd: mcpRoot,
+    env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
+    stdio: "inherit",
+  });
+  chmodSync(destination, 0o755);
+}
+
+function buildMCPLauncher(destination) {
+  console.log(`Building the stable MCP launcher for macOS ${process.arch}…`);
+  execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w", "-o", destination, "."], {
+    cwd: mcpLauncherRoot,
     env: { ...process.env, GOOS: "darwin", GOARCH: process.arch === "x64" ? "amd64" : process.arch, CGO_ENABLED: "0" },
     stdio: "inherit",
   });

@@ -1,43 +1,39 @@
 # Connect Sourcebook to an Agent
 
-Sourcebook Desktop and the Agent Plugin are independent installations. Desktop provides Books and local access controls; the Plugin supplies the MCP helper and Skill. Updating either one never replaces the other.
+Sourcebook Desktop and the optional Agent Skill package are independent installations. Desktop provides Books, local access controls, and the MCP runtime; the marketplace package supplies workflow Skills. Desktop updates replace the MCP runtime without requiring a Skill update.
 
-In **Settings → Connect an Agent**, allow local-agent access, choose an Agent, then copy the short installation request into a conversation with that Agent. The request points to the [GitHub install/update guide](install-agent-plugin.md). The Agent downloads and verifies the latest independent `agent-v…` Release, checks that Desktop is installed, then updates only Sourcebook's own Agent integration. If Desktop is absent, it should direct the user to [sourcebook.online](https://sourcebook.online) and stop. The prompt never contains a pairing credential.
+In **Settings → Connect an Agent**, allow local-agent access, then connect Codex or WorkBuddy directly. Desktop never puts a pairing credential in an Agent configuration, prompt, or marketplace package.
 
-The connection window's help popover shows the fallback Agent version **included with Desktop**, not the latest GitHub version or a claim about what Codex or WorkBuddy has installed. The target Agent reports the verified independent Plugin version after installation.
+The connection window reports connection state owned by Desktop. It does not claim which optional Skill-package version Codex or WorkBuddy has installed.
 
 After setup, use natural language: for example, “Open my Sourcebook and let me choose a Book first” or “Save this decision to my Product Book.” `@Sourcebook` and `/` can be host conveniences, but they are not required.
 
 ## Codex
 
-Choose **Codex** and send the copied request to a local Codex task. Codex installs or updates `sourcebook@sourcebook-plugin` from Sourcebook's independent Git marketplace. If an old Desktop-owned Plugin is present, the update removes that retired registration before adding the independent Plugin. If the task sandbox blocks writes to Codex's user-level plugin cache, it must stop and tell you to use a local Codex task with access or run the documented commands in Terminal. A permission error is not a completed installation.
+Choose **Connect Codex**. Desktop registers a standard local stdio MCP named `sourcebook`, pointing to Sourcebook's fixed local launcher. If Codex already has a same-named configuration that is not Desktop-managed, Desktop leaves it unchanged and explains the conflict. A new Codex conversation is required to load the connection.
 
 Plugin installation does not require the current installation task to reach Sourcebook's loopback service. This matters because some Agent sandboxes block `127.0.0.1`. Start a new local Codex task after installation; that task connects to Desktop only when you use Sourcebook.
 
-Start a new local Codex task after it succeeds. The Plugin supplies the Sourcebook MCP and Skill together; the Skill helps recognize ordinary requests to search, save, organize, or wrap up work in a Book.
+Install `sourcebook@sourcebook-plugin` separately when you want its workflow Skill; the Skill helps recognize ordinary requests to search, save, organize, or wrap up work in a Book. It no longer supplies an MCP binary.
 
 ## WorkBuddy
 
-Choose **WorkBuddy** and send the copied request to WorkBuddy. It downloads the matching Agent Plugin Release, checks Desktop, reads its `INSTALL-WORKBUDDY.md`, and completes the user-level setup:
+Choose **Connect WorkBuddy**. Desktop reads and updates only `~/.workbuddy/mcp.json` → `mcpServers.sourcebook`, preserving every other server. It uses a fixed launcher command, fixed arguments, and fixed environment variable names; Desktop updates only replace the code behind that launcher, so WorkBuddy's configuration hash stays stable. Desktop never writes `mcp-approvals.json`: the user must click **Trust** once in **Connectors → Custom connectors → MCP service management**. A new WorkBuddy conversation is required; an already-open conversation owns its stdio process and cannot be forcibly disconnected by Desktop.
 
-1. It checks the independently installed Skill, then backs up and merges `~/.workbuddy/mcp.json`, changing only `mcpServers.sourcebook` and preserving other MCP settings.
-2. It installs or updates the same Sourcebook Skill at `~/.workbuddy/skills/sourcebook/`. If that folder belongs to something other than an existing Sourcebook Skill, it stops and asks you what to do.
-3. It verifies the copied Skill version against the independent MCP version, then reports that version on success or the specific action you need to take. After success, restart WorkBuddy and begin a new conversation.
-
-WorkBuddy does not silently overwrite a malformed configuration, a conflicting Sourcebook entry, another MCP server, or another Skill.
+If a user-managed same-named WorkBuddy entry exists, Desktop protects it and does not overwrite it. Disconnect sets that Desktop-managed entry to `disabled: true`; it affects new conversations only.
 
 ## Connect any compatible MCP Agent
 
 1. Install and start Sourcebook Desktop.
 2. In **Settings → Connect an Agent**, choose **Allow local-agent access**.
 3. Select **Any compatible MCP Agent** and copy the generated request. The Agent reads the GitHub installation guide and the downloaded `INSTALL-MCP.md`.
-4. Add the independently installed helper as a user-level **stdio** MCP server named `sourcebook`, using the target Agent's configuration format. Do not add it to a project repository.
+4. Add Sourcebook Desktop's stable local launcher as a user-level **stdio** MCP server named `sourcebook`, using the target Agent's configuration format. Do not add it to a project repository or copy a helper from a Skill package.
 
 The helper reads its local pairing state only when it starts. A pairing credential is never placed in an Agent configuration, prompt, or plugin archive.
 
 After connecting, simply say something like: **“Open my Sourcebook and let me choose a Book first”** or **“Save this decision to my Product Book.”** The model receives Sourcebook’s workflow instructions and can call the `sourcebook` tools itself. You do not need `@` or `/`; a current or named project Book is also a natural cue. If “book” could mean an ordinary book or another product, the Agent should ask rather than assume.
 
-Before its first Sourcebook action, the Plugin checks the local connection and tries to start an installed Desktop app. Its returned URL confirms that Desktop is available, but does **not** prove a panel opened. An MCP Apps host may render the library in its own panel. If no panel appears, the Agent should open the returned URL in its built-in browser panel when available, including WorkBuddy; otherwise it should give you the URL to open. After submitting content for review, the Agent should bring Sourcebook into view again so you can accept or reject it. If Desktop cannot be started, it tells you to open or reinstall it; if local access is off, it tells you to open **Settings → Connect an Agent → Allow local-agent access**. If only the Plugin is too old, it updates the Plugin and asks you to start a new local task. If Desktop is too old, it tells you which app to update and never replaces Desktop itself.
+Before its first Sourcebook action, the MCP server checks the local connection and tries to start an installed Desktop app. Its returned URL confirms that Desktop is available, but does **not** prove a panel opened. An MCP Apps host may render the library in its own panel. If no panel appears, the Agent should open the returned URL in its built-in browser panel when available, including WorkBuddy; otherwise it should give you the URL to open. After submitting content for review, the Agent should bring Sourcebook into view again so you can accept or reject it. If Desktop cannot be started, it tells you to open or reinstall it; if local access is off, it tells you to open **Settings → Connect an Agent → Allow local-agent access**. MCP updates come from Desktop updates; the optional Skill package is updated separately through its marketplace.
 
 This works with Claude Code, Grokbot, Cursor, VS Code/Copilot, Gemini CLI, Windsurf, and other Agents that support local stdio MCP. A host may additionally surface an MCP Prompt as a slash command, but its exact syntax is host-specific and optional.
 

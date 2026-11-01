@@ -2,7 +2,7 @@
 
 The local service is intentionally loopback-only and is not a general-purpose local integration API. It accepts requests from the local Sources page plus the approved downloadable and Chrome Web Store Picker builds; other websites and browser extensions are rejected. Do not write SQLite files directly.
 
-Sourcebook MCP uses a separate paired bridge API, not these browser routes. The native `sourcebook-mcp` helper is supplied by the independently installed Sourcebook Agent Plugin, requires an explicit Book selection for every MCP session, and can read data, explicitly create or rename Books, or create pending user-reviewed suggestions. Multi-item suggestions are stored as one durable review batch; they are never applied to a Book until the user accepts them in Sourcebook. See [Connect Sourcebook to an Agent](connect-agents.md).
+Sourcebook MCP uses a separate paired bridge API, not these browser routes. Desktop supplies the native `sourcebook-mcp` helper through a fixed local bootstrapper; it requires an explicit Book selection for every MCP session, and can read data, explicitly create or rename Books, or create pending user-reviewed suggestions. Multi-item suggestions are stored as one durable review batch; they are never applied to a Book until the user accepts them in Sourcebook. See [Connect Sourcebook to an Agent](connect-agents.md).
 
 ## Paste to the current Book
 
