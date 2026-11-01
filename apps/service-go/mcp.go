@@ -381,6 +381,15 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 		})
 		return nil
 	}
+	if request.Method == http.MethodPost && request.URL.Path == mcpBridgePrefix+"/agent-sessions" {
+		return server.registerAgentSession(response, request)
+	}
+	if request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, mcpBridgePrefix+"/agent-sessions/") {
+		id := strings.TrimPrefix(request.URL.Path, mcpBridgePrefix+"/agent-sessions/")
+		if sourceBookPattern.MatchString(id) {
+			return server.readAgentSession(response, request, id)
+		}
+	}
 	if request.Method == http.MethodGet && request.URL.Path == mcpBridgePrefix+"/books" {
 		return server.mcpListBooks(response, request, settings)
 	}

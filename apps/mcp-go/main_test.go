@@ -90,6 +90,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 				t.Errorf("decode proposal: %v", err)
 			}
 			_ = json.NewEncoder(response).Encode(map[string]any{"note": proposal.Payload["note"]})
+		case "/api/mcp/v1/agent-sessions":
+			_, _ = response.Write([]byte(`{"ok":true}`))
 		default:
 			http.NotFound(response, request)
 		}
@@ -120,8 +122,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 16 {
-		t.Fatalf("tools = %d, want 16", len(tools.Tools))
+	if len(tools.Tools) != 17 {
+		t.Fatalf("tools = %d, want 17", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, registered := range tools.Tools {
@@ -151,13 +153,13 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if toolNames["propose_pack"] {
 		t.Fatal("propose_pack must not be exposed by the MCP server")
 	}
-	for _, name := range []string{"resolve_book", "create_book", "rename_book", "propose_source_bundle", "get_submission_batch"} {
+	for _, name := range []string{"get_current_scope", "resolve_book", "create_book", "rename_book", "propose_source_bundle", "get_submission_batch"} {
 		if !toolNames[name] {
 			t.Fatalf("%s must be exposed", name)
 		}
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "Returning the URL alone does not open it") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "Returning the URL alone does not open it") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	navigated, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook", Arguments: map[string]any{"book_id": "research", "panel": "agent-submissions", "batch_id": "agent-batch-1"}})
@@ -271,7 +273,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 16 {
+	if err != nil || len(listed.Tools) != 17 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -284,7 +286,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 		t.Fatalf("WorkBuddy resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "right-side built-in browser panel") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side built-in browser panel") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	cancel()
@@ -317,7 +319,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 16 {
+	if err != nil || len(listed.Tools) != 17 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -330,7 +332,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 		t.Fatalf("Codex resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	cancel()

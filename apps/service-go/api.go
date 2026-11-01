@@ -51,6 +51,8 @@ type Server struct {
 	changeMu           sync.Mutex
 	changeSubscribers  map[string]map[chan struct{}]struct{}
 	mcpMu              sync.Mutex
+	agentSessionMu     sync.Mutex
+	agentSessions      map[string]agentSessionScope
 	clipboardMu        sync.Mutex
 	clipboardSnapshots map[string]clipboardSnapshot
 }
@@ -83,7 +85,7 @@ func NewServer(library *Library, webRoot string) http.Handler {
 		// successful library migration.
 		settingsRoot = filepath.Dir(library.locationConfigPath)
 	}
-	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}, clipboardSnapshots: map[string]clipboardSnapshot{}}
+	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}, agentSessions: map[string]agentSessionScope{}, clipboardSnapshots: map[string]clipboardSnapshot{}}
 	server.cleanupExpiredMCPContextFiles()
 	return server
 }
@@ -206,6 +208,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 	if request.Method == http.MethodDelete && path == "/api/settings/mcp/workbuddy" {
 		return server.setWorkBuddyMCP(response, true)
+	}
+	if strings.HasPrefix(path, "/api/agent-sessions/") {
+		return server.routeBrowserAgentSession(response, request)
 	}
 	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
 		return server.listMCPSuggestions(response, request.URL.Query().Get("batchId"))

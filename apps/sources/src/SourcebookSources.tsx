@@ -229,6 +229,8 @@ export default function SourcebookSources() {
   const activeBookIdRef = useRef("");
   const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
+  const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
+  const agentSessionTokenRef = useRef(new URLSearchParams(window.location.search).get("agentSessionToken"));
   const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
 
@@ -318,6 +320,16 @@ export default function SourcebookSources() {
   }
   useEffect(() => { void loadBooks(); }, []);
   useEffect(() => { activeBookIdRef.current = activeBookId; }, [activeBookId]);
+  useEffect(() => {
+    const sessionId = agentSessionIdRef.current;
+    const pageToken = agentSessionTokenRef.current;
+    if (!sessionId || !pageToken || !activeBookId) return;
+    void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, { method: "PUT", body: JSON.stringify({ pageToken, bookId: activeBookId }) }).catch(() => {
+      // The page remains a usable local library if its owning Agent session has
+      // ended or Desktop restarted. The Agent receives that state on its next
+      // scoped MCP read instead of the browser repeatedly surfacing an error.
+    });
+  }, [activeBookId]);
   useEffect(() => () => loadMoreAbortRef.current?.abort(), []);
   useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
   useEffect(() => {
@@ -1207,27 +1219,26 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
   const installAvailable = Boolean(current?.enabled && current?.serviceReady && current?.installReady);
   const installStatus = !current?.enabled ? (zh ? "先在上方批准本机 Agent 访问。" : "Approve local-agent access above first.") : !current?.serviceReady ? (zh ? "本机配对尚未准备好；请重新启用访问后再试。" : "Local pairing is not ready. Re-enable access and try again.") : null;
   const workBuddy = current?.workbuddy;
+  const workBuddyState = workBuddy?.status === "connected" ? (zh ? "已连接" : "Connected") : workBuddy?.status === "awaiting_trust" ? (zh ? "等待信任" : "Needs trust") : workBuddy?.status === "disabled" ? (zh ? "已停用" : "Disconnected") : workBuddy?.status === "protected" ? (zh ? "配置受保护" : "Protected") : workBuddy?.status === "not_ready" ? (zh ? "等待 WorkBuddy" : "Open WorkBuddy first") : (zh ? "可连接" : "Ready to connect");
+  const workBuddyHint = workBuddy?.message || (zh ? "Desktop 会保持一条稳定的本地连接；首次仅需在 WorkBuddy 信任一次。" : "Desktop keeps one stable local connection; WorkBuddy asks for trust only once.");
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mcp-settings-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="export-modal mcp-settings-modal">
       <header className="modal-head"><div><h2 id="mcp-settings-title">{zh ? "连接 Agent" : "Connect an Agent"}</h2><p>{zh ? "让本机 Agent 在你选择 Book 后安全使用资料。" : "Let a local Agent safely use sources after you choose a Book."}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header>
       <div className="mcp-settings-body">
         <section className="mcp-access-panel"><div><span className={`mcp-access-indicator ${current?.enabled ? "is-enabled" : ""}`} aria-hidden="true" /><strong>{current?.enabled ? (zh ? "本机访问已开启" : "Local access is on") : (zh ? "先开启本机访问" : "Turn on local access first")}</strong><p>{zh ? "Agent可以获取Book数据，对Book的改动可在Agent提交窗口中查看" : "Agents can access Book data. Review proposed Book changes in Agent submissions."}</p></div>{!current?.enabled ? <button className="primary-button" disabled={Boolean(busy)} onClick={() => void apply("access", "/api/settings/mcp")} type="button">{busy === "access" ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "允许本机 Agent 访问" : "Allow local-agent access"}</button> : <button className="mcp-revoke-button" disabled={Boolean(busy)} onClick={() => void apply("access", "/api/settings/mcp", "DELETE")} type="button">{busy === "access" ? <LoaderCircle className="spin" size={14} /> : null}{zh ? "撤销访问" : "Revoke access"}</button>}</section>
-        <section className="mcp-install-step">
-          <div className="mcp-install-heading">
-            <div className="mcp-install-title-row">
-              <h3>{zh ? "连接 Codex" : "Connect Codex"}</h3>
-            </div>
-            <p className="mcp-install-description">{zh ? "将 Desktop 管理的本地 MCP 登记到 Codex。不会覆盖同名的用户配置；完成后从新对话开始使用。" : "Register the Desktop-managed local MCP with Codex. A user-managed connection with the same name is never overwritten; use a new conversation afterward."}</p>
-          </div>
-          <div className="mcp-install-action">
-            <button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("codex", "/api/settings/mcp/codex")} type="button">{busy === "codex" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接 Codex" : "Connect Codex"}</button>
-            {message ? <p className="mcp-install-feedback" role="status"><Info aria-hidden="true" size={15} />{message}</p> : installStatus ? <p className="mcp-install-feedback"><Info aria-hidden="true" size={15} />{installStatus}</p> : current?.codex?.message ? <p className="mcp-install-feedback"><Info aria-hidden="true" size={15} />{current.codex.message}</p> : null}
-          </div>
-        </section>
-        <section className="mcp-install-step">
-          <div className="mcp-install-heading"><div className="mcp-install-title-row"><h3>{zh ? "连接 WorkBuddy" : "Connect WorkBuddy"}</h3></div><p className="mcp-install-description">{zh ? "Desktop 会写入一条固定的本地 MCP 登记。随后请在 WorkBuddy 的 MCP 服务管理中手动信任一次；更新 Desktop 不需要再次信任。" : "Desktop writes one stable local MCP registration. Then approve Sourcebook once in WorkBuddy MCP service management; Desktop updates do not require another approval."}</p></div>
-          <div className="mcp-install-action"><button className="primary-button" disabled={!installAvailable || Boolean(busy) || workBuddy?.status === "protected"} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接 WorkBuddy" : "Connect WorkBuddy"}</button>{workBuddy?.status === "connected" ? <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy", "DELETE")} type="button"><Link2Off size={15} />{zh ? "断开" : "Disconnect"}</button> : null}{workBuddy?.message ? <p className="mcp-install-feedback"><Info aria-hidden="true" size={15} />{workBuddy.message}</p> : null}</div>
-        </section>
+        <div className="mcp-host-list">
+          <section className="mcp-host-card">
+            <div aria-hidden="true" className="mcp-host-logo is-codex"><Sparkles size={20} /></div>
+            <div className="mcp-host-copy"><div className="mcp-host-heading"><h3>Codex</h3><span className="mcp-host-status is-ready">{zh ? "由 Desktop 管理" : "Desktop managed"}</span></div><p>{zh ? "连接后，新对话可直接使用本机 Sourcebook；不会覆盖同名的用户配置。" : "Connect once to use local Sourcebook in new conversations. A user-managed connection is never overwritten."}</p></div>
+            <div className="mcp-host-action"><button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("codex", "/api/settings/mcp/codex")} type="button">{busy === "codex" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接" : "Connect"}</button></div>
+          </section>
+          <section className="mcp-host-card">
+            <div aria-hidden="true" className="mcp-host-logo is-workbuddy"><Puzzle size={20} /></div>
+            <div className="mcp-host-copy"><div className="mcp-host-heading"><h3>WorkBuddy</h3><span className={`mcp-host-status is-${workBuddy?.status || "ready"}`}>{workBuddyState}</span></div><p>{workBuddyHint}</p></div>
+            <div className="mcp-host-action">{workBuddy?.status === "connected" ? <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy", "DELETE")} type="button"><Link2Off size={15} />{zh ? "断开" : "Disconnect"}</button> : <button className="primary-button" disabled={!installAvailable || Boolean(busy) || workBuddy?.status === "protected"} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接" : "Connect"}</button>}</div>
+          </section>
+        </div>
+        {message ? <p className="mcp-host-message" role="status"><Info aria-hidden="true" size={15} />{message}</p> : installStatus ? <p className="mcp-host-message"><Info aria-hidden="true" size={15} />{installStatus}</p> : current?.codex?.message ? <p className="mcp-host-message"><Info aria-hidden="true" size={15} />{current.codex.message}</p> : null}
       </div>
     </section>
   </div>;
