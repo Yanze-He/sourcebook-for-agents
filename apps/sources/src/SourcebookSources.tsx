@@ -312,8 +312,23 @@ export default function SourcebookSources() {
   async function loadBooks() {
     let response = await request<BookManifest>("/api/books");
     const requestedBookId = requestedBookIdRef.current;
-    const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : response.activeBookId;
-    if (targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
+    let agentBookId = "";
+    const sessionId = agentSessionIdRef.current;
+    const pageToken = agentSessionTokenRef.current;
+    if (sessionId && pageToken) {
+      try {
+        const scope = await request<{ bookId?: string }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}`);
+        agentBookId = scope.bookId || "";
+        setAgentPageConnection("connected");
+      } catch (error) {
+        if (/Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
+      }
+    }
+    const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : response.activeBookId;
+    // Agent pages retain their own Book in the server-side page scope. Do not
+    // mutate Desktop's shared browsing default just to restore that page.
+    if (!sessionId && targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
+    else if (sessionId) response = { ...response, activeBookId: targetBookId };
     requestedBookIdRef.current = null;
     if (requestedBookId) {
       const query = new URLSearchParams(window.location.search);
@@ -324,20 +339,6 @@ export default function SourcebookSources() {
   }
   useEffect(() => { void loadBooks(); }, []);
   useEffect(() => { activeBookIdRef.current = activeBookId; }, [activeBookId]);
-  useEffect(() => {
-    const sessionId = agentSessionIdRef.current;
-    const pageToken = agentSessionTokenRef.current;
-    if (!sessionId || !pageToken || !activeBookId) return;
-    let disposed = false;
-    const syncAgentPage = () => void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, { method: "PUT", body: JSON.stringify({ pageToken, bookId: activeBookId }) }).then(() => {
-      if (!disposed) setAgentPageConnection("connected");
-    }).catch((error) => {
-      if (!disposed && /Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
-    });
-    syncAgentPage();
-    const interval = window.setInterval(syncAgentPage, 4000);
-    return () => { disposed = true; window.clearInterval(interval); };
-  }, [activeBookId]);
   useEffect(() => () => loadMoreAbortRef.current?.abort(), []);
   useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
   useEffect(() => {
@@ -429,6 +430,29 @@ export default function SourcebookSources() {
     const matchesQuery = !normalizedQuery || [item.itemTitle, item.sourceTitle, item.sourceOrigin, item.sourceUrl, item.contentUrl, item.userNote, item.contentText, item.resourceSummary, item.metadata.description, item.metadata.pageTitle, item.metadata.ogTitle, item.metadata.siteName, item.metadata.canonicalUrl, item.metadata.conversation?.provider, post?.title, post?.bodyText, post?.author?.displayName, post?.author?.handle, ...(post?.tags ?? [])].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery));
     return matchesQuery && matchesDate(item.pickedAt, dateFilter, dateStart, dateEnd) && (!kind.length || kind.includes(item.modality)) && (!source.length || source.includes(sourceLabel(item))) && (!linkFilter.length || linkFilter.includes(item.linkState as Exclude<LinkFilter, "all">)) && (!localFilter.length || localFilter.includes(localState(item) as Exclude<LocalFilter, "all">)) && (!onlyFavorites || item.favorite);
   }), [dateEnd, dateFilter, items, kind, linkFilter, localFilter, onlyFavorites, query, source]);
+  useEffect(() => {
+    const sessionId = agentSessionIdRef.current;
+    const pageToken = agentSessionTokenRef.current;
+    if (!sessionId || !pageToken || !activeBookId) return;
+    let disposed = false;
+    const syncAgentPage = () => void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
+      method: "PUT",
+      body: JSON.stringify({
+        pageToken,
+        bookId: activeBookId,
+        selectedSourceIds: selectedIds,
+        filteredSourceIds: visibleItems.map((item) => item.id),
+        filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites },
+      }),
+    }).then(() => {
+      if (!disposed) setAgentPageConnection("connected");
+    }).catch((error) => {
+      if (!disposed && /Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
+    });
+    syncAgentPage();
+    const interval = window.setInterval(syncAgentPage, 2500);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, selectedIds, source, visibleItems]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const reusableSelectionIds = useMemo(() => (lastSelectedIdsByBook[activeBookId] || []).filter((id) => items.some((item) => item.id === id)), [activeBookId, items, lastSelectedIdsByBook]);
   const hasReusableSelection = reusableSelectionIds.length > 0;
@@ -596,7 +620,9 @@ export default function SourcebookSources() {
     setIsLoadingMore(false);
     setIsBookOpen(false);
     try {
-      const response = await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
+      const response = agentSessionIdRef.current
+        ? { ...(await request<BookManifest>("/api/books")), activeBookId: bookId }
+        : await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
       if (isBatchSelecting) rememberSelection(activeBookId, selectedIds);
       setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null);
     } catch (error) { setMessage(errorMessage(error)); }

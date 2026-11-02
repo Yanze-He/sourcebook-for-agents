@@ -2,6 +2,11 @@
 
 All notable user-facing changes are documented here.
 
+## Unreleased
+
+- Keep a WorkBuddy conversation connected to its existing Sourcebook page when WorkBuddy recreates its local MCP helper. The page restores its own Book, selected materials, and current filter instead of falling back to Desktop's global browsing Book or opening an extra tab.
+- Let an Agent read the current page scope directly: selected materials take priority, followed by the materials currently visible through the user's filter. Explicit reconnects retire the old page, which then displays its disconnected state.
+
 ## 0.1.3 — 2026-10-25
 
 - Consolidate Source selection into one shared flow across Desktop and embedded Agent browsers. Pages start in Browse mode; hovering a card reveals its lower-right selection circle, and selecting or drag-selecting enters Select mode with the existing selection veil and action bar. The header now has one mode button instead of a Browse/Select switch or a separate batch-select button.
