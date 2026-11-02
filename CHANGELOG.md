@@ -4,6 +4,10 @@ All notable user-facing changes are documented here.
 
 ## 0.1.3 — 2026-10-25
 
+- Consolidate Source selection into one shared flow across Desktop and embedded Agent browsers. Pages start in Browse mode; hovering a card reveals its lower-right selection circle, and selecting or drag-selecting enters Select mode with the existing selection veil and action bar. The header now has one mode button instead of a Browse/Select switch or a separate batch-select button.
+- Replace the separate Record and local-import header actions with **Add materials**, a compact menu for a record, local files, clipboard content, and Picker installation.
+- Make the WorkBuddy connection card match Codex’s action hierarchy: a connected host offers **Check connection** first, with **Remove** as a secondary destructive action; disabled entries offer **Repair connection**.
+- Clarify the present WorkBuddy boundary: its configured stdio connector is shared across chats, so its Sourcebook page is shared too. Per-chat browser scope requires WorkBuddy to expose a chat identity or start an MCP process per chat.
 - Fix **Show in folder** on Windows. It now opens the local file's parent folder directly rather than relying on Explorer's unreliable legacy selection argument, which could fall back to Documents for some paths.
 - Make **Load more** cancellable when switching Books. A late page response can no longer append its old Book's items after the switch, and a stalled local request returns to a retryable state after 20 seconds.
 - Add a system **Open** action for every Source with a cached local file. Use it from the card toolbar or the file-detail preview to open the original in the operating system’s default app; details consistently show the Book-relative saved location with a Finder or Explorer reveal action.

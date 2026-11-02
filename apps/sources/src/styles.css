@@ -2056,6 +2056,107 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   white-space: nowrap;
 }
 
+/* The shared header owns selection state, so every browser surface gets the
+   same browse → select path. The card affordance is intentionally quiet until
+   the user approaches a card, then stays visible for the whole selection run. */
+.source-mode-button.is-selecting {
+  border-color: rgba(23, 105, 255, .36);
+  background: var(--blue-soft);
+  color: #1758bd;
+}
+
+.add-materials-menu {
+  position: relative;
+}
+
+.add-materials-trigger {
+  min-width: 0;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.add-materials-trigger.is-open {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.add-materials-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.add-materials-trigger.is-open .add-materials-chevron {
+  transform: rotate(180deg);
+}
+
+.add-materials-popover {
+  position: absolute;
+  z-index: 240;
+  top: calc(100% + 7px);
+  right: 0;
+  display: grid;
+  width: 206px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.add-materials-popover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.add-materials-popover button:hover {
+  background: var(--surface-2);
+}
+
+.add-materials-popover button svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.source-card-select {
+  top: auto;
+  right: 11px;
+  bottom: 11px;
+  left: auto;
+  z-index: 70;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity 150ms ease, transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.source-masonry-card:hover .source-card-select,
+.source-masonry-card:focus-within .source-card-select,
+.source-masonry.is-selecting .source-card-select {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.source-masonry.is-selecting .source-masonry-card::before {
+  display: none;
+}
+
 @media (max-width: 1120px) {
   .book-actions .header-action-button {
     width: 36px;
@@ -2063,6 +2164,10 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   }
 
   .book-actions .header-action-label {
+    display: none;
+  }
+
+  .add-materials-trigger .add-materials-chevron {
     display: none;
   }
 }

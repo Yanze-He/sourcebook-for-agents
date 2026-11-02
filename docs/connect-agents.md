@@ -20,6 +20,8 @@ Install `sourcebook@sourcebook-plugin` separately when you want its workflow Ski
 
 Choose **Connect WorkBuddy**. Desktop reads and updates only `~/.workbuddy/mcp.json` → `mcpServers.sourcebook`, preserving every other server. It uses a fixed launcher command, fixed arguments, and fixed environment variable names; Desktop updates only replace the code behind that launcher, so WorkBuddy's configuration hash stays stable. Desktop never writes `mcp-approvals.json`: the user must click **Trust** once in **Connectors → Custom connectors → MCP service management**. A new WorkBuddy conversation is required; an already-open conversation owns its stdio process and cannot be forcibly disconnected by Desktop.
 
+WorkBuddy currently starts one deferred `sourcebook` stdio connector shared by its chats, and passes no chat identity to Sourcebook. Its Sourcebook page and selected Book are therefore shared across WorkBuddy chats; this is not equivalent to Codex’s per-chat behavior. Desktop cannot safely manufacture that missing identity. Per-chat scope requires a WorkBuddy host capability that either starts the MCP process per chat or supplies a stable chat ID with every MCP call.
+
 If a user-managed same-named WorkBuddy entry exists, Desktop protects it and does not overwrite it. Disconnect sets that Desktop-managed entry to `disabled: true`; it affects new conversations only.
 
 ## Connect any compatible MCP Agent
@@ -41,7 +43,7 @@ This works with Claude Code, Grokbot, Cursor, VS Code/Copilot, Gemini CLI, Winds
 
 After you approve access, an Agent can list Books, explicitly select one Book, search and read Sources, and prepare a temporary folder containing only explicitly named real files. It can submit suggestions to save confirmed text, import a local file, or update source metadata. If you ask it to organize the current conversation, it proposes a concise session record rather than a raw transcript, plus only the local files you explicitly approve. It cannot create a Pack or send material to another Agent for you.
 
-Agent submissions do not change a Book automatically. Review them in **Agent submissions**, immediately to the left of **Record**. The window opens automatically for a new pending submission; **Pending** shows items awaiting your decision, while **Processed** holds accepted, rejected, and no-longer-applicable items. Proposed text is shown as Markdown, including tables; supported local images can be enlarged, and audio/video can be played when the original file remains available. File imports do not need an unrelated existing Source ID; changing an existing source does require its specific Source ID.
+Agent submissions do not change a Book automatically. Review them in **Agent submissions** in the Sourcebook header. The window opens automatically for a new pending submission; **Pending** shows items awaiting your decision, while **Processed** holds accepted, rejected, and no-longer-applicable items. Proposed text is shown as Markdown, including tables; supported local images can be enlarged, and audio/video can be played when the original file remains available. File imports do not need an unrelated existing Source ID; changing an existing source does require its specific Source ID.
 
 ## Disconnect or revoke access
 
