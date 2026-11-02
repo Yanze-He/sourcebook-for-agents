@@ -2259,6 +2259,127 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   overflow: hidden;
 }
 
+/* Selection must stay actionable in narrow Agent panels: one compact row,
+   with the explanation yielding before controls ever wrap. */
+.sources-batch-footer.has-selection,
+.sources-batch-footer.is-empty {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.sources-batch-footer.has-selection .sources-selection-context {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.sources-batch-footer.has-selection .sources-selection-context strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.sources-batch-footer.has-selection .sources-selection-context p {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sources-batch-footer.has-selection .sources-selection-context p span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sources-selection-count-icon {
+  border: 1px solid rgba(255,255,255,.55);
+  cursor: pointer;
+}
+
+.sources-selection-count-icon[aria-pressed="true"] {
+  border-color: #2d75ee;
+}
+
+.sources-batch-footer .sources-footer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: auto;
+  min-width: 0;
+  gap: 6px;
+}
+
+.sources-batch-footer .sources-more-button,
+.sources-batch-footer .sources-copy-button,
+.sources-batch-footer .sources-send-button,
+.sources-batch-footer .sources-cancel-button {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.sources-copy-actions {
+  position: relative;
+}
+
+.sources-copy-actions .sources-copy-menu {
+  right: 0;
+}
+
+.sources-batch-footer.is-empty .sources-selection-empty-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sources-batch-footer.is-empty .sources-selection-empty-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 700px) {
+  .sources-footer.sources-batch-footer.has-selection,
+  .sources-footer.sources-batch-footer.is-empty {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    max-width: none;
+    padding: 8px 10px;
+  }
+
+  .sources-batch-footer.has-selection .sources-selection-context {
+    gap: 6px;
+  }
+
+  .sources-batch-footer.has-selection .sources-selection-context p span,
+  .sources-batch-footer.is-empty .sources-selection-empty-hint i,
+  .sources-batch-footer.is-empty .sources-selection-empty-hint span:last-child {
+    display: none;
+  }
+
+  .sources-batch-footer .sources-more-button,
+  .sources-batch-footer .sources-copy-button,
+  .sources-batch-footer .sources-send-button,
+  .sources-batch-footer .sources-cancel-button {
+    gap: 4px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
+
 /* Retain type semantics in filters while differentiating files and audio in the card itself. */
 .source-masonry-card.kind-file {
   border-color: #ddd6b6;
