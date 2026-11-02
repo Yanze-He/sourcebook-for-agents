@@ -76,3 +76,34 @@ func TestHealthReportsTheBundledDesktopVersion(t *testing.T) {
 		t.Fatalf("version = %q, want %q", health.Version, appVersion)
 	}
 }
+
+func TestLegacyBookIDWithSpacesCanActivate(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	manifest, err := library.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Books = append(manifest.Books, Book{ID: "sourcebook brand", Name: "Sourcebook brand", Directory: "sourcebook brand"})
+	if err := library.writeManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/books/sourcebook%20brand/activate", nil)
+	request.Host = "127.0.0.1:4177"
+	response := httptest.NewRecorder()
+	NewServer(library, "").ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var result Manifest
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.ActiveBookID != "sourcebook brand" {
+		t.Fatalf("activeBookId = %q", result.ActiveBookID)
+	}
+}

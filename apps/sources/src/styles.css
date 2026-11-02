@@ -138,6 +138,52 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
 .mcp-install-action-main .mcp-agent-picker-button.is-open svg { transform:rotate(0deg); }
 .mcp-install-action-main .primary-button { justify-self:end; white-space:nowrap; }
 .mcp-suggestions-header-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+
+/* Agent pages reserve a real row for their banner and selection controls.
+   Nothing is positioned over the material list. */
+.sources-page.sources-surface { grid-template-rows:auto auto minmax(0,1fr) auto; }
+.sources-page.sources-surface.has-agent-banner { grid-template-rows:auto auto auto minmax(0,1fr) auto; }
+.sources-page.sources-surface.has-agent-banner .sources-footer { position:relative; right:auto; bottom:auto; left:auto; width:100%; max-width:none; margin:0; border-right:0; border-bottom:0; border-left:0; border-radius:0; transform:none; }
+.sources-page.sources-surface.has-agent-banner .source-masonry { padding-bottom:22px; }
+
+/* Selection is one state across buttons, click selection, and drag selection. */
+.source-masonry { position:relative; }
+.source-selection-empty-overlay { position:absolute; z-index:50; inset:0; display:grid; place-items:center; padding:28px; pointer-events:none; background:linear-gradient(180deg,rgba(237,244,255,.06),rgba(237,244,255,.23)); box-shadow:inset 0 0 0 1px rgba(23,105,255,.08); }
+.source-selection-empty-overlay > div { display:inline-flex; align-items:center; gap:8px; max-width:min(310px,calc(100% - 24px)); padding:8px 11px; border:1px solid rgba(23,105,255,.2); border-radius:999px; background:rgba(255,255,255,.92); box-shadow:0 8px 20px rgba(23,105,255,.1); color:#315a9f; font-size:12px; font-weight:720; }
+.source-selection-marquee { position:absolute; z-index:80; min-width:2px; min-height:2px; border:1px solid #1769ff; background:rgba(23,105,255,.12); box-shadow:0 0 0 1px rgba(255,255,255,.78) inset; pointer-events:none; }
+.source-masonry.is-selecting .source-masonry-card { position:relative; z-index:55; }
+
+.sources-batch-footer.is-empty { justify-content:space-between; gap:16px; }
+.sources-selection-empty-hint { display:flex; align-items:center; justify-content:center; gap:9px; min-width:0; color:#f7f7f4; font-size:13px; font-weight:720; }
+.sources-selection-empty-hint > span { display:inline-flex; align-items:center; gap:7px; min-width:0; white-space:nowrap; }
+.sources-selection-empty-hint svg { flex:0 0 auto; color:#9fbaff; }
+.sources-selection-empty-hint i { color:#979790; font-size:11px; font-style:normal; font-weight:600; }
+.sources-selection-empty-actions { display:flex; align-items:center; gap:4px; flex:0 0 auto; }
+.sources-selection-empty-actions .sources-select-all-button { color:#c8d7ff; }
+.sources-batch-footer.has-selection { justify-content:space-between; gap:18px; }
+.sources-selection-context { display:grid; gap:8px; min-width:0; }
+.sources-selection-context strong { display:flex; align-items:center; gap:9px; min-width:0; color:#fff; font-size:14px; font-weight:760; }
+.sources-selection-count-icon { display:grid; flex:0 0 auto; width:24px; height:24px; place-items:center; border-radius:50%; background:#2d75ee; color:#fff; }
+.sources-selection-context p { display:flex; align-items:center; gap:8px; min-width:0; margin:0; color:#c8c8c1; font-size:12px; line-height:1.4; }
+.sources-selection-context p svg { flex:0 0 auto; color:#78a8ff; }
+.sources-more-actions { position:relative; }
+.sources-more-button { min-width:136px; }
+.sources-more-actions-menu { position:absolute; right:0; bottom:calc(100% + 9px); z-index:140; display:grid; gap:3px; width:196px; padding:5px; border:1px solid #454540; border-radius:10px; background:#272724; box-shadow:0 16px 34px rgba(0,0,0,.26); }
+.sources-more-actions-menu > button { display:flex; align-items:center; gap:8px; min-height:34px; padding:0 9px; border:0; border-radius:6px; background:transparent; color:#f4f4ef; font:inherit; font-size:12px; font-weight:680; text-align:left; }
+.sources-more-actions-menu > button:hover { background:#3a3a36; }
+.sources-more-actions-menu .sources-delete-button { color:#ffb0b9; }
+.sources-more-actions-menu .sources-delete-button:hover { background:rgba(230,75,97,.16); }
+.sources-more-actions-menu .book-transfer-popover { right:0; bottom:calc(100% + 7px); }
+
+@media (max-width:700px) {
+  .sources-page.sources-surface.has-agent-banner .source-masonry { padding-bottom:16px; }
+  .sources-batch-footer.is-empty,.sources-batch-footer.has-selection { align-items:stretch; }
+  .sources-selection-empty-hint { justify-content:flex-start; flex-wrap:wrap; white-space:normal; }
+  .sources-selection-context { padding-right:0; }
+  .sources-selection-context p { align-items:flex-start; }
+  .sources-footer-actions { justify-content:space-between; }
+  .sources-more-button { min-width:0; flex:1; }
+}
 .mcp-suggestions-header-actions .secondary-button { white-space:nowrap; }
 .mcp-install-heading { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; row-gap:4px; }
 .mcp-install-title-row { display:flex; grid-column:1/-1; align-items:center; justify-content:flex-start; gap:4px; }

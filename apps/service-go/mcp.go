@@ -432,7 +432,7 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 		return server.mcpCreateBook(response, request, settings)
 	}
 	parts := strings.Split(strings.TrimPrefix(request.URL.Path, mcpBridgePrefix+"/"), "/")
-	if len(parts) >= 2 && parts[0] == "books" && sourceBookPattern.MatchString(parts[1]) {
+	if len(parts) >= 2 && parts[0] == "books" && bookIDPattern.MatchString(parts[1]) {
 		bookID := parts[1]
 		switch {
 		case len(parts) == 2 && request.Method == http.MethodGet:

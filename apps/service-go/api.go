@@ -40,7 +40,13 @@ const (
 	ChromeWebStorePickerExtensionID = "pkglhngkfkjblabnhgcioindjgffgfpf"
 )
 
+// sourceBookPattern guards opaque MCP session IDs. Book IDs have a separate
+// compatibility rule: early Desktop libraries used the Book name as its ID,
+// including spaces and non-Latin names. Paths are still safe because slash
+// and control characters are rejected and clients encode IDs as one URL
+// segment.
 var sourceBookPattern = regexp.MustCompile(`^[\w-]+$`)
+var bookIDPattern = regexp.MustCompile(`^[^/\x00-\x1f\x7f]{1,160}$`)
 
 type Server struct {
 	library            *Library
@@ -262,7 +268,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "books" && sourceBookPattern.MatchString(parts[2]) {
+	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "books" && bookIDPattern.MatchString(parts[2]) {
 		bookID := parts[2]
 		if len(parts) == 3 {
 			switch request.Method {
@@ -300,13 +306,13 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "sources" && request.Method == http.MethodPost {
 		return server.sourceAction(response, request, parts[2], parts[3])
 	}
-	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && parts[5] == "preview" && request.Method == http.MethodGet {
+	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && bookIDPattern.MatchString(parts[3]) && parts[5] == "preview" && request.Method == http.MethodGet {
 		return server.previewMCPSuggestion(response, request, parts[3], parts[4])
 	}
-	if len(parts) == 5 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && request.Method == http.MethodPatch {
+	if len(parts) == 5 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && bookIDPattern.MatchString(parts[3]) && request.Method == http.MethodPatch {
 		return server.updateMCPSuggestion(response, request, parts[3], parts[4])
 	}
-	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && sourceBookPattern.MatchString(parts[3]) && request.Method == http.MethodPost {
+	if len(parts) == 6 && parts[0] == "api" && parts[1] == "mcp" && parts[2] == "suggestions" && bookIDPattern.MatchString(parts[3]) && request.Method == http.MethodPost {
 		if parts[5] == "accept" || parts[5] == "reject" {
 			return server.reviewMCPSuggestion(response, request, parts[3], parts[4], parts[5])
 		}
@@ -611,7 +617,7 @@ func (server *Server) createSource(response http.ResponseWriter, request *http.R
 
 func (server *Server) streamSourceEvents(response http.ResponseWriter, request *http.Request) error {
 	bookID := request.URL.Query().Get("bookId")
-	if !sourceBookPattern.MatchString(bookID) {
+	if !bookIDPattern.MatchString(bookID) {
 		return &apiError{status: http.StatusBadRequest, code: "INVALID_BOOK", message: "Book 无效"}
 	}
 	if _, err := server.context(bookID, true); err != nil {
