@@ -1,10 +1,10 @@
 # Connect Sourcebook to an Agent
 
-Sourcebook Desktop and the optional Agent Skill package are independent installations. Desktop provides Books, local access controls, and the MCP runtime; the marketplace package supplies workflow Skills. Desktop updates replace the MCP runtime without requiring a Skill update.
+Sourcebook Desktop provides Books, local access controls, the MCP runtime, and its runtime instructions. No separate Agent Skill or marketplace package is required.
 
-In **Settings → Connect an Agent**, allow local-agent access, then connect Codex or WorkBuddy directly. Desktop never puts a pairing credential in an Agent configuration, prompt, or marketplace package.
+In **Settings → Connect an Agent**, allow local-agent access, then connect Codex or WorkBuddy directly. Desktop never puts a pairing credential in an Agent configuration or prompt.
 
-The connection window reports connection state owned by Desktop. It does not claim which optional Skill-package version Codex or WorkBuddy has installed.
+The connection window reports connection state owned by Desktop.
 
 After setup, use natural language: for example, “Open my Sourcebook and let me choose a Book first” or “Save this decision to my Product Book.” `@Sourcebook` and `/` can be host conveniences, but they are not required.
 
@@ -12,9 +12,7 @@ After setup, use natural language: for example, “Open my Sourcebook and let me
 
 Choose **Connect Codex**. Desktop registers a standard local stdio MCP named `sourcebook`, pointing to Sourcebook's fixed local launcher. If Codex already has a same-named configuration that is not Desktop-managed, Desktop leaves it unchanged and explains the conflict. A new Codex conversation is required to load the connection.
 
-Plugin installation does not require the current installation task to reach Sourcebook's loopback service. This matters because some Agent sandboxes block `127.0.0.1`. Start a new local Codex task after installation; that task connects to Desktop only when you use Sourcebook.
-
-Install `sourcebook@sourcebook-plugin` separately when you want its workflow Skill; the Skill helps recognize ordinary requests to search, save, organize, or wrap up work in a Book. It no longer supplies an MCP binary.
+Connecting Codex does not require the current installation task to reach Sourcebook's loopback service. This matters because some Agent sandboxes block `127.0.0.1`. Start a new local Codex task after connecting; that task connects to Desktop only when you use Sourcebook.
 
 ## WorkBuddy
 
@@ -24,20 +22,24 @@ WorkBuddy provides a conversation identity to its local helper context. Sourcebo
 
 If a user-managed same-named WorkBuddy entry exists, Desktop protects it and does not overwrite it. Disconnect sets that Desktop-managed entry to `disabled: true`; it affects new conversations only.
 
-## Connect any compatible MCP Agent
+## Other compatible MCP Agents
 
-1. Install and start Sourcebook Desktop.
-2. In **Settings → Connect an Agent**, choose **Allow local-agent access**.
-3. Select **Any compatible MCP Agent** and copy the generated request. The Agent reads the GitHub installation guide and the downloaded `INSTALL-MCP.md`.
-4. Add Sourcebook Desktop's stable local launcher as a user-level **stdio** MCP server named `sourcebook`, using the target Agent's configuration format. Do not add it to a project repository or copy a helper from a Skill package.
+Codex and WorkBuddy are the directly managed connections in Desktop. Another
+host can be considered only if its official documentation supports a local
+user-level **stdio** MCP server. Use that host's documented configuration to
+register Sourcebook Desktop's stable local launcher as `sourcebook`; do not add
+it to a project repository, copy a helper, or install a marketplace package.
+
+This path is not configured or supported by Desktop's connection window yet.
 
 The helper reads its local pairing state only when it starts. A pairing credential is never placed in an Agent configuration, prompt, or plugin archive.
 
 After connecting, simply say something like: **“Open my Sourcebook and let me choose a Book first”** or **“Save this decision to my Product Book.”** The model receives Sourcebook’s workflow instructions and can call the `sourcebook` tools itself. You do not need `@` or `/`; a current or named project Book is also a natural cue. If “book” could mean an ordinary book or another product, the Agent should ask rather than assume.
 
-Before its first Sourcebook action, the MCP server checks the local connection and tries to start an installed Desktop app. Its returned URL confirms that Desktop is available, but does **not** prove a panel opened. An MCP Apps host may render the library in its own panel. If no panel appears, the Agent should open the returned URL in its built-in browser panel when available, including WorkBuddy; otherwise it should give you the URL to open. After submitting content for review, the Agent should bring Sourcebook into view again so you can accept or reject it. If Desktop cannot be started, it tells you to open or reinstall it; if local access is off, it tells you to open **Settings → Connect an Agent → Allow local-agent access**. MCP updates come from Desktop updates; the optional Skill package is updated separately through its marketplace.
+Before its first Sourcebook data or page action, the MCP server checks the local connection and can start an installed Desktop app. A returned URL confirms that Desktop is available, but does **not** prove a panel opened. When the Agent needs to show Sourcebook or a submission review, it reuses its existing Sourcebook page where possible and opens one new built-in browser page only when none exists. If Desktop cannot be started, it tells you to open or reinstall it; if local access is off, it tells you to open **Settings → Connect an Agent → Allow local-agent access**. MCP updates come from Desktop updates.
 
-This works with Claude Code, Grokbot, Cursor, VS Code/Copilot, Gemini CLI, Windsurf, and other Agents that support local stdio MCP. A host may additionally surface an MCP Prompt as a slash command, but its exact syntax is host-specific and optional.
+A host may additionally surface an MCP Prompt as a slash command, but its exact
+syntax is host-specific and optional.
 
 ## What an Agent can do
 

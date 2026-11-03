@@ -12,10 +12,10 @@ import (
 	"testing"
 )
 
-func TestMCPSettingsExposeIndependentPluginGuideWithoutBundlePaths(t *testing.T) {
+func TestMCPSettingsExposeDesktopConnectionGuide(t *testing.T) {
 	payload := (&Server{}).mcpSettingsPayload(desktopSettings{MCPEnabled: true, MCPToken: "paired"})
-	if payload["guideUrl"] != "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md" || payload["installReady"] != true || payload["serviceReady"] != true {
-		t.Fatalf("independent plugin payload = %v", payload)
+	if payload["guideUrl"] != "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/connect-agents.md" || payload["installReady"] != true || payload["serviceReady"] != true {
+		t.Fatalf("desktop connection payload = %v", payload)
 	}
 	for _, legacy := range []string{"agentVersion", "installGuides", "bundledResourcesReady"} {
 		if _, exists := payload[legacy]; exists {

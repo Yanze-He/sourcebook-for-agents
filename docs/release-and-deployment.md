@@ -19,32 +19,6 @@ The release workflow builds artifacts for inspection:
 
 Pushing a `v*` tag, or running the workflow manually, never signs, notarizes, or publishes a GitHub Release. CI has read-only repository permissions and no signing credentials.
 
-## Independent Agent Plugin releases
-
-The Agent Plugin has its **own** version in `apps/agent-plugin/plugin.json` and
-uses `agent-v<version>` tags. It does not inherit Desktop's version or build
-number. `.github/workflows/agent-plugin.yml` produces versioned macOS arm64
-and Windows x64 ZIPs plus a `.zip.sha256` file for each. This workflow uploads
-CI artifacts only; it does not create a public Release. Do not attach these
-unsigned CI test artifacts directly to a public Agent Plugin Release.
-
-Before publication, test the standalone install/update guide with Desktop
-present and absent, and with Codex and WorkBuddy user-level configurations.
-The macOS helper must be Developer ID signed and its distribution archive
-notarized; verify the resulting public ZIP and its checksum. Rebuild the
-checksum after any signing or archive change. Publish both platform archives
-and matching `.zip.sha256` files in a non-draft GitHub Release for the
-`agent-v<version>` tag. The [Agent install guide](install-agent-plugin.md)
-selects only this tag family. An Agent can then download, verify, and update
-its own Plugin without a Desktop release. Changes to the Desktop bridge API
-still require compatibility testing and, if needed, a Desktop update.
-
-Desktop does not bundle an Agent Plugin. Before building Desktop, test the
-bridge compatibility range against the latest accepted standalone Plugin
-package. The Connect an Agent prompt must continue to point to the
-version-independent install guide, which directs supported Agents to the
-standalone marketplace package for installation and updates.
-
 ## Local macOS signing and notarization
 
 Only a maintainer-controlled Mac signs and notarizes macOS releases. Keep the Developer ID private key, the `.p12` backup password, and Apple notarization credentials out of the repository, shell history, and GitHub Actions.

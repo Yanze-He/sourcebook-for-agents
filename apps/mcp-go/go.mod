@@ -1,4 +1,4 @@
-module github.com/Yanze-He/sourcebook-plugin/mcp
+module github.com/Yanze-He/sourcebook-for-agents/apps/mcp-go
 
 go 1.24.3
 

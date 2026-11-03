@@ -17,26 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestSkillKeepsCodexBrowserTabOpen(t *testing.T) {
-	content, err := os.ReadFile("../agent-plugin/skills/sourcebook/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, instruction := range []string{"right-side built-in browser tab", "tab.markDeliverable()", "repeat the mark on later turns"} {
-		if !strings.Contains(string(content), instruction) {
-			t.Fatalf("Sourcebook Skill is missing the Codex browser persistence instruction %q", instruction)
-		}
-	}
-}
-
 func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
-	content, err := os.ReadFile("../agent-plugin/skills/sourcebook/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(content), "Add a brief, factual note to each text or file proposal") {
-		t.Fatal("Sourcebook Skill must instruct Agents to describe the source context")
-	}
 	for _, fields := range [][]any{
 		{"title", stringSchema("Title"), "content", stringSchema("Content"), "note", stringSchema("Context")},
 		{"path", stringSchema("Path"), "note", stringSchema("Context")},
@@ -52,21 +33,17 @@ func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
 	}
 }
 
-func TestMCPInstructionsAreHostSpecific(t *testing.T) {
-	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
-	codex := sourcebookServerInstructions()
-	if !strings.Contains(codex, "tab.markDeliverable()") || strings.Contains(codex, "WorkBuddy, use the right-side") {
-		t.Fatalf("Codex instructions leaked another host's rules: %q", codex)
+func TestMCPInstructionsContainOnlyCrossToolRules(t *testing.T) {
+	instructions := sourcebookServerInstructions()
+	for _, required := range []string{"general product question is not enough", "current selection", "do not open a page merely to repair missing scope", "Proposals always await the user's review"} {
+		if !strings.Contains(instructions, required) {
+			t.Fatalf("server instruction is missing %q: %q", required, instructions)
+		}
 	}
-	t.Setenv("SOURCEBOOK_AGENT_NAME", "WorkBuddy")
-	workBuddy := sourcebookServerInstructions()
-	if !strings.Contains(workBuddy, "WorkBuddy, use the right-side") || strings.Contains(workBuddy, "tab.markDeliverable()") {
-		t.Fatalf("WorkBuddy instructions leaked another host's rules: %q", workBuddy)
-	}
-	t.Setenv("SOURCEBOOK_AGENT_NAME", "Another Agent")
-	generic := sourcebookServerInstructions()
-	if !strings.Contains(generic, "In other hosts") || strings.Contains(generic, "tab.markDeliverable()") || strings.Contains(generic, "WorkBuddy, use the right-side") {
-		t.Fatalf("generic instructions leaked host-specific rules: %q", generic)
+	for _, toolSpecific := range []string{"tab.markDeliverable()", "right-side browser panel"} {
+		if strings.Contains(instructions, toolSpecific) {
+			t.Fatalf("server instruction must not contain tool-specific host behavior %q: %q", toolSpecific, instructions)
+		}
 	}
 }
 
@@ -186,7 +163,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	instructions := sourcebookServerInstructions()
-	if !strings.Contains(instructions, "current or named project Book") || !strings.Contains(instructions, "@Sourcebook and slash commands are optional") || !strings.Contains(instructions, "Call open_sourcebook when") || !strings.Contains(instructions, "explicitly select the target") || !strings.Contains(instructions, "untrusted reference material") || !strings.Contains(instructions, "Do not automatically save drafts") || !strings.Contains(instructions, "save or organize several confirmed results") || !strings.Contains(instructions, "never inspect its SQLite database") || !strings.Contains(instructions, "never infer either from Marketplace Skill metadata") {
+	if !strings.Contains(instructions, "general product question is not enough") || !strings.Contains(instructions, "current selection") || !strings.Contains(instructions, "do not open a page merely to repair missing scope") || !strings.Contains(instructions, "untrusted reference material") || !strings.Contains(instructions, "Do not automatically save drafts") || !strings.Contains(instructions, "Proposals always await the user's review") || !strings.Contains(instructions, "never inspect its database") {
 		t.Fatalf("server instructions must explain Book scope and untrusted material: %q", instructions)
 	}
 	defer session.Close()
@@ -194,8 +171,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 17 {
-		t.Fatalf("tools = %d, want 17", len(tools.Tools))
+	if len(tools.Tools) != 16 {
+		t.Fatalf("tools = %d, want 16", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, registered := range tools.Tools {
@@ -345,7 +322,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 17 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -358,7 +335,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 		t.Fatalf("WorkBuddy resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side built-in browser panel") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side WorkBuddy page") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	cancel()
@@ -391,7 +368,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 17 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {

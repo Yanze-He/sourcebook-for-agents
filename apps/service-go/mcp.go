@@ -81,7 +81,7 @@ func (server *Server) mcpSettingsPayload(settings desktopSettings) map[string]an
 		"enabled":      settings.MCPEnabled,
 		"enabledAt":    settings.MCPEnabledAt,
 		"serviceReady": settings.MCPEnabled && settings.MCPToken != "",
-		"guideUrl":     "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/install-agent-plugin.md",
+		"guideUrl":     "https://github.com/Yanze-He/sourcebook-for-agents/blob/main/docs/connect-agents.md",
 		"installReady": true,
 		"codex":        server.codexMCPStatus(),
 		"workbuddy":    server.workBuddyMCPStatus(),

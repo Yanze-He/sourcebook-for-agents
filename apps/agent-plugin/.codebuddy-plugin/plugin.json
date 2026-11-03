@@ -1,9 +1,0 @@
-{
-  "name": "sourcebook",
-  "version": "0.1.2-beta.4",
-  "description": "Use a local Sourcebook library through the Sourcebook Desktop-managed MCP connection and workflow Skill.",
-  "author": { "name": "Sourcebook" },
-  "homepage": "https://github.com/Yanze-He/sourcebook-plugin",
-  "repository": "https://github.com/Yanze-He/sourcebook-plugin",
-  "license": "MIT"
-}
