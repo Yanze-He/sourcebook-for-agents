@@ -1379,7 +1379,7 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, onNotice, setting
   const [current, setCurrent] = useState<MCPSettingsResponse | null>(settings);
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => { if (!isOpen) return; void request<MCPSettingsResponse>("/api/settings/mcp").then((value) => { setCurrent(value); onLoad(value); }).catch((reason) => onNotice(errorMessage(reason), "error")); }, [isOpen]);
-  const apply = async (key: string, path: string, method = "POST") => { setBusy(key); try { const value = await request<MCPSettingsResponse>(path, { method, body: method === "POST" ? JSON.stringify({}) : undefined }); setCurrent(value); onLoad(value); onNotice(mcpActionNotice(key, zh), "success"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
+  const apply = async (key: string, path: string, method = "POST") => { setBusy(key); try { const value = await request<MCPSettingsResponse>(path, { method, body: method === "POST" ? JSON.stringify({}) : undefined }); setCurrent(value); onLoad(value); onNotice(mcpActionNotice(key, zh, value.workbuddy?.status), "success"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
   const inspectCodex = async () => { setBusy("codex-check"); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); const status = value.codex?.status || "unavailable"; onNotice(mcpInspectionNotice("Codex", status, zh), status === "connected" ? "success" : "neutral"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
   const inspectWorkBuddy = async () => { setBusy("workbuddy-check"); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); const status = value.workbuddy?.status || "unavailable"; onNotice(mcpInspectionNotice("WorkBuddy", status, zh), status === "connected" ? "success" : "neutral"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
   if (!isOpen) return null;
@@ -2048,13 +2048,13 @@ function copiedForAgentMessage(count: number, kind: "file" | "link", language: L
   if (language === "zh") return `已复制 ${count} 个${kind === "file" ? "文件" : "链接"}，请粘贴到 Agent 输入框。`;
   return `Copied ${count} ${kind}${count === 1 ? "" : "s"}. Paste ${count === 1 ? "it" : "them"} into the Agent input.`;
 }
-function mcpActionNotice(action: string, zh: boolean) {
+function mcpActionNotice(action: string, zh: boolean, workBuddyStatus?: string) {
   if (zh) {
     if (action === "access-enable") return "已允许本机 Agent 访问。";
     if (action === "access-revoke") return "已撤销本机 Agent 访问。现有连接配置会保留，但后续调用会被拒绝。";
     if (action === "codex") return "已配置 Codex。请新开 Codex 对话后使用 Sourcebook。";
     if (action === "codex-remove") return "已移除由 Sourcebook Desktop 管理的 Codex 配置。";
-    if (action === "workbuddy") return "已写入 WorkBuddy 配置。请在 WorkBuddy 中信任 Sourcebook 后新开对话。";
+    if (action === "workbuddy") return workBuddyStatus === "connected" ? "已写入 WorkBuddy 配置，并检测到已信任 Sourcebook。请新开对话。" : "已写入 WorkBuddy 配置，但尚未检测到信任。请在 WorkBuddy 中信任 Sourcebook 后新开对话。";
     if (action === "workbuddy-disable") return "已停用 WorkBuddy 配置。已有对话仍可能保留当前连接。";
     return "连接设置已更新。";
   }
@@ -2062,7 +2062,7 @@ function mcpActionNotice(action: string, zh: boolean) {
   if (action === "access-revoke") return "Local-agent access was revoked. Existing connection entries remain, but future calls will be rejected.";
   if (action === "codex") return "Codex is configured. Start a new Codex conversation to use Sourcebook.";
   if (action === "codex-remove") return "The Codex configuration managed by Sourcebook Desktop was removed.";
-  if (action === "workbuddy") return "WorkBuddy is configured. Trust Sourcebook in WorkBuddy, then start a new conversation.";
+  if (action === "workbuddy") return workBuddyStatus === "connected" ? "WorkBuddy is configured and has trusted Sourcebook. Start a new conversation." : "WorkBuddy is configured, but Sourcebook is not trusted yet. Trust it in WorkBuddy, then start a new conversation.";
   if (action === "workbuddy-disable") return "The WorkBuddy configuration is disabled. Existing conversations may keep their current connection.";
   return "Connection settings were updated.";
 }

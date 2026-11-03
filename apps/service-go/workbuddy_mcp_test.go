@@ -48,6 +48,12 @@ func TestDesktopManagedWorkBuddyConnectionPreservesOtherServersAndUsesStableLaun
 	if err := server.setWorkBuddyMCP(result, false); err != nil {
 		t.Fatal(err)
 	}
+	var initialPayload struct {
+		WorkBuddy workBuddyMCPStatus `json:"workbuddy"`
+	}
+	if err := json.Unmarshal(result.Body.Bytes(), &initialPayload); err != nil || initialPayload.WorkBuddy.Status != "awaiting_trust" {
+		t.Fatalf("initial trust check = %#v, %v", initialPayload.WorkBuddy, err)
+	}
 	document, err := readWorkBuddyMCPDocument(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -59,6 +65,30 @@ func TestDesktopManagedWorkBuddyConnectionPreservesOtherServersAndUsesStableLaun
 	sourcebook := servers["sourcebook"].(map[string]any)
 	if sourcebook["command"] != launcher || boolValue(sourcebook["disabled"]) || !isDesktopManagedWorkBuddyConfig(sourcebook) {
 		t.Fatalf("Sourcebook WorkBuddy config = %#v", sourcebook)
+	}
+	if status := server.workBuddyMCPStatus(); status.Status != "awaiting_trust" {
+		t.Fatalf("untrusted WorkBuddy status = %#v", status)
+	}
+	approvalKey, ok := workBuddyMCPApprovalKey(sourcebook)
+	if !ok {
+		t.Fatalf("approval key was not created for %#v", sourcebook)
+	}
+	approvals, _ := json.Marshal(map[string]int64{approvalKey: 1})
+	if err := os.WriteFile(filepath.Join(workBuddyDir, "mcp-approvals.json"), approvals, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := server.workBuddyMCPStatus(); status.Status != "connected" {
+		t.Fatalf("trusted WorkBuddy status = %#v", status)
+	}
+	trustedResult := httptest.NewRecorder()
+	if err := server.setWorkBuddyMCP(trustedResult, false); err != nil {
+		t.Fatal(err)
+	}
+	var trustedPayload struct {
+		WorkBuddy workBuddyMCPStatus `json:"workbuddy"`
+	}
+	if err := json.Unmarshal(trustedResult.Body.Bytes(), &trustedPayload); err != nil || trustedPayload.WorkBuddy.Status != "connected" {
+		t.Fatalf("trusted response = %#v, %v", trustedPayload.WorkBuddy, err)
 	}
 	if err := server.setWorkBuddyMCP(httptest.NewRecorder(), true); err != nil {
 		t.Fatal(err)

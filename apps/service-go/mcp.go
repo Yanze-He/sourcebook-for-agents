@@ -6,6 +6,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
@@ -188,7 +189,14 @@ func (server *Server) workBuddyMCPStatus() workBuddyMCPStatus {
 	if boolValue(serverConfig["disabled"]) {
 		return workBuddyMCPStatus{Status: "disabled", Message: "Reconnect to enable it for new WorkBuddy conversations."}
 	}
-	return workBuddyMCPStatus{Status: "connected", Message: "If WorkBuddy asks, approve Sourcebook once in MCP service management."}
+	trusted, err := workBuddyMCPTrusted(serverConfig)
+	if err != nil {
+		return workBuddyMCPStatus{Status: "unavailable", Message: "WorkBuddy trust status could not be checked."}
+	}
+	if !trusted {
+		return workBuddyMCPStatus{Status: "awaiting_trust", Message: "WorkBuddy has not trusted Sourcebook yet. Approve it once in MCP service management."}
+	}
+	return workBuddyMCPStatus{Status: "connected", Message: "WorkBuddy has trusted Sourcebook. Start a new conversation to load it."}
 }
 
 func (server *Server) setWorkBuddyMCP(response http.ResponseWriter, disabled bool) error {
@@ -230,14 +238,77 @@ func (server *Server) setWorkBuddyMCP(response http.ResponseWriter, disabled boo
 	if err := writeWorkBuddyMCPDocument(path, document); err != nil {
 		return &apiError{status: http.StatusBadGateway, code: "WORKBUDDY_CONFIG_WRITE_FAILED", message: "WorkBuddy connection could not be saved."}
 	}
-	payload := server.mcpSettingsPayload(settings)
-	if disabled {
-		payload["workbuddy"] = workBuddyMCPStatus{Status: "disabled", Message: "Disconnected for new WorkBuddy conversations. Existing conversations keep their current MCP process."}
-	} else {
-		payload["workbuddy"] = workBuddyMCPStatus{Status: "awaiting_trust", Message: "Open WorkBuddy MCP service management and approve Sourcebook once, then use a new conversation."}
-	}
-	writeJSON(response, http.StatusOK, payload)
+	writeJSON(response, http.StatusOK, server.mcpSettingsPayload(settings))
 	return nil
+}
+
+func workBuddyMCPTrusted(config map[string]any) (bool, error) {
+	key, ok := workBuddyMCPApprovalKey(config)
+	if !ok {
+		return false, errors.New("WorkBuddy configuration is invalid")
+	}
+	path, err := workBuddyMCPApprovalPath()
+	if err != nil {
+		return false, err
+	}
+	contents, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	approvals := map[string]json.RawMessage{}
+	if err := json.Unmarshal(contents, &approvals); err != nil {
+		return false, err
+	}
+	_, trusted := approvals[key]
+	return trusted, nil
+}
+
+func workBuddyMCPApprovalKey(config map[string]any) (string, bool) {
+	command, ok := config["command"].(string)
+	if !ok || strings.TrimSpace(command) == "" {
+		return "", false
+	}
+	args, ok := stringValues(config["args"])
+	if !ok {
+		return "", false
+	}
+	env, ok := config["env"].(map[string]any)
+	if !ok {
+		return "", false
+	}
+	envKeys := make([]string, 0, len(env))
+	for key := range env {
+		envKeys = append(envKeys, key)
+	}
+	sort.Strings(args)
+	sort.Strings(envKeys)
+	digest := sha256.Sum256([]byte(command + "|" + strings.Join(args, "|") + "|" + strings.Join(envKeys, "|")))
+	return fmt.Sprintf("%x::sourcebook", digest), true
+}
+
+func stringValues(value any) ([]string, bool) {
+	if value == nil {
+		return []string{}, true
+	}
+	entries, ok := value.([]any)
+	if !ok {
+		if strings, stringsOK := value.([]string); stringsOK {
+			return append([]string{}, strings...), true
+		}
+		return nil, false
+	}
+	result := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		text, ok := entry.(string)
+		if !ok {
+			return nil, false
+		}
+		result = append(result, text)
+	}
+	return result, true
 }
 
 func desktopMCPLauncherPath() (string, error) {
@@ -276,6 +347,14 @@ func workBuddyMCPConfigPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".workbuddy", "mcp.json"), nil
+}
+
+func workBuddyMCPApprovalPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".workbuddy", "mcp-approvals.json"), nil
 }
 
 func readWorkBuddyMCPDocument(path string) (map[string]any, error) {

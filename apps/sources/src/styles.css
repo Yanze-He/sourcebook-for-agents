@@ -178,6 +178,16 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   .sources-footer-actions { justify-content:space-between; }
   .sources-more-button { min-width:0; flex:1; }
 }
+@media (min-width:701px) {
+  .sources-page.sources-surface.has-agent-banner .sources-batch-footer.has-selection,
+  .sources-page.sources-surface.has-agent-banner .sources-batch-footer.is-empty {
+    width:fit-content;
+    max-width:calc(100% - 40px);
+    margin:10px auto 14px;
+    border:1px solid rgba(255,255,255,.15);
+    border-radius:11px;
+  }
+}
 .mcp-suggestions-header-actions .secondary-button { white-space:nowrap; }
 .mcp-install-heading { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; row-gap:4px; }
 .mcp-install-title-row { display:flex; grid-column:1/-1; align-items:center; justify-content:flex-start; gap:4px; }
