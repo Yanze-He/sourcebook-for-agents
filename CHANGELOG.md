@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Keep the **Send to Agent** prompt and its usage guidance in separate, sequential sections when a large material scope is expanded; the modal scrolls as one surface instead of allowing the prompt editor to overlap the guidance.
 - Verify WorkBuddy trust from its local approval record when Sourcebook writes or checks the Desktop-managed connection, so the card and Toast distinguish a trusted configuration from one still awaiting approval. In wide Sourcebook pages, keep the selection bar centered and content-sized instead of spanning the entire page; narrow panels retain their one-line layout.
 - Simplify **Add materials** to records, local files, and clipboard import; Picker installation remains available from Settings. Tighten **Connect an Agent** by removing its redundant footer information, localizing action feedback, and showing every connect, check, remove, disable, or local-access result as a Toast. WorkBuddy’s secondary action now accurately reads **Disable** because it disables Sourcebook for new conversations rather than deleting its configuration.
 - Use one clear copy confirmation across files, links, and prompts: show the copied count and tell the user to paste it into the Agent input.
