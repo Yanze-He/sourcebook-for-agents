@@ -547,13 +547,13 @@ export default function SourcebookSources() {
     try {
       if (hasCopyablePackFile(item)) {
         const result = await request<{ copied: number }>(bookPath("/api/source-packs/copy-materials", item.bookId), { method: "POST", body: JSON.stringify({ sourceItemIds: [item.id] }) });
-        showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件，可粘贴到 Agent 对话框。` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}. Paste them into your agent chat.`, 3600, "success");
+        showSourcesMessage(copiedForAgentMessage(result.copied, "file", language), 3600, "success");
         return;
       }
       const link = webLinkFor(item);
       if (!link) throw new Error(language === "zh" ? "此素材没有可复制的文件或链接。" : "This source has no copyable file or link.");
       await copyTextToClipboard(link);
-      showSourcesMessage(language === "zh" ? "链接已复制。" : "Link copied.", 3600, "success");
+      showSourcesMessage(copiedForAgentMessage(1, "link", language), 3600, "success");
     } catch (error) {
       showSourcesMessage(`Could not copy this source: ${errorMessage(error)}`, 6000, "error");
     }
@@ -562,7 +562,7 @@ export default function SourcebookSources() {
     try {
       const result = await request<{ copied: number; skipped: number; linkReferences: number }>(bookPath("/api/source-packs/copy-materials", activeBookId), { method: "POST", body: JSON.stringify({ sourceItemIds: selectedIds }) });
       const detail = result.skipped ? (language === "zh" ? `${result.skipped} 个没有本地文件的素材会在复制提示词时以链接提供。` : `${result.skipped} source${result.skipped === 1 ? "" : "s"} without a local file will be included as links when you copy the prompt.`) : "";
-      showSourcesMessage(language === "zh" ? `已复制 ${result.copied} 个文件，可粘贴到 Agent 对话框。${detail}` : `Copied ${result.copied} file${result.copied === 1 ? "" : "s"}. Paste them into your agent chat.${detail ? " " + detail : ""}`, 3600, "success");
+      showSourcesMessage(copiedForAgentMessage(result.copied, "file", language) + detail, 3600, "success");
       return true;
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制素材：${errorMessage(error)}` : `Could not copy sources: ${errorMessage(error)}`, 6000, "error");
@@ -574,13 +574,13 @@ export default function SourcebookSources() {
     if (!links.length) return;
     try {
       await copyTextToClipboard(links.join("\n"));
-      showSourcesMessage(language === "zh" ? `已复制 ${links.length} 个链接。` : `Copied ${links.length} link${links.length === 1 ? "" : "s"}.`, 3600, "success");
+      showSourcesMessage(copiedForAgentMessage(links.length, "link", language), 3600, "success");
     } catch (error) { showSourcesMessage(language === "zh" ? `无法复制链接：${errorMessage(error)}` : `Could not copy links: ${errorMessage(error)}`, 6000, "error"); }
   }
   async function copyPackPrompt(prompt: string) {
     try {
       await copyTextToClipboard(prompt);
-      showSourcesMessage(language === "zh" ? "提示词已复制，可粘贴到 Agent 对话框。" : "Prompt copied. Paste it into your agent chat.", 3600, "success");
+      showSourcesMessage(language === "zh" ? "提示词已复制，请粘贴到 Agent 输入框。" : "Prompt copied. Paste it into the Agent input.", 3600, "success");
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制提示词：${errorMessage(error)}` : `Could not copy prompt: ${errorMessage(error)}`, 6000, "error");
     }
@@ -2047,6 +2047,10 @@ function agentPageConnectionErrorMessage(error: unknown, language: Language) {
   if (/not connected to the current Agent session|belongs to a different Agent conversation/i.test(message)) return language === "zh" ? "此页的 Agent 连接已失效。请让 Agent 重新打开 Sourcebook。" : "This tab's Agent connection is no longer valid. Ask the Agent to reopen Sourcebook.";
   if (/book.+(not found|does not exist)/i.test(message)) return language === "zh" ? "当前 Book 已不可用。请刷新页面后重试。" : "The current Book is no longer available. Refresh the page and try again.";
   return language === "zh" ? `无法刷新连接：${message}` : `Could not refresh connection: ${message}`;
+}
+function copiedForAgentMessage(count: number, kind: "file" | "link", language: Language) {
+  if (language === "zh") return `已复制 ${count} 个${kind === "file" ? "文件" : "链接"}，请粘贴到 Agent 输入框。`;
+  return `Copied ${count} ${kind}${count === 1 ? "" : "s"}. Paste ${count === 1 ? "it" : "them"} into the Agent input.`;
 }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 async function copyTextToClipboard(text: string) {

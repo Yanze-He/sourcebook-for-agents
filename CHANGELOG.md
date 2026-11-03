@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Use one clear copy confirmation across files, links, and prompts: show the copied count and tell the user to paste it into the Agent input.
 - Make the Agent page connection action explicit: it shows an in-progress state and confirms whether the tab connected or its connection refreshed. If Desktop is unavailable, the page credential is no longer valid, or the Book disappeared, it shows the concrete recovery reason instead of silently failing.
 - Copy links and prompts directly through Sourcebook Desktop in WorkBuddy, where the embedded browser does not grant clipboard-write permission. The same direct-copy interaction remains intact.
 - Distinguish Select mode from Agent submissions with a pointer icon. Accepting every pending Agent submission now closes the review window after all items succeed; accepting one item keeps it open.
