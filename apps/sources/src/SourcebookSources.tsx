@@ -205,6 +205,7 @@ export default function SourcebookSources() {
   const [loading, setLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRefreshingAgentPageConnection, setIsRefreshingAgentPageConnection] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isBackupExportOpen, setIsBackupExportOpen] = useState(false);
   const [backupBookIds, setBackupBookIds] = useState<string[]>([]);
@@ -451,7 +452,18 @@ export default function SourcebookSources() {
   const refreshAgentPageConnection = async () => {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
-    if (!sessionId || !pageToken || !activeBookId) return;
+    const wasDisconnected = agentPageConnection === "disconnected";
+    if (isRefreshingAgentPageConnection) return;
+    if (!sessionId || !pageToken) {
+      showSourcesMessage(language === "zh" ? "此页缺少连接信息。请让 Agent 重新打开 Sourcebook。" : "This tab is missing its connection details. Ask the Agent to reopen Sourcebook.", 5000, "error");
+      return;
+    }
+    if (!activeBookId) {
+      showSourcesMessage(language === "zh" ? "当前 Book 尚未加载完成。请稍后重试。" : "The current Book has not finished loading. Try again shortly.", 5000, "error");
+      return;
+    }
+    setIsRefreshingAgentPageConnection(true);
+    showSourcesMessage(wasDisconnected ? (language === "zh" ? "正在连接此页…" : "Connecting this tab…") : (language === "zh" ? "正在刷新连接…" : "Refreshing connection…"), 0);
     try {
       await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken }) });
       await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
@@ -459,10 +471,11 @@ export default function SourcebookSources() {
         body: JSON.stringify({ pageToken, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } }),
       });
       setAgentPageConnection("connected");
+      showSourcesMessage(wasDisconnected ? (language === "zh" ? "此页已连接。" : "This tab is connected.") : (language === "zh" ? "连接已刷新。" : "Connection refreshed."), 3600, "success");
     } catch (error) {
       if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
-      else showSourcesMessage(language === "zh" ? `无法刷新连接：${errorMessage(error)}` : `Could not refresh connection: ${errorMessage(error)}`, 5000, "error");
-    }
+      showSourcesMessage(agentPageConnectionErrorMessage(error, language), 5000, "error");
+    } finally { setIsRefreshingAgentPageConnection(false); }
   };
   useEffect(() => {
     const sessionId = agentSessionIdRef.current;
@@ -891,7 +904,7 @@ export default function SourcebookSources() {
 
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className={`sources-page sources-surface public-sources-surface ${agentSessionIdRef.current ? "has-agent-banner" : ""}`} aria-label="Sources">
-      {agentSessionIdRef.current ? <div className={`agent-page-banner ${agentPageDisconnected ? "is-disconnected" : ""}`} role="status"><span className="agent-page-banner-mark">{agentPageDisconnected ? <Link2Off size={15} /> : agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageDisconnected ? (language === "zh" ? "本标签页未连接" : "Disconnected") : agentPageName}</strong><span>{agentPageDisconnected ? (language === "zh" ? "点击“连接此页”重新连接。" : "Connect this tab to reconnect.") : agentPageScopeMessage}</span></div><button className="agent-page-connection-action" onClick={() => void refreshAgentPageConnection()} type="button">{agentPageDisconnected ? (language === "zh" ? "连接此页" : "Connect this tab") : (language === "zh" ? "刷新连接" : "Refresh connection")}</button></div> : null}
+      {agentSessionIdRef.current ? <div className={`agent-page-banner ${agentPageDisconnected ? "is-disconnected" : ""}`} role="status"><span className="agent-page-banner-mark">{agentPageDisconnected ? <Link2Off size={15} /> : agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageDisconnected ? (language === "zh" ? "本标签页未连接" : "Disconnected") : agentPageName}</strong><span>{agentPageDisconnected ? (language === "zh" ? "点击“连接此页”重新连接。" : "Connect this tab to reconnect.") : agentPageScopeMessage}</span></div><button aria-busy={isRefreshingAgentPageConnection} className="agent-page-connection-action" disabled={isRefreshingAgentPageConnection} onClick={() => void refreshAgentPageConnection()} type="button">{isRefreshingAgentPageConnection ? <LoaderCircle className="spin" size={13} /> : null}{isRefreshingAgentPageConnection ? (language === "zh" ? "连接中…" : "Connecting…") : agentPageDisconnected ? (language === "zh" ? "连接此页" : "Connect this tab") : (language === "zh" ? "刷新连接" : "Refresh connection")}</button></div> : null}
       <header className="panel-head">
         <div className="panel-title-block">
           <div className="book-title-row">
@@ -958,7 +971,7 @@ export default function SourcebookSources() {
       {!loading && !bootstrapError && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
       {!loading && !bootstrapError && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onEnterBatchSelection={() => setIsBatchSelecting(true)} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onMarqueeSelect={addSelected} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onRevealLocal={revealLocalFile} onSelect={selectFromCard} onToggle={toggleSelected} /> : null}
       {isBatchSelecting ? <SourcesSelectionFooter activeBookId={activeBookId} books={books} copy={copy} count={selectedIds.length} hasFiles={selectedItems.some(hasCopyablePackFile)} hasLinks={selectedItems.some((item) => Boolean(webLinkFor(item)))} hasReusableSelection={hasReusableSelection} isActionsOpen={isBatchActionsOpen} isAgentPage={Boolean(agentSessionIdRef.current && !agentPageDisconnected)} isBookTransferOpen={isBookTransferOpen} isCopyOpen={isBatchCopyOpen} isTransferring={isTransferringSelected} language={language} onAddNote={() => { setIsBatchActionsOpen(false); setIsBatchNoteOpen(true); }} onClear={exitBatchSelection} onCopyFiles={() => { setIsBatchCopyOpen(false); void copyPackedMaterials(); }} onCopyLinks={() => { setIsBatchCopyOpen(false); void copySelectedLinks(); }} onDelete={() => { setIsBatchActionsOpen(false); setIsDeleteOpen(true); }} onOpenPack={() => { setIsBatchActionsOpen(false); setIsBookTransferOpen(false); setIsPackOpen(true); }} onRestoreLastSelection={restoreLastSelection} onToggleAll={toggleVisibleSelection} onToggleActions={() => setIsBatchActionsOpen((open) => !open)} onToggleCopy={() => setIsBatchCopyOpen((open) => !open)} onToggleTransfer={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} onTransfer={transferSelectedSources} transferRef={bookTransferRef} visibleCount={visibleItems.length} /> : null}
-      {message ? <p className={`sources-message is-${messageTone}`} role="status">{isRefreshing || isImporting ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
+      {message ? <p aria-live={messageTone === "error" ? "assertive" : "polite"} className={`sources-message is-${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{isRefreshing || isImporting || isRefreshingAgentPageConnection ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
     <SourceDetailModal focusNote={focusDetailNote} item={detailItem} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onTitleSave={saveTitle} />
     <DeleteModal count={selectedIds.length} isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={() => void removeSelected()} />
@@ -2027,6 +2040,14 @@ function bookPath(path: string, bookId: string | undefined) { if (!bookId || !pa
 async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(); let value = ""; const bytes = new Uint8Array(buffer); for (let index = 0; index < bytes.length; index += 0x8000) value += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(value); }
 async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
 function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)/i.test(errorMessage(error)); }
+function agentPageConnectionErrorMessage(error: unknown, language: Language) {
+  const message = errorMessage(error);
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) return language === "zh" ? "无法连接 Sourcebook Desktop。请确认应用仍在运行后重试。" : "Could not reach Sourcebook Desktop. Make sure the app is still running, then try again.";
+  if (/replaced by a newer page/i.test(message)) return language === "zh" ? "此页已被另一个 Sourcebook 标签页替代。请在该标签页查看，或重新连接此页。" : "This tab was replaced by another Sourcebook tab. Use that tab, or reconnect this one.";
+  if (/not connected to the current Agent session|belongs to a different Agent conversation/i.test(message)) return language === "zh" ? "此页的 Agent 连接已失效。请让 Agent 重新打开 Sourcebook。" : "This tab's Agent connection is no longer valid. Ask the Agent to reopen Sourcebook.";
+  if (/book.+(not found|does not exist)/i.test(message)) return language === "zh" ? "当前 Book 已不可用。请刷新页面后重试。" : "The current Book is no longer available. Refresh the page and try again.";
+  return language === "zh" ? `无法刷新连接：${message}` : `Could not refresh connection: ${message}`;
+}
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 async function copyTextToClipboard(text: string) {
   const host = new URLSearchParams(window.location.search).get("sourcebookHost");

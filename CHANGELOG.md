@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Make the Agent page connection action explicit: it shows an in-progress state and confirms whether the tab connected or its connection refreshed. If Desktop is unavailable, the page credential is no longer valid, or the Book disappeared, it shows the concrete recovery reason instead of silently failing.
 - Copy links and prompts directly through Sourcebook Desktop in WorkBuddy, where the embedded browser does not grant clipboard-write permission. The same direct-copy interaction remains intact.
 - Distinguish Select mode from Agent submissions with a pointer icon. Accepting every pending Agent submission now closes the review window after all items succeed; accepting one item keeps it open.
 - Keep Agent submissions in the page that created them. Sourcebook now persists the originating Agent page identity, validates its current page token for review, and never uses a host preview tool to open another page after a proposal. In WorkBuddy, a known connected panel is no longer passed to `present_files`, which can only create a new preview rather than navigate the existing one.
