@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Keep Agent submissions in the page that created them. Sourcebook now persists the originating Agent page identity, validates its current page token for review, and never uses a host preview tool to open another page after a proposal. In WorkBuddy, a known connected panel is no longer passed to `present_files`, which can only create a new preview rather than navigate the existing one.
 - Retire the separate Sourcebook Agent Skill and marketplace package. Desktop's MCP server now carries the runtime guidance, while individual tool descriptions define tool-specific behavior and side effects.
 - Make duplicate browser views of one Agent session deterministic. Exactly one active page may write the conversation's Book, selection, and filter; background refreshes from another view remain passive. A passive page identifies itself and offers an explicit **Use this tab** action. Remove the central selection overlay so it no longer obscures materials.
 - Keep a WorkBuddy conversation connected to its existing Sourcebook page when WorkBuddy recreates its local MCP helper. The page restores its own Book, selected materials, and current filter instead of falling back to Desktop's global browsing Book or opening an extra tab.

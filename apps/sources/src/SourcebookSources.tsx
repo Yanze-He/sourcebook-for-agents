@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, ClipboardPaste, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, FolderOpen, Funnel, Globe2, HardDrive, Image, Info, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, MousePointer2, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -240,6 +240,14 @@ export default function SourcebookSources() {
   const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
 
+  const agentSuggestionPath = useCallback((path: string) => {
+    const sessionId = agentSessionIdRef.current;
+    const pageToken = agentSessionTokenRef.current;
+    if (!sessionId || !pageToken) return path;
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}agentSession=${encodeURIComponent(sessionId)}&agentSessionToken=${encodeURIComponent(pageToken)}`;
+  }, []);
+
   function showSourcesMessage(nextMessage: string, duration = 3600, tone: "neutral" | "success" | "error" = "neutral") {
     if (messageTimeoutRef.current) window.clearTimeout(messageTimeoutRef.current);
     setMessageTone(tone);
@@ -249,7 +257,7 @@ export default function SourcebookSources() {
 
   async function refreshMCPSuggestions({ openOnNew = false }: { openOnNew?: boolean } = {}) {
     try {
-      const response = await request<MCPSuggestionsResponse>("/api/mcp/suggestions");
+      const response = await request<MCPSuggestionsResponse>(agentSuggestionPath("/api/mcp/suggestions"));
       const suggestions = response.suggestions || [];
       const pendingIds = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id));
       const knownIds = knownPendingSuggestionIdsRef.current;
@@ -395,11 +403,13 @@ export default function SourcebookSources() {
     const refreshWhenVisible = () => { if (!document.hidden) { refresh(); void loadBooks(); } };
     const refreshWhenFocused = () => { refresh(); void loadBooks(); };
     window.addEventListener("focus", refreshWhenFocused);
+    window.addEventListener("pageshow", refreshWhenFocused);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       window.clearTimeout(refreshTimer);
       stream.close();
       window.removeEventListener("focus", refreshWhenFocused);
+      window.removeEventListener("pageshow", refreshWhenFocused);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [activeBookId]);
@@ -968,7 +978,7 @@ export default function SourcebookSources() {
     <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
     <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
     <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} settings={mcpSettings} />
-    <MCPSuggestionsModal batchId={requestedSubmissionBatchIdRef.current} isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`, { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`, { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestions={mcpSuggestions} />
+    <MCPSuggestionsModal batchId={requestedSubmissionBatchIdRef.current} isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`), { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`), { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestionPath={agentSuggestionPath} suggestions={mcpSuggestions} />
   </main></LanguageContext.Provider>;
 }
 
@@ -1393,14 +1403,14 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
   </div>;
 }
 
-function MCPSuggestionsModal({ batchId, isOpen, language, onClose, onConnectAgent, onLoad, onReview, onUpdate, suggestions }: { batchId: string | null; isOpen: boolean; language: Language; onClose: () => void; onConnectAgent: () => void; onLoad: (suggestions: MCPSuggestionEntry[]) => void; onReview: (bookId: string, suggestionId: string, decision: "accept" | "reject") => Promise<void>; onUpdate: (bookId: string, suggestionId: string, payload: { title: string; note: string }) => Promise<void>; suggestions: MCPSuggestionEntry[] }) {
+function MCPSuggestionsModal({ batchId, isOpen, language, onClose, onConnectAgent, onLoad, onReview, onUpdate, suggestionPath, suggestions }: { batchId: string | null; isOpen: boolean; language: Language; onClose: () => void; onConnectAgent: () => void; onLoad: (suggestions: MCPSuggestionEntry[]) => void; onReview: (bookId: string, suggestionId: string, decision: "accept" | "reject") => Promise<void>; onUpdate: (bookId: string, suggestionId: string, payload: { title: string; note: string }) => Promise<void>; suggestionPath: (path: string) => string; suggestions: MCPSuggestionEntry[] }) {
   const zh = language === "zh";
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"pending" | "processed">("pending");
   const [editingSuggestionIds, setEditingSuggestionIds] = useState<Set<string>>(() => new Set());
   const saveHandlers = useRef(new Map<string, () => Promise<void>>());
-  useEffect(() => { if (!isOpen) return; setView("pending"); setError(""); setEditingSuggestionIds(new Set()); const suffix = batchId ? "?batchId=" + encodeURIComponent(batchId) : ""; void request<MCPSuggestionsResponse>("/api/mcp/suggestions" + suffix).then((response) => onLoad(response.suggestions || [])).catch((reason) => setError(errorMessage(reason))); }, [batchId, isOpen]);
+  useEffect(() => { if (!isOpen) return; setView("pending"); setError(""); setEditingSuggestionIds(new Set()); const suffix = batchId ? "?batchId=" + encodeURIComponent(batchId) : ""; void request<MCPSuggestionsResponse>(suggestionPath("/api/mcp/suggestions" + suffix)).then((response) => onLoad(response.suggestions || [])).catch((reason) => setError(errorMessage(reason))); }, [batchId, isOpen, suggestionPath]);
   if (!isOpen) return null;
   const scopedSuggestions = batchId ? suggestions.filter((entry) => entry.suggestion.batchId === batchId) : suggestions;
   const pending = scopedSuggestions.filter((entry) => entry.suggestion.status === "pending");
@@ -1449,7 +1459,7 @@ function MCPSuggestionsModal({ batchId, isOpen, language, onClose, onConnectAgen
           const isEditing = canEdit && editingSuggestionIds.has(entry.suggestion.id);
           return <article className="mcp-suggestion" key={entry.suggestion.id}>
             <div className="mcp-suggestion-head"><div><strong>{suggestionTitle(entry.suggestion.kind, zh)}</strong><small>{entry.book.name} · {entry.suggestion.agentName} · {formatDateTime(entry.suggestion.createdAt)}</small></div><span className={`mcp-suggestion-status is-${entry.suggestion.status}`}>{suggestionStatus(entry.suggestion.status, zh)}</span></div>
-            <SuggestionPreview editing={isEditing} entry={entry} zh={zh} />
+            <SuggestionPreview editing={isEditing} entry={entry} suggestionPath={suggestionPath} zh={zh} />
             {isEditing ? <SuggestionEditFields entry={entry} onRegisterSave={(save) => saveHandlers.current.set(entry.suggestion.id, save)} onSave={(payload) => onUpdate(entry.book.id, entry.suggestion.id, payload)} zh={zh} /> : null}
             {entry.suggestion.reviewError ? <p className="mcp-suggestion-error">{entry.suggestion.reviewError}</p> : null}
             {entry.suggestion.status === "pending" ? <div className="mcp-suggestion-actions">{isEditing ? <><button className="text-button" disabled={busy !== null} onClick={() => cancelEditing(entry.suggestion.id)} onMouseDown={(event) => event.preventDefault()} type="button">{zh ? "取消" : "Cancel"}</button><button className="primary-button" disabled={busy !== null} onClick={() => void confirmEditing(entry)} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "确定" : "Confirm"}</button></> : <>{canEdit ? <button className="text-button" disabled={busy !== null} onClick={() => beginEditing(entry.suggestion.id)} type="button"><Pencil size={14} />{zh ? "编辑描述" : "Edit description"}</button> : null}<div className="mcp-suggestion-review-actions"><button className="text-button" disabled={busy !== null} onClick={() => void review(entry, "reject")} type="button">{zh ? "拒绝" : "Reject"}</button><button className="primary-button" disabled={busy !== null} onClick={() => void review(entry, "accept")} type="button">{busy === entry.suggestion.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "接受" : "Accept"}</button></div></>}</div> : null}
@@ -1516,7 +1526,7 @@ function SuggestionEditFields({ entry, onRegisterSave, onSave, zh }: { entry: MC
 function suggestionTitle(kind: MCPSuggestion["kind"], zh: boolean) { return ({ create_text_source: zh ? "新增文本素材" : "Create text source", import_local_file: zh ? "导入本地文件" : "Import local file", update_source_metadata: zh ? "更新素材信息" : "Update source metadata", pack: zh ? "创建 Pack" : "Create Pack" })[kind]; }
 function suggestionStatus(status: MCPSuggestion["status"], zh: boolean) { return ({ pending: zh ? "待确认" : "Pending", accepted: zh ? "已接受" : "Accepted", rejected: zh ? "已拒绝" : "Rejected", stale: zh ? "无法应用" : "Could not apply" })[status]; }
 function SuggestionSummary({ note, title }: { note: unknown; title: string }) { return <div className="mcp-suggestion-summary"><h3>{title}</h3>{typeof note === "string" && note.trim() ? <div className="mcp-suggestion-note"><MarkdownContent compact value={note} /></div> : null}</div>; }
-function SuggestionPreview({ editing = false, entry, zh }: { editing?: boolean; entry: MCPSuggestionEntry; zh: boolean }) {
+function SuggestionPreview({ editing = false, entry, suggestionPath, zh }: { editing?: boolean; entry: MCPSuggestionEntry; suggestionPath: (path: string) => string; zh: boolean }) {
   const { suggestion, book } = entry;
   const payload = suggestion.payload;
   const [expanded, setExpanded] = useState(false);
@@ -1531,7 +1541,7 @@ function SuggestionPreview({ editing = false, entry, zh }: { editing?: boolean; 
     const path = typeof payload.path === "string" ? payload.path : "";
     const name = path.split(/[\\/]/).filter(Boolean).pop() || (zh ? "本地文件" : "Local file");
     const mediaKind = /\.(?:png|jpe?g|webp|gif)$/i.test(name) ? "image" : /\.(?:mp4|mov|webm)$/i.test(name) ? "video" : /\.(?:mp3|wav|m4a|aac|flac|ogg)$/i.test(name) ? "audio" : null;
-    const mediaUrl = `/api/mcp/suggestions/${encodeURIComponent(book.id)}/${encodeURIComponent(suggestion.id)}/preview`;
+    const mediaUrl = suggestionPath(`/api/mcp/suggestions/${encodeURIComponent(book.id)}/${encodeURIComponent(suggestion.id)}/preview`);
     return <div className="mcp-suggestion-preview">
       <div className="mcp-suggestion-file"><div className="mcp-suggestion-file-icon">{mediaKind === "image" ? <Image size={22} /> : mediaKind === "video" ? <Video size={22} /> : mediaKind === "audio" ? <Music2 size={22} /> : <FileUp size={22} />}</div><div className="mcp-suggestion-file-details"><strong title={name}>{name}</strong><small title={path}>{path}</small></div>{mediaKind ? <SuggestionMediaThumbnail kind={mediaKind} name={name} onOpen={() => setExpanded(true)} url={mediaUrl} zh={zh} /> : null}</div>
       {!editing ? <SuggestionSummary note={payload.note} title={String(payload.title || name)} /> : null}

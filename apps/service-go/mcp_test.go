@@ -149,6 +149,90 @@ func TestMCPBridgeRequiresPairingAndScopesSuggestionsToBooks(t *testing.T) {
 	}
 }
 
+func TestAgentSuggestionsAreLimitedToTheirBoundPage(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	call := func(method, path string, body string, headers map[string]string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(method, "http://127.0.0.1:4177"+path, strings.NewReader(body))
+		request.Host = "127.0.0.1:4177"
+		for key, value := range headers {
+			request.Header.Set(key, value)
+		}
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		return response
+	}
+	enable := call(http.MethodPost, "/api/settings/mcp", "{}", map[string]string{"content-type": "application/json"})
+	if enable.Code != http.StatusOK {
+		t.Fatalf("enable status = %d: %s", enable.Code, enable.Body.String())
+	}
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := "workbuddy-owner-a"
+	bridgeHeaders := map[string]string{"X-Sourcebook-MCP-Token": settings.MCPToken, "X-Sourcebook-Owner": owner}
+	register := func(id, token string) {
+		response := call(http.MethodPost, "/api/mcp/v1/agent-sessions", `{"sessionId":"`+id+`","pageToken":"`+token+`","bookId":"sourcebook","agentName":"WorkBuddy"}`, bridgeHeaders)
+		if response.Code != http.StatusOK {
+			t.Fatalf("register %s status = %d: %s", id, response.Code, response.Body.String())
+		}
+	}
+	register("session-a", "token-a-abcdefghijklmnopqrstuvwxyz")
+	register("session-b", "token-b-abcdefghijklmnopqrstuvwxyz")
+	proposalHeaders := map[string]string{
+		"X-Sourcebook-MCP-Token":        settings.MCPToken,
+		"X-Sourcebook-Owner":            owner,
+		"X-Sourcebook-Agent-Session":    "session-a",
+		"X-Sourcebook-Agent-Page-Token": "token-a-abcdefghijklmnopqrstuvwxyz",
+		"content-type":                  "application/json",
+	}
+	created := call(http.MethodPost, "/api/mcp/v1/books/sourcebook/proposals", `{"kind":"create_text_source","payload":{"title":"Only A","content":"Scoped proposal","note":"Created in session A."}}`, proposalHeaders)
+	if created.Code != http.StatusAccepted {
+		t.Fatalf("proposal status = %d: %s", created.Code, created.Body.String())
+	}
+	var payload struct {
+		Suggestion mcpSuggestion `json:"suggestion"`
+	}
+	if err := json.NewDecoder(created.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	list := func(id, token string) *httptest.ResponseRecorder {
+		path := "/api/mcp/suggestions"
+		if id != "" {
+			path += "?agentSession=" + id + "&agentSessionToken=" + token
+		}
+		return call(http.MethodGet, path, "", nil)
+	}
+	assertCount := func(response *httptest.ResponseRecorder, expected int) {
+		if response.Code != http.StatusOK {
+			t.Fatalf("suggestion list status = %d: %s", response.Code, response.Body.String())
+		}
+		var result struct {
+			Suggestions []struct {
+				Suggestion mcpSuggestion `json:"suggestion"`
+			} `json:"suggestions"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		if len(result.Suggestions) != expected {
+			t.Fatalf("suggestion count = %d, want %d: %#v", len(result.Suggestions), expected, result.Suggestions)
+		}
+	}
+	assertCount(list("session-a", "token-a-abcdefghijklmnopqrstuvwxyz"), 1)
+	assertCount(list("session-b", "token-b-abcdefghijklmnopqrstuvwxyz"), 0)
+	assertCount(list("", ""), 0)
+	wrongPageReview := call(http.MethodPost, "/api/mcp/suggestions/sourcebook/"+payload.Suggestion.ID+"/accept?agentSession=session-b&agentSessionToken=token-b-abcdefghijklmnopqrstuvwxyz", "", nil)
+	if wrongPageReview.Code != http.StatusNotFound {
+		t.Fatalf("other page reviewed a suggestion: %d: %s", wrongPageReview.Code, wrongPageReview.Body.String())
+	}
+}
+
 func TestMCPBookOperationsAndSubmissionBatchAreRetrySafe(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
 	if err != nil {

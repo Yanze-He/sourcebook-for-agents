@@ -40,16 +40,17 @@ type mcpActivity struct {
 }
 
 type mcpSuggestion struct {
-	ID            string         `json:"id"`
-	BatchID       string         `json:"batchId,omitempty"`
-	Kind          string         `json:"kind"`
-	Payload       map[string]any `json:"payload"`
-	SourceItemIDs []string       `json:"sourceItemIds"`
-	AgentName     string         `json:"agentName"`
-	CreatedAt     string         `json:"createdAt"`
-	Status        string         `json:"status"`
-	ReviewedAt    string         `json:"reviewedAt,omitempty"`
-	ReviewError   string         `json:"reviewError,omitempty"`
+	ID             string         `json:"id"`
+	BatchID        string         `json:"batchId,omitempty"`
+	AgentSessionID string         `json:"-"`
+	Kind           string         `json:"kind"`
+	Payload        map[string]any `json:"payload"`
+	SourceItemIDs  []string       `json:"sourceItemIds"`
+	AgentName      string         `json:"agentName"`
+	CreatedAt      string         `json:"createdAt"`
+	Status         string         `json:"status"`
+	ReviewedAt     string         `json:"reviewedAt,omitempty"`
+	ReviewError    string         `json:"reviewError,omitempty"`
 }
 
 type mcpSubmissionBatch struct {
@@ -852,10 +853,14 @@ func (server *Server) mcpCreateSuggestion(response http.ResponseWriter, request 
 	if agent == "" {
 		agent = "Local agent"
 	}
-	suggestion := mcpSuggestion{ID: "agent-suggestion-" + newID(), Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"}
+	agentSessionID, err := server.mcpProposalSessionID(request)
+	if err != nil {
+		return err
+	}
+	suggestion := mcpSuggestion{ID: "agent-suggestion-" + newID(), AgentSessionID: agentSessionID, Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"}
 	payloadJSON, _ := json.Marshal(payload)
 	idsJSON, _ := json.Marshal(ids)
-	if _, err = ctx.DB.Exec("INSERT INTO agent_suggestions (id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?)", suggestion.ID, "", kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
+	if _, err = ctx.DB.Exec("INSERT INTO agent_suggestions (id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?,?)", suggestion.ID, "", agentSessionID, kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
 		return err
 	}
 	server.publishSourceChange(bookID)
@@ -884,7 +889,14 @@ func (server *Server) mcpCreateSubmissionBatch(response http.ResponseWriter, req
 	if err != nil {
 		return err
 	}
+	agentSessionID, err := server.mcpProposalSessionID(request)
+	if err != nil {
+		return err
+	}
 	if existing, err := server.mcpSubmissionBatch(ctx, bookID, "", key, request.Host); err == nil {
+		if len(existing.Suggestions) > 0 && existing.Suggestions[0].AgentSessionID != agentSessionID {
+			return &apiError{status: http.StatusConflict, code: "MCP_IDEMPOTENCY_KEY_CONFLICT", message: "This idempotency key belongs to a different Sourcebook Agent page."}
+		}
 		server.recordMCPActivity(&settings, request, bookID, "propose_source_bundle", "reused")
 		writeJSON(response, http.StatusAccepted, map[string]any{"batch": existing, "reused": true})
 		return nil
@@ -930,7 +942,7 @@ func (server *Server) mcpCreateSubmissionBatch(response http.ResponseWriter, req
 			}
 			payload["base"] = base
 		}
-		suggestions = append(suggestions, mcpSuggestion{ID: "agent-suggestion-" + newID(), BatchID: batchID, Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"})
+		suggestions = append(suggestions, mcpSuggestion{ID: "agent-suggestion-" + newID(), BatchID: batchID, AgentSessionID: agentSessionID, Kind: kind, Payload: payload, SourceItemIDs: ids, AgentName: agent, CreatedAt: now(), Status: "pending"})
 	}
 	tx, err := ctx.DB.Begin()
 	if err != nil {
@@ -943,7 +955,7 @@ func (server *Server) mcpCreateSubmissionBatch(response http.ResponseWriter, req
 	for _, suggestion := range suggestions {
 		payloadJSON, _ := json.Marshal(suggestion.Payload)
 		idsJSON, _ := json.Marshal(suggestion.SourceItemIDs)
-		if _, err = tx.Exec("INSERT INTO agent_suggestions (id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?)", suggestion.ID, batchID, suggestion.Kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
+		if _, err = tx.Exec("INSERT INTO agent_suggestions (id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error) VALUES (?,?,?,?,?,?,?,?,?,?,?)", suggestion.ID, batchID, suggestion.AgentSessionID, suggestion.Kind, string(payloadJSON), string(idsJSON), agent, suggestion.CreatedAt, "pending", "", ""); err != nil {
 			return err
 		}
 	}
@@ -988,7 +1000,7 @@ func (server *Server) mcpSubmissionBatch(ctx *BookContext, bookID, batchID, key,
 	}
 	batch.BookID = bookID
 	batch.ReviewURL = "http://" + host + "/?bookId=" + url.QueryEscape(bookID) + "&panel=agent-submissions&batchId=" + url.QueryEscape(batch.ID)
-	rows, err := ctx.DB.Query("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE batch_id=? ORDER BY created_at,id", batch.ID)
+	rows, err := ctx.DB.Query("SELECT id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE batch_id=? ORDER BY created_at,id", batch.ID)
 	if err != nil {
 		return batch, err
 	}
@@ -1028,9 +1040,12 @@ func (server *Server) updateMCPSuggestion(response http.ResponseWriter, request 
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	suggestion, err := scanSuggestion(row)
 	if err != nil {
+		return err
+	}
+	if err := server.authorizeSuggestionRequest(request, suggestion.AgentSessionID); err != nil {
 		return err
 	}
 	if suggestion.Status != "pending" || (suggestion.Kind != "import_local_file" && suggestion.Kind != "create_text_source") {
@@ -1123,7 +1138,11 @@ func ensureSuggestionSources(ctx *BookContext, ids []string) error {
 	return nil
 }
 
-func (server *Server) listMCPSuggestions(response http.ResponseWriter, batchID string) error {
+func (server *Server) listMCPSuggestions(response http.ResponseWriter, request *http.Request, batchID string) error {
+	agentSessionID, err := server.agentSuggestionSessionID(request)
+	if err != nil {
+		return err
+	}
 	manifest, err := server.library.List()
 	if err != nil {
 		return err
@@ -1134,10 +1153,10 @@ func (server *Server) listMCPSuggestions(response http.ResponseWriter, batchID s
 		if err != nil {
 			return err
 		}
-		query := `SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions`
-		args := []any{}
+		query := `SELECT id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE agent_session_id=?`
+		args := []any{agentSessionID}
 		if batchID != "" {
-			query += " WHERE batch_id=?"
+			query += " AND batch_id=?"
 			args = append(args, batchID)
 		}
 		query += " ORDER BY created_at DESC"
@@ -1167,7 +1186,7 @@ type suggestionRow interface{ Scan(...any) error }
 func scanSuggestion(row suggestionRow) (mcpSuggestion, error) {
 	var s mcpSuggestion
 	var payload, ids string
-	if err := row.Scan(&s.ID, &s.BatchID, &s.Kind, &payload, &ids, &s.AgentName, &s.CreatedAt, &s.Status, &s.ReviewedAt, &s.ReviewError); err != nil {
+	if err := row.Scan(&s.ID, &s.BatchID, &s.AgentSessionID, &s.Kind, &payload, &ids, &s.AgentName, &s.CreatedAt, &s.Status, &s.ReviewedAt, &s.ReviewError); err != nil {
 		return s, err
 	}
 	s.Payload = map[string]any{}
@@ -1189,10 +1208,13 @@ func (server *Server) previewMCPSuggestion(response http.ResponseWriter, request
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	suggestion, err := scanSuggestion(row)
 	if err != nil || suggestion.Kind != "import_local_file" {
 		return &apiError{status: http.StatusNotFound, code: "MCP_PREVIEW_UNAVAILABLE", message: "Image preview is unavailable."}
+	}
+	if err := server.authorizeSuggestionRequest(request, suggestion.AgentSessionID); err != nil {
+		return err
 	}
 	path := stringValue(suggestion.Payload["path"])
 	expectedMime, modality, supported := localImportFormat(path)
@@ -1235,9 +1257,12 @@ func (server *Server) reviewMCPSuggestion(response http.ResponseWriter, request 
 	if err != nil {
 		return err
 	}
-	row := ctx.DB.QueryRow("SELECT id,batch_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
+	row := ctx.DB.QueryRow("SELECT id,batch_id,agent_session_id,kind,payload_json,source_item_ids_json,agent_name,created_at,status,reviewed_at,review_error FROM agent_suggestions WHERE id=?", suggestionID)
 	s, err := scanSuggestion(row)
 	if err != nil {
+		return err
+	}
+	if err := server.authorizeSuggestionRequest(request, s.AgentSessionID); err != nil {
 		return err
 	}
 	if s.Status != "pending" {

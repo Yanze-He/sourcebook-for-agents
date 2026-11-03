@@ -231,6 +231,67 @@ func (server *Server) agentSession(id string) (agentSessionScope, bool) {
 	return session, ok
 }
 
+// agentSuggestionSessionID validates the page credentials carried by a
+// Sourcebook browser request before exposing or changing Agent proposals.
+// Empty credentials deliberately mean a normal Desktop page, which can only
+// see legacy/unbound proposals; a connected Agent page sees only its own.
+func (server *Server) agentSuggestionSessionID(request *http.Request) (string, error) {
+	id := strings.TrimSpace(request.URL.Query().Get("agentSession"))
+	token := strings.TrimSpace(request.URL.Query().Get("agentSessionToken"))
+	if id == "" && token == "" {
+		return "", nil
+	}
+	if !sourceBookPattern.MatchString(id) || token == "" {
+		return "", &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "This Sourcebook page is not connected to the current Agent session."}
+	}
+	server.agentSessionMu.Lock()
+	defer server.agentSessionMu.Unlock()
+	server.cleanupExpiredAgentSessionsLocked(time.Now())
+	session, ok := server.agentSessions[id]
+	if !ok || subtle.ConstantTimeCompare([]byte(token), []byte(session.Token)) != 1 {
+		if ok && containsAgentSessionToken(session.RetiredTokens, token) {
+			return "", &apiError{status: http.StatusGone, code: "AGENT_SESSION_REPLACED", message: "This Sourcebook page was replaced by a newer page for this Agent conversation."}
+		}
+		return "", &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "This Sourcebook page is not connected to the current Agent session."}
+	}
+	return id, nil
+}
+
+// mcpProposalSessionID ensures a proposal can be attributed only to the
+// current page of the same host conversation. It never accepts a session ID
+// by itself, which prevents a helper from assigning a proposal to another
+// conversation's review queue.
+func (server *Server) mcpProposalSessionID(request *http.Request) (string, error) {
+	id := strings.TrimSpace(request.Header.Get("X-Sourcebook-Agent-Session"))
+	token := strings.TrimSpace(request.Header.Get("X-Sourcebook-Agent-Page-Token"))
+	if id == "" && token == "" {
+		return "", nil
+	}
+	if !sourceBookPattern.MatchString(id) || token == "" {
+		return "", &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "The proposal is not attached to a current Sourcebook page."}
+	}
+	ownerID := strings.TrimSpace(request.Header.Get("X-Sourcebook-Owner"))
+	server.agentSessionMu.Lock()
+	defer server.agentSessionMu.Unlock()
+	server.cleanupExpiredAgentSessionsLocked(time.Now())
+	session, ok := server.agentSessions[id]
+	if !ok || subtle.ConstantTimeCompare([]byte(token), []byte(session.Token)) != 1 || (session.OwnerID != "" && subtle.ConstantTimeCompare([]byte(ownerID), []byte(session.OwnerID)) != 1) {
+		return "", &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "The proposal is not attached to this Agent conversation's current Sourcebook page."}
+	}
+	return id, nil
+}
+
+func (server *Server) authorizeSuggestionRequest(request *http.Request, suggestionSessionID string) error {
+	requestSessionID, err := server.agentSuggestionSessionID(request)
+	if err != nil {
+		return err
+	}
+	if requestSessionID != suggestionSessionID {
+		return &apiError{status: http.StatusNotFound, code: "MCP_SUGGESTION_NOT_FOUND", message: "This Agent submission is not available in this Sourcebook page."}
+	}
+	return nil
+}
+
 func (server *Server) cleanupExpiredAgentSessionsLocked(now time.Time) {
 	for id, session := range server.agentSessions {
 		if now.Sub(session.UpdatedAt) > 12*time.Hour {

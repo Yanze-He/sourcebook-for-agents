@@ -1195,6 +1195,9 @@ func schema(db *sql.DB) error {
 	// Existing libraries predate submission batches. The best-effort migration
 	// keeps their pending suggestions readable and assigns no batch to them.
 	_, _ = db.Exec("ALTER TABLE agent_suggestions ADD COLUMN batch_id TEXT NOT NULL DEFAULT ''")
+	// Agent pages must not surface one another's pending proposals. Older,
+	// unbound submissions remain available to ordinary Desktop pages.
+	_, _ = db.Exec("ALTER TABLE agent_suggestions ADD COLUMN agent_session_id TEXT NOT NULL DEFAULT ''")
 	// Keep a per-Book full-text index current so MCP searches do not scan every
 	// source row and every text body on each request.
 	searchStatements := []string{

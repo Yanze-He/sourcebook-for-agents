@@ -222,7 +222,7 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 		return server.routeBrowserAgentSession(response, request)
 	}
 	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
-		return server.listMCPSuggestions(response, request.URL.Query().Get("batchId"))
+		return server.listMCPSuggestions(response, request, request.URL.Query().Get("batchId"))
 	}
 	if request.Method == http.MethodPut && path == "/api/settings/update" {
 		return server.updateUpdateSettings(response, request)

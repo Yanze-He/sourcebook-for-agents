@@ -40,7 +40,7 @@ func TestMCPInstructionsContainOnlyCrossToolRules(t *testing.T) {
 			t.Fatalf("server instruction is missing %q: %q", required, instructions)
 		}
 	}
-	for _, required := range []string{"never opens a browser page", "Do not call open_sourcebook merely to start Desktop", "do not infer a replacement from an ambiguous request", "After a proposal is created", "Never replace a page merely to show a proposal"} {
+	for _, required := range []string{"never opens a browser page", "Do not call open_sourcebook merely to start Desktop", "do not infer a replacement from an ambiguous request", "A proposal is already delivered", "Never replace a page merely to show a proposal"} {
 		if !strings.Contains(instructions, required) {
 			t.Fatalf("server instruction is missing explicit page-binding rule %q: %q", required, instructions)
 		}
@@ -370,8 +370,12 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 		t.Fatalf("WorkBuddy resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side WorkBuddy page") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side WorkBuddy browser panel") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
+	}
+	reopened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
+	if err != nil || reopened.IsError || !strings.Contains(textResult(reopened), "do not call present_files") {
+		t.Fatalf("reused WorkBuddy page must not create another preview: %#v, %v", reopened, err)
 	}
 	cancel()
 	<-serverDone
