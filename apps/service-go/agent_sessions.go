@@ -12,8 +12,10 @@ import (
 // identity, and disappears when Desktop restarts.
 type agentSessionScope struct {
 	Token             string
+	RetiredTokens     []string
 	AgentName         string
 	OwnerID           string
+	Retired           bool
 	BookID            string
 	SelectedSourceIDs []string
 	FilteredSourceIDs []string
@@ -43,13 +45,16 @@ func (server *Server) registerAgentSession(response http.ResponseWriter, request
 	server.cleanupExpiredAgentSessionsLocked(time.Now())
 	// A different session id for the same owner is an explicit page
 	// replacement (for example, reconnect after a host discarded its panel).
-	// Retire the old record so its browser poll receives a disconnected state
-	// and future helper restarts can only recover the new page.
+	// Keep a short-lived tombstone rather than deleting the old record. A
+	// WorkBuddy panel can be frozen while replaced; when it resumes, its first
+	// scope check must receive a deterministic disconnected response.
 	if ownerID != "" {
 		if _, replacingCurrentID := server.agentSessions[id]; !replacingCurrentID {
 			for existingID, existing := range server.agentSessions {
 				if subtle.ConstantTimeCompare([]byte(ownerID), []byte(existing.OwnerID)) == 1 {
-					delete(server.agentSessions, existingID)
+					existing.Retired = true
+					existing.UpdatedAt = time.Now()
+					server.agentSessions[existingID] = existing
 				}
 			}
 		}
@@ -61,7 +66,11 @@ func (server *Server) registerAgentSession(response http.ResponseWriter, request
 	if bookID == "" {
 		bookID = previous.BookID
 	}
-	server.agentSessions[id] = agentSessionScope{Token: token, AgentName: truncate(strings.TrimSpace(stringValue(payload["agentName"])), 80), OwnerID: ownerID, BookID: bookID, SelectedSourceIDs: previous.SelectedSourceIDs, FilteredSourceIDs: previous.FilteredSourceIDs, Filters: previous.Filters, Revision: previous.Revision + 1, UpdatedAt: time.Now()}
+	retiredTokens := previous.RetiredTokens
+	if previous.Token != "" && previous.Token != token {
+		retiredTokens = appendUniqueString(retiredTokens, previous.Token)
+	}
+	server.agentSessions[id] = agentSessionScope{Token: token, RetiredTokens: retiredTokens, AgentName: truncate(strings.TrimSpace(stringValue(payload["agentName"])), 80), OwnerID: ownerID, BookID: bookID, SelectedSourceIDs: previous.SelectedSourceIDs, FilteredSourceIDs: previous.FilteredSourceIDs, Filters: previous.Filters, Revision: previous.Revision + 1, UpdatedAt: time.Now()}
 	server.agentSessionMu.Unlock()
 	writeJSON(response, http.StatusOK, map[string]any{"sessionId": id, "bookId": bookID})
 	return nil
@@ -89,7 +98,7 @@ func (server *Server) readActiveAgentSession(response http.ResponseWriter, reque
 	defer server.agentSessionMu.Unlock()
 	server.cleanupExpiredAgentSessionsLocked(time.Now())
 	for id, session := range server.agentSessions {
-		if subtle.ConstantTimeCompare([]byte(ownerID), []byte(session.OwnerID)) == 1 {
+		if !session.Retired && subtle.ConstantTimeCompare([]byte(ownerID), []byte(session.OwnerID)) == 1 {
 			writeJSON(response, http.StatusOK, map[string]any{"session": agentSessionPayload(id, session, true)})
 			return nil
 		}
@@ -127,7 +136,13 @@ func (server *Server) routeBrowserAgentSession(response http.ResponseWriter, req
 	defer server.agentSessionMu.Unlock()
 	server.cleanupExpiredAgentSessionsLocked(time.Now())
 	session, ok := server.agentSessions[sessionID]
-	if !ok || subtle.ConstantTimeCompare([]byte(pageToken), []byte(session.Token)) != 1 {
+	if !ok {
+		return &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "This Sourcebook page is not connected to the current Agent session."}
+	}
+	if session.Retired || containsAgentSessionToken(session.RetiredTokens, pageToken) {
+		return &apiError{status: http.StatusGone, code: "AGENT_SESSION_REPLACED", message: "This Sourcebook page was replaced by a newer page for this Agent conversation."}
+	}
+	if subtle.ConstantTimeCompare([]byte(pageToken), []byte(session.Token)) != 1 {
 		return &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "This Sourcebook page is not connected to the current Agent session."}
 	}
 	if request.Method == http.MethodGet {
@@ -173,6 +188,22 @@ func boundedStringSlice(value any, maximum int) []string {
 		}
 	}
 	return output
+}
+
+func appendUniqueString(values []string, next string) []string {
+	if containsAgentSessionToken(values, next) {
+		return values
+	}
+	return append(values, next)
+}
+
+func containsAgentSessionToken(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (server *Server) agentSession(id string) (agentSessionScope, bool) {

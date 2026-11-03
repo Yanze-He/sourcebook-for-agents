@@ -52,6 +52,24 @@ func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
 	}
 }
 
+func TestMCPInstructionsAreHostSpecific(t *testing.T) {
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
+	codex := sourcebookServerInstructions()
+	if !strings.Contains(codex, "tab.markDeliverable()") || strings.Contains(codex, "WorkBuddy, use the right-side") {
+		t.Fatalf("Codex instructions leaked another host's rules: %q", codex)
+	}
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "WorkBuddy")
+	workBuddy := sourcebookServerInstructions()
+	if !strings.Contains(workBuddy, "WorkBuddy, use the right-side") || strings.Contains(workBuddy, "tab.markDeliverable()") {
+		t.Fatalf("WorkBuddy instructions leaked another host's rules: %q", workBuddy)
+	}
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "Another Agent")
+	generic := sourcebookServerInstructions()
+	if !strings.Contains(generic, "In other hosts") || strings.Contains(generic, "tab.markDeliverable()") || strings.Contains(generic, "WorkBuddy, use the right-side") {
+		t.Fatalf("generic instructions leaked host-specific rules: %q", generic)
+	}
+}
+
 func TestSourcebookNavigationReusesOrReplacesOnlyThePageToken(t *testing.T) {
 	registered := []map[string]any{}
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -122,6 +140,7 @@ func containsAnyString(items []any, target string) bool {
 }
 
 func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "")
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("X-Sourcebook-MCP-Token") != "test-token" {
 			t.Errorf("missing pairing token")
@@ -150,7 +169,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	}))
 	defer bridge.Close()
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "sourcebook-test", Version: "test"}, &mcp.ServerOptions{Instructions: sourcebookServerInstructions})
+	server := mcp.NewServer(&mcp.Implementation{Name: "sourcebook-test", Version: "test"}, &mcp.ServerOptions{Instructions: sourcebookServerInstructions()})
 	bridgeClient := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
 	registerSourcebookApp(server, bridgeClient)
 	addTools(server, bridgeClient, &sessionState{})
@@ -166,8 +185,9 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sourcebookServerInstructions, "current or named project Book") || !strings.Contains(sourcebookServerInstructions, "@Sourcebook and slash commands are optional") || !strings.Contains(sourcebookServerInstructions, "Call open_sourcebook when") || !strings.Contains(sourcebookServerInstructions, "explicitly select the target") || !strings.Contains(sourcebookServerInstructions, "untrusted reference material") || !strings.Contains(sourcebookServerInstructions, "Do not automatically save drafts") || !strings.Contains(sourcebookServerInstructions, "save or organize several confirmed results") || !strings.Contains(sourcebookServerInstructions, "tab.markDeliverable()") || !strings.Contains(sourcebookServerInstructions, "never inspect its SQLite database") || !strings.Contains(sourcebookServerInstructions, "never infer either from Marketplace Skill metadata") {
-		t.Fatalf("server instructions must explain Book scope and untrusted material: %q", sourcebookServerInstructions)
+	instructions := sourcebookServerInstructions()
+	if !strings.Contains(instructions, "current or named project Book") || !strings.Contains(instructions, "@Sourcebook and slash commands are optional") || !strings.Contains(instructions, "Call open_sourcebook when") || !strings.Contains(instructions, "explicitly select the target") || !strings.Contains(instructions, "untrusted reference material") || !strings.Contains(instructions, "Do not automatically save drafts") || !strings.Contains(instructions, "save or organize several confirmed results") || !strings.Contains(instructions, "never inspect its SQLite database") || !strings.Contains(instructions, "never infer either from Marketplace Skill metadata") {
+		t.Fatalf("server instructions must explain Book scope and untrusted material: %q", instructions)
 	}
 	defer session.Close()
 	tools, err := session.ListTools(ctx, nil)

@@ -71,8 +71,11 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	oldPage.Host = "127.0.0.1:4177"
 	oldPageResult := httptest.NewRecorder()
 	server.ServeHTTP(oldPageResult, oldPage)
-	if oldPageResult.Code != http.StatusUnauthorized {
+	if oldPageResult.Code != http.StatusGone {
 		t.Fatalf("old page scope = %d: %s", oldPageResult.Code, oldPageResult.Body.String())
+	}
+	if !strings.Contains(oldPageResult.Body.String(), "replaced by a newer page") {
+		t.Fatalf("old page must receive a replacement reason: %s", oldPageResult.Body.String())
 	}
 
 	newPage := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/session-test/scope", bytes.NewBufferString(`{"pageToken":"replaced-token-123456789012","bookId":"sourcebook"}`))
@@ -81,6 +84,52 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	server.ServeHTTP(newPageResult, newPage)
 	if newPageResult.Code != http.StatusOK {
 		t.Fatalf("new page scope = %d: %s", newPageResult.Code, newPageResult.Body.String())
+	}
+}
+
+func TestReplacingAnOwnerPageKeepsTheOldPageAsDisconnectedTombstone(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	enable := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/settings/mcp", bytes.NewBufferString(`{}`))
+	enable.Host = "127.0.0.1:4177"
+	server.ServeHTTP(httptest.NewRecorder(), enable)
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	register := func(id, token string) {
+		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions", bytes.NewBufferString(`{"sessionId":"`+id+`","pageToken":"`+token+`","agentName":"WorkBuddy"}`))
+		request.Host = "127.0.0.1:4177"
+		request.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+		request.Header.Set("X-Sourcebook-Owner", "one-workbuddy-chat")
+		result := httptest.NewRecorder()
+		server.ServeHTTP(result, request)
+		if result.Code != http.StatusOK {
+			t.Fatalf("register %s = %d: %s", id, result.Code, result.Body.String())
+		}
+	}
+	register("first-page", "first-page-token-123456789012")
+	register("second-page", "second-page-token-12345678901")
+
+	oldPage := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/agent-sessions/first-page/scope?pageToken=first-page-token-123456789012", nil)
+	oldPage.Host = "127.0.0.1:4177"
+	oldResult := httptest.NewRecorder()
+	server.ServeHTTP(oldResult, oldPage)
+	if oldResult.Code != http.StatusGone || !strings.Contains(oldResult.Body.String(), "replaced by a newer page") {
+		t.Fatalf("old page must become a disconnected tombstone: %d %s", oldResult.Code, oldResult.Body.String())
+	}
+	active := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions/active", nil)
+	active.Host = "127.0.0.1:4177"
+	active.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	active.Header.Set("X-Sourcebook-Owner", "one-workbuddy-chat")
+	activeResult := httptest.NewRecorder()
+	server.ServeHTTP(activeResult, active)
+	if activeResult.Code != http.StatusOK || !strings.Contains(activeResult.Body.String(), `"sessionId":"second-page"`) {
+		t.Fatalf("active page = %d: %s", activeResult.Code, activeResult.Body.String())
 	}
 }
 

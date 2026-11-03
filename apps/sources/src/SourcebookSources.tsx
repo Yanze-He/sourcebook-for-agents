@@ -322,7 +322,7 @@ export default function SourcebookSources() {
         agentBookId = scope.bookId || "";
         setAgentPageConnection("connected");
       } catch (error) {
-        if (/Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
+        if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
       }
     }
     const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : response.activeBookId;
@@ -448,7 +448,7 @@ export default function SourcebookSources() {
     }).then(() => {
       if (!disposed) setAgentPageConnection("connected");
     }).catch((error) => {
-      if (!disposed && /Sourcebook page is (not|no longer) connected to the current Agent session/i.test(errorMessage(error))) setAgentPageConnection("disconnected");
+      if (!disposed && isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
     });
     syncAgentPage();
     const interval = window.setInterval(syncAgentPage, 2500);
@@ -1997,6 +1997,7 @@ function clipboardErrorReason(message: string, language: Language) {
 function bookPath(path: string, bookId: string | undefined) { if (!bookId || !path.startsWith("/api/")) return path; return `${path}${path.includes("?") ? "&" : "?"}bookId=${encodeURIComponent(bookId)}`; }
 async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(); let value = ""; const bytes = new Uint8Array(buffer); for (let index = 0; index < bytes.length; index += 0x8000) value += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(value); }
 async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
+function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)/i.test(errorMessage(error)); }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 async function requestFormData<T = unknown>(path: string, body: FormData): Promise<T> { const response = await fetch(path, { method: "POST", body }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 function isAbortedRequest(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || error instanceof Error && error.name === "AbortError"; }
