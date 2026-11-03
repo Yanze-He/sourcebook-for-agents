@@ -266,6 +266,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if request.Method == http.MethodPost && path == "/api/clipboard/files" {
 		return server.clipboardFiles(response)
 	}
+	if request.Method == http.MethodPost && path == "/api/clipboard/text" {
+		return server.clipboardText(response, request)
+	}
 
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "books" && bookIDPattern.MatchString(parts[2]) {

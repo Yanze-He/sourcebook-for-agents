@@ -539,7 +539,7 @@ export default function SourcebookSources() {
       }
       const link = webLinkFor(item);
       if (!link) throw new Error(language === "zh" ? "此素材没有可复制的文件或链接。" : "This source has no copyable file or link.");
-      await navigator.clipboard.writeText(link);
+      await copyTextToClipboard(link);
       showSourcesMessage(language === "zh" ? "链接已复制。" : "Link copied.", 3600, "success");
     } catch (error) {
       showSourcesMessage(`Could not copy this source: ${errorMessage(error)}`, 6000, "error");
@@ -560,13 +560,13 @@ export default function SourcebookSources() {
     const links = selectedItems.map(webLinkFor).filter((link): link is string => Boolean(link));
     if (!links.length) return;
     try {
-      await navigator.clipboard.writeText(links.join("\n"));
+      await copyTextToClipboard(links.join("\n"));
       showSourcesMessage(language === "zh" ? `已复制 ${links.length} 个链接。` : `Copied ${links.length} link${links.length === 1 ? "" : "s"}.`, 3600, "success");
     } catch (error) { showSourcesMessage(language === "zh" ? `无法复制链接：${errorMessage(error)}` : `Could not copy links: ${errorMessage(error)}`, 6000, "error"); }
   }
   async function copyPackPrompt(prompt: string) {
     try {
-      await navigator.clipboard.writeText(prompt);
+      await copyTextToClipboard(prompt);
       showSourcesMessage(language === "zh" ? "提示词已复制，可粘贴到 Agent 对话框。" : "Prompt copied. Paste it into your agent chat.", 3600, "success");
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制提示词：${errorMessage(error)}` : `Could not copy prompt: ${errorMessage(error)}`, 6000, "error");
@@ -2028,6 +2028,21 @@ async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(
 async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
 function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)/i.test(errorMessage(error)); }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
+async function copyTextToClipboard(text: string) {
+  const host = new URLSearchParams(window.location.search).get("sourcebookHost");
+  if (host === "workbuddy") {
+    await request("/api/clipboard/text", { method: "POST", body: JSON.stringify({ text }) });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // A compatible embedded browser may refuse Clipboard.writeText even for a
+    // user click. Sourcebook Desktop writes exactly this text in that case.
+    await request("/api/clipboard/text", { method: "POST", body: JSON.stringify({ text }) });
+  }
+}
 async function requestFormData<T = unknown>(path: string, body: FormData): Promise<T> { const response = await fetch(path, { method: "POST", body }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 function isAbortedRequest(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || error instanceof Error && error.name === "AbortError"; }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Something went wrong. Try again."; }

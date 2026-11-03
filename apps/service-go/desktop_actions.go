@@ -2,9 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -192,6 +194,45 @@ func copyFilesToSystemClipboard(paths []string) error {
 		return runCommand("powershell.exe", "-NoProfile", "-STA", "-Command", script)
 	default:
 		return &apiError{status: 501, code: "FILE_CLIPBOARD_UNSUPPORTED", message: "当前系统暂不支持复制文本文件。请使用 macOS 或 Windows 桌面版。"}
+	}
+}
+
+// clipboardText lets an embedded Agent page write user-selected text through
+// its paired Desktop. It never reads or stores existing clipboard contents.
+func (server *Server) clipboardText(response http.ResponseWriter, request *http.Request) error {
+	payload, err := readBody(request)
+	if err != nil {
+		return &apiError{status: 400, code: "INVALID_CLIPBOARD_TEXT", message: "无法读取要复制的文本。"}
+	}
+	text, ok := payload["text"].(string)
+	if !ok || text == "" {
+		return &apiError{status: 400, code: "CLIPBOARD_TEXT_REQUIRED", message: "没有可复制的文本。"}
+	}
+	if len(text) > 256*1024 {
+		return &apiError{status: 413, code: "CLIPBOARD_TEXT_TOO_LARGE", message: "要复制的文本过长。"}
+	}
+	if err := copyTextToSystemClipboard(text); err != nil {
+		return err
+	}
+	writeJSON(response, 200, map[string]any{"ok": true})
+	return nil
+}
+
+func copyTextToSystemClipboard(text string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		encoded, err := json.Marshal(text)
+		if err != nil {
+			return err
+		}
+		script := `ObjC.import("AppKit"); const text = ` + string(encoded) + `; const board = $.NSPasteboard.generalPasteboard; board.clearContents; if (!board.setStringForType($(text), $.NSPasteboardTypeString)) throw new Error("Unable to write text to the clipboard.");`
+		return runCommand("osascript", "-l", "JavaScript", "-e", script)
+	case "windows":
+		encoded := base64.StdEncoding.EncodeToString([]byte(text))
+		script := "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Windows.Forms; $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('" + encoded + "')); [System.Windows.Forms.Clipboard]::SetText($text);"
+		return runCommand("powershell.exe", "-NoProfile", "-STA", "-Command", script)
+	default:
+		return &apiError{status: 501, code: "TEXT_CLIPBOARD_UNSUPPORTED", message: "当前系统不支持复制文本。请使用 macOS 或 Windows 桌面版。"}
 	}
 }
 

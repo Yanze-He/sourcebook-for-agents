@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Copy links and prompts directly through Sourcebook Desktop in WorkBuddy, where the embedded browser does not grant clipboard-write permission. The same direct-copy interaction remains intact.
 - Distinguish Select mode from Agent submissions with a pointer icon. Accepting every pending Agent submission now closes the review window after all items succeed; accepting one item keeps it open.
 - Keep Agent submissions in the page that created them. Sourcebook now persists the originating Agent page identity, validates its current page token for review, and never uses a host preview tool to open another page after a proposal. In WorkBuddy, a known connected panel is no longer passed to `present_files`, which can only create a new preview rather than navigate the existing one.
 - Retire the separate Sourcebook Agent Skill and marketplace package. Desktop's MCP server now carries the runtime guidance, while individual tool descriptions define tool-specific behavior and side effects.
