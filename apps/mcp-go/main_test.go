@@ -40,6 +40,11 @@ func TestMCPInstructionsContainOnlyCrossToolRules(t *testing.T) {
 			t.Fatalf("server instruction is missing %q: %q", required, instructions)
 		}
 	}
+	for _, required := range []string{"never opens a browser page", "Do not call open_sourcebook merely to start Desktop", "do not infer a replacement from an ambiguous request", "After a proposal is created", "Never replace a page merely to show a proposal"} {
+		if !strings.Contains(instructions, required) {
+			t.Fatalf("server instruction is missing explicit page-binding rule %q: %q", required, instructions)
+		}
+	}
 	for _, toolSpecific := range []string{"tab.markDeliverable()", "right-side browser panel"} {
 		if strings.Contains(instructions, toolSpecific) {
 			t.Fatalf("server instruction must not contain tool-specific host behavior %q: %q", toolSpecific, instructions)
@@ -50,16 +55,21 @@ func TestMCPInstructionsContainOnlyCrossToolRules(t *testing.T) {
 func TestSourcebookNavigationReusesOrReplacesOnlyThePageToken(t *testing.T) {
 	registered := []map[string]any{}
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/mcp/v1/agent-sessions" || request.Method != http.MethodPost {
+		switch {
+		case request.URL.Path == "/api/mcp/v1/books":
+			_ = json.NewEncoder(response).Encode(map[string]any{"activeBookId": "research", "books": []map[string]any{{"id": "research", "name": "Research"}}})
+		case strings.HasPrefix(request.URL.Path, "/api/mcp/v1/agent-sessions/") && request.Method == http.MethodGet:
+			_ = json.NewEncoder(response).Encode(map[string]any{"bookId": "research"})
+		case request.URL.Path == "/api/mcp/v1/agent-sessions" && request.Method == http.MethodPost:
+			var payload map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			registered = append(registered, payload)
+			_ = json.NewEncoder(response).Encode(map[string]any{"ok": true})
+		default:
 			http.NotFound(response, request)
-			return
 		}
-		var payload map[string]any
-		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-			t.Fatal(err)
-		}
-		registered = append(registered, payload)
-		_ = json.NewEncoder(response).Encode(map[string]any{"ok": true})
 	}))
 	defer bridge.Close()
 	client := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
@@ -123,14 +133,14 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 			t.Errorf("missing pairing token")
 		}
 		response.Header().Set("content-type", "application/json")
-		switch request.URL.Path {
-		case "/api/mcp/v1/status":
+		switch {
+		case request.URL.Path == "/api/mcp/v1/status":
 			_, _ = response.Write([]byte(`{"ok":true}`))
-		case "/api/mcp/v1/books":
-			_, _ = response.Write([]byte(`{"books":[{"id":"research","name":"Research","sourceCount":1}]}`))
-		case "/api/mcp/v1/books/research":
+		case request.URL.Path == "/api/mcp/v1/books":
+			_, _ = response.Write([]byte(`{"activeBookId":"research","books":[{"id":"research","name":"Research","sourceCount":1}]}`))
+		case request.URL.Path == "/api/mcp/v1/books/research":
 			_, _ = response.Write([]byte(`{"book":{"id":"research","name":"Research","sourceCount":1}}`))
-		case "/api/mcp/v1/books/research/proposals":
+		case request.URL.Path == "/api/mcp/v1/books/research/proposals":
 			var proposal struct {
 				Payload map[string]any `json:"payload"`
 			}
@@ -138,7 +148,11 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 				t.Errorf("decode proposal: %v", err)
 			}
 			_ = json.NewEncoder(response).Encode(map[string]any{"note": proposal.Payload["note"]})
-		case "/api/mcp/v1/agent-sessions":
+		case request.URL.Path == "/api/mcp/v1/books/research/sources":
+			_, _ = response.Write([]byte(`{"items":[]}`))
+		case strings.HasPrefix(request.URL.Path, "/api/mcp/v1/agent-sessions/") && request.Method == http.MethodGet:
+			_, _ = response.Write([]byte(`{"bookId":"research"}`))
+		case request.URL.Path == "/api/mcp/v1/agent-sessions":
 			_, _ = response.Write([]byte(`{"ok":true}`))
 		default:
 			http.NotFound(response, request)
@@ -171,8 +185,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 16 {
-		t.Fatalf("tools = %d, want 16", len(tools.Tools))
+	if len(tools.Tools) != 15 {
+		t.Fatalf("tools = %d, want 15", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, registered := range tools.Tools {
@@ -183,7 +197,7 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 				t.Fatalf("import schema type = %T", registered.InputSchema)
 			}
 			properties, ok := schema["properties"].(map[string]any)
-			if !ok || len(properties) != 3 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
+			if !ok || len(properties) != 4 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["book_id"] == nil || properties["source_ids"] != nil {
 				t.Fatalf("registered import schema must require a path and note: %#v", schema)
 			}
 			required, ok := schema["required"].([]any)
@@ -201,6 +215,9 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	}
 	if toolNames["propose_pack"] {
 		t.Fatal("propose_pack must not be exposed by the MCP server")
+	}
+	if toolNames["select_book"] {
+		t.Fatal("select_book must not be exposed by the MCP server")
 	}
 	for _, name := range []string{"get_current_scope", "resolve_book", "create_book", "rename_book", "propose_source_bundle", "get_submission_batch"} {
 		if !toolNames[name] {
@@ -244,22 +261,15 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 		t.Fatalf("open prompt = %#v, %v", prompt, err)
 	}
 	openedPrompt, ok := prompt.Messages[0].Content.(*mcp.TextContent)
-	if !ok || !strings.Contains(openedPrompt.Text, "Open my local Sourcebook library") || !strings.Contains(openedPrompt.Text, "ask me to choose when the evidence is ambiguous") {
+	if !ok || !strings.Contains(openedPrompt.Text, "Open my local Sourcebook library") || !strings.Contains(openedPrompt.Text, "ask whether I want to use that page or create a fresh page") || !strings.Contains(openedPrompt.Text, "If multiple Books are plausible, ask me to choose") {
 		t.Fatalf("open prompt content = %#v", prompt.Messages[0].Content)
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "search_sources", Arguments: map[string]any{"query": "brief"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.IsError {
-		t.Fatal("search without select_book should be an MCP tool error")
-	}
-	selected, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "select_book", Arguments: map[string]any{"book_id": "research"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if selected.IsError {
-		t.Fatalf("select_book returned %v", selected.Content)
+	if result.IsError {
+		t.Fatalf("search should use the current Desktop Book without select_book: %v", result.Content)
 	}
 	for _, name := range []string{"propose_create_text_source", "propose_import_local_file"} {
 		arguments := map[string]any{"title": "Summary", "content": "Confirmed outcome"}
@@ -276,14 +286,6 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 			t.Fatalf("%s did not forward the note: %#v, %v", name, proposed, err)
 		}
 	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(textResult(selected)), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["book"].(map[string]any)["id"] != "research" {
-		t.Fatalf("selected result = %#v", payload)
-	}
-
 	cancel()
 	<-serverDone
 }
@@ -300,6 +302,10 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	t.Setenv("SOURCEBOOK_AGENT_NAME", "WorkBuddy")
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("content-type", "application/json")
+		if request.URL.Path == "/api/mcp/v1/books" {
+			_, _ = response.Write([]byte(`{"activeBookId":"research","books":[{"id":"research","name":"Research"}]}`))
+			return
+		}
 		_, _ = response.Write([]byte(`{"ok":true}`))
 	}))
 	defer bridge.Close()
@@ -322,7 +328,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 16 {
+	if err != nil || len(listed.Tools) != 15 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -346,6 +352,10 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("content-type", "application/json")
+		if request.URL.Path == "/api/mcp/v1/books" {
+			_, _ = response.Write([]byte(`{"activeBookId":"research","books":[{"id":"research","name":"Research"}]}`))
+			return
+		}
 		_, _ = response.Write([]byte(`{"ok":true}`))
 	}))
 	defer bridge.Close()
@@ -368,7 +378,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 16 {
+	if err != nil || len(listed.Tools) != 15 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -466,8 +476,8 @@ func TestImportLocalFileAcceptsPathAndOptionalTitle(t *testing.T) {
 		t.Fatalf("import required fields = %#v, want path only", schema["required"])
 	}
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok || len(properties) != 3 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["source_ids"] != nil {
-		t.Fatalf("import schema must expose path, optional title, and note without related source IDs: %#v", schema)
+	if !ok || len(properties) != 4 || properties["path"] == nil || properties["title"] == nil || properties["note"] == nil || properties["book_id"] == nil || properties["source_ids"] != nil {
+		t.Fatalf("import schema must expose path, optional title, note, and a request-scoped Book without related source IDs: %#v", schema)
 	}
 }
 

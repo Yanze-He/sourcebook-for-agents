@@ -85,9 +85,31 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	if newPageResult.Code != http.StatusOK {
 		t.Fatalf("new page scope = %d: %s", newPageResult.Code, newPageResult.Body.String())
 	}
+
+	useOldPage := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/agent-sessions/session-test/reconnect", bytes.NewBufferString(`{"pageToken":"123456789012345678901234"}`))
+	useOldPage.Host = "127.0.0.1:4177"
+	useOldPageResult := httptest.NewRecorder()
+	server.ServeHTTP(useOldPageResult, useOldPage)
+	if useOldPageResult.Code != http.StatusOK {
+		t.Fatalf("use old page = %d: %s", useOldPageResult.Code, useOldPageResult.Body.String())
+	}
+	oldPage = httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/session-test/scope", bytes.NewBufferString(`{"pageToken":"123456789012345678901234","bookId":"sourcebook"}`))
+	oldPage.Host = "127.0.0.1:4177"
+	oldPageResult = httptest.NewRecorder()
+	server.ServeHTTP(oldPageResult, oldPage)
+	if oldPageResult.Code != http.StatusOK {
+		t.Fatalf("reconnected old page scope = %d: %s", oldPageResult.Code, oldPageResult.Body.String())
+	}
+	newPage = httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/session-test/scope", bytes.NewBufferString(`{"pageToken":"replaced-token-123456789012","bookId":"sourcebook"}`))
+	newPage.Host = "127.0.0.1:4177"
+	newPageResult = httptest.NewRecorder()
+	server.ServeHTTP(newPageResult, newPage)
+	if newPageResult.Code != http.StatusGone {
+		t.Fatalf("the formerly current page must disconnect after using the old page: %d %s", newPageResult.Code, newPageResult.Body.String())
+	}
 }
 
-func TestDuplicateAgentPagesHaveOneExplicitScopeOwner(t *testing.T) {
+func TestDuplicateAgentPagesWithTheSameTokenRemainConnected(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -107,53 +129,29 @@ func TestDuplicateAgentPagesHaveOneExplicitScopeOwner(t *testing.T) {
 	if result := httptest.NewRecorder(); func() *httptest.ResponseRecorder { server.ServeHTTP(result, register); return result }().Code != http.StatusOK {
 		t.Fatalf("register = %d", result.Code)
 	}
-	update := func(instance string, claim bool, selected string) map[string]any {
-		body := `{"pageToken":"duplicate-page-token-123456789","pageInstanceId":"` + instance + `","bookId":"sourcebook","selectedSourceIds":["` + selected + `"]`
-		if claim {
-			body += `,"claim":true`
-		}
-		body += `}`
+	update := func(selected string) {
+		body := `{"pageToken":"duplicate-page-token-123456789","bookId":"sourcebook","selectedSourceIds":["` + selected + `"]}`
 		request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/duplicate-page-test/scope", bytes.NewBufferString(body))
 		request.Host = "127.0.0.1:4177"
 		result := httptest.NewRecorder()
 		server.ServeHTTP(result, request)
 		if result.Code != http.StatusOK {
-			t.Fatalf("scope update %s = %d: %s", instance, result.Code, result.Body.String())
+			t.Fatalf("scope update %s = %d: %s", selected, result.Code, result.Body.String())
 		}
-		payload := map[string]any{}
-		if err := json.NewDecoder(result.Body).Decode(&payload); err != nil {
-			t.Fatal(err)
-		}
-		return payload
 	}
-	if first := update("page-first", false, "first"); first["isActivePage"] != true {
-		t.Fatalf("first page must become active: %#v", first)
-	}
-	if duplicate := update("page-duplicate", false, "duplicate"); duplicate["isActivePage"] != false {
-		t.Fatalf("a duplicate page must stay passive: %#v", duplicate)
-	}
+	update("first")
+	update("duplicate")
 	readScope := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions/duplicate-page-test", nil)
 	readScope.Host = "127.0.0.1:4177"
 	readScope.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
 	readResult := httptest.NewRecorder()
 	server.ServeHTTP(readResult, readScope)
-	if !strings.Contains(readResult.Body.String(), `"selectedSourceIds":["first"]`) {
-		t.Fatalf("passive page must not overwrite scope: %s", readResult.Body.String())
-	}
-	if claimed := update("page-duplicate", true, "duplicate"); claimed["isActivePage"] != true {
-		t.Fatalf("explicit claim must become active: %#v", claimed)
-	}
-	if former := update("page-first", false, "first-again"); former["isActivePage"] != false {
-		t.Fatalf("former page must become passive: %#v", former)
-	}
-	readResult = httptest.NewRecorder()
-	server.ServeHTTP(readResult, readScope)
 	if !strings.Contains(readResult.Body.String(), `"selectedSourceIds":["duplicate"]`) {
-		t.Fatalf("claimed page must own scope: %s", readResult.Body.String())
+		t.Fatalf("the latest explicit page update must be readable: %s", readResult.Body.String())
 	}
 }
 
-func TestReplacingAnOwnerPageKeepsTheOldPageAsDisconnectedTombstone(t *testing.T) {
+func TestSameOwnerSessionsDoNotDisconnectEachOther(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -185,8 +183,8 @@ func TestReplacingAnOwnerPageKeepsTheOldPageAsDisconnectedTombstone(t *testing.T
 	oldPage.Host = "127.0.0.1:4177"
 	oldResult := httptest.NewRecorder()
 	server.ServeHTTP(oldResult, oldPage)
-	if oldResult.Code != http.StatusGone || !strings.Contains(oldResult.Body.String(), "replaced by a newer page") {
-		t.Fatalf("old page must become a disconnected tombstone: %d %s", oldResult.Code, oldResult.Body.String())
+	if oldResult.Code != http.StatusOK {
+		t.Fatalf("a host-created second session must not disconnect the first page: %d %s", oldResult.Code, oldResult.Body.String())
 	}
 	active := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions/active", nil)
 	active.Host = "127.0.0.1:4177"
@@ -194,8 +192,8 @@ func TestReplacingAnOwnerPageKeepsTheOldPageAsDisconnectedTombstone(t *testing.T
 	active.Header.Set("X-Sourcebook-Owner", "one-workbuddy-chat")
 	activeResult := httptest.NewRecorder()
 	server.ServeHTTP(activeResult, active)
-	if activeResult.Code != http.StatusOK || !strings.Contains(activeResult.Body.String(), `"sessionId":"second-page"`) {
-		t.Fatalf("active page = %d: %s", activeResult.Code, activeResult.Body.String())
+	if activeResult.Code != http.StatusOK {
+		t.Fatalf("active session = %d: %s", activeResult.Code, activeResult.Body.String())
 	}
 }
 

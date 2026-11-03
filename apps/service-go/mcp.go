@@ -439,7 +439,7 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 		bookID := parts[1]
 		switch {
 		case len(parts) == 2 && request.Method == http.MethodGet:
-			return server.mcpSelectBook(response, request, settings, bookID)
+			return server.mcpReadBook(response, request, settings, bookID)
 		case len(parts) == 2 && request.Method == http.MethodPatch:
 			return server.mcpRenameBook(response, request, settings, bookID)
 		case len(parts) == 3 && parts[2] == "sources" && request.Method == http.MethodGet:
@@ -478,11 +478,11 @@ func (server *Server) mcpListBooks(response http.ResponseWriter, request *http.R
 		books = append(books, map[string]any{"id": book.ID, "name": book.Name, "revision": book.Revision, "sourceCount": count, "lastActivityAt": last})
 	}
 	server.recordMCPActivity(&settings, request, "", "list_books", "ok")
-	writeJSON(response, http.StatusOK, map[string]any{"books": books})
+	writeJSON(response, http.StatusOK, map[string]any{"activeBookId": manifest.ActiveBookID, "books": books})
 	return nil
 }
 
-func (server *Server) mcpSelectBook(response http.ResponseWriter, request *http.Request, settings desktopSettings, bookID string) error {
+func (server *Server) mcpReadBook(response http.ResponseWriter, request *http.Request, settings desktopSettings, bookID string) error {
 	ctx, err := server.context(bookID, true)
 	if err != nil {
 		return err
@@ -492,7 +492,7 @@ func (server *Server) mcpSelectBook(response http.ResponseWriter, request *http.
 	if err := ctx.DB.QueryRow("SELECT COUNT(*),COALESCE(MAX(created_at),'') FROM source_items").Scan(&count, &last); err != nil {
 		return err
 	}
-	server.recordMCPActivity(&settings, request, bookID, "select_book", "ok")
+	server.recordMCPActivity(&settings, request, bookID, "get_book", "ok")
 	writeJSON(response, http.StatusOK, map[string]any{"book": map[string]any{"id": ctx.Book.ID, "name": ctx.Book.Name, "revision": ctx.Book.Revision, "sourceCount": count, "lastActivityAt": last}})
 	return nil
 }
