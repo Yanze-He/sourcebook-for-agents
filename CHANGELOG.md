@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Add the existing **Copy** action to the ordinary browser selection bar, immediately before **Send to AI**. It retains the Agent-page behavior: copy directly when the selection has one transferable type, or choose files versus links when it has both.
 - Keep the **Send to Agent** prompt and its usage guidance in separate, sequential sections when a large material scope is expanded; the modal scrolls as one surface instead of allowing the prompt editor to overlap the guidance.
 - Verify WorkBuddy trust from its local approval record when Sourcebook writes or checks the Desktop-managed connection, so the card and Toast distinguish a trusted configuration from one still awaiting approval. In wide Sourcebook pages, keep the selection bar centered and content-sized instead of spanning the entire page; narrow panels retain their one-line layout.
 - Simplify **Add materials** to records, local files, and clipboard import; Picker installation remains available from Settings. Tighten **Connect an Agent** by removing its redundant footer information, localizing action feedback, and showing every connect, check, remove, disable, or local-access result as a Toast. WorkBuddy’s secondary action now accurately reads **Disable** because it disables Sourcebook for new conversations rather than deleting its configuration.
