@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, ClipboardPaste, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, FolderOpen, Funnel, Globe2, HardDrive, Image, Info, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, MousePointer2, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
+import { AlignLeft, ArrowRightLeft, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, ClipboardPaste, CloudOff, Copy, Download, EllipsisVertical, ExternalLink, Eye, FilePlus2, FileText, FileUp, FileWarning, FolderOpen, Funnel, Globe2, HardDrive, Image, Languages, Link2, Link2Off, ListChecks, LoaderCircle, Maximize2, MessageSquare, Minus, MousePointer2, Music2, Package, Pencil, Play, Plus, Puzzle, RefreshCw, Search, Send, Settings, Sparkles, Star, Trash2, Upload, Video, Workflow, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createPortal } from "react-dom";
@@ -933,7 +933,6 @@ export default function SourcebookSources() {
                   <button onClick={() => { setIsAddMaterialsOpen(false); setIsCreateTextOpen(true); }} role="menuitem" type="button"><FilePlus2 size={15} /><span>{copy.addText}</span></button>
                   <button onClick={() => { setIsAddMaterialsOpen(false); localImportInputRef.current?.click(); }} role="menuitem" type="button"><FileUp size={15} /><span>{copy.importLocalFiles}</span></button>
                   <button onClick={() => { setIsAddMaterialsOpen(false); void importClipboardFromMenu(); }} role="menuitem" type="button"><ClipboardPaste size={15} /><span>{language === "zh" ? "导入剪贴板内容" : "Import clipboard"}</span></button>
-                  <button onClick={() => { setIsAddMaterialsOpen(false); openPickerInstall(); }} role="menuitem" type="button"><Puzzle size={15} /><span>{copy.installPicker}</span></button>
                 </div> : null}
               </div>
               <div className="settings-menu" ref={settingsRef}>
@@ -990,7 +989,7 @@ export default function SourcebookSources() {
     <ClipboardImportModal busy={isClipboardImporting} language={language} onClose={() => !isClipboardImporting && setClipboardPlan(null)} onConfirm={() => void importClipboardPlan()} plan={clipboardPlan} />
     <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
     <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
-    <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} settings={mcpSettings} />
+    <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} onNotice={(text, tone) => showSourcesMessage(text, tone === "error" ? 6000 : 3600, tone)} settings={mcpSettings} />
     <MCPSuggestionsModal batchId={requestedSubmissionBatchIdRef.current} isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`), { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`), { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestionPath={agentSuggestionPath} suggestions={mcpSuggestions} />
   </main></LanguageContext.Provider>;
 }
@@ -1375,20 +1374,18 @@ function UpdateSettingsModal({ isOpen, language, onClose, onLoad, settings }: { 
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="update-settings-title"><section className="export-modal update-settings-modal"><header className="modal-head"><div><h2 id="update-settings-title">{zh ? "版本与更新" : "Version & updates"}</h2><p>{zh ? `当前版本 ${installedVersion}${installedBuild ? `（构建 ${installedBuild}）` : ""}` : `Installed version ${installedVersion}${installedBuild ? ` (Build ${installedBuild})` : ""}`}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header><div className="update-settings-body"><label className="update-toggle"><span><strong>{zh ? "自动检查更新" : "Check for updates automatically"}</strong><small>{zh ? "启动后静默检查，最多每 24 小时一次。" : "Check quietly after launch, at most once every 24 hours."}</small></span><input checked={current?.autoCheck ?? true} onChange={async (event) => { const value = await request<UpdateSettingsResponse>("/api/settings/update", { method: "PUT", body: JSON.stringify({ autoCheck: event.target.checked }) }); setCurrent(value); onLoad(value); }} type="checkbox" /></label>{release ? <section className="available-update"><span className="available-update-label">{zh ? "有新版本可用" : "Update available"}</span><h3>{release.name || release.version}</h3><p>{release.notes || (zh ? "查看 Release 页面了解此版本的更新内容。" : "See the Release page for what changed.")}</p><a className="primary-button" href={release.url} rel="noreferrer" target="_blank"><Download size={15} />{zh ? "下载更新" : "Download update"}</a></section> : <p className={current?.status === "error" ? "settings-inline-error" : "settings-muted"}>{current?.status === "error" ? current.error : (zh ? "已是最新版本。" : "You’re up to date.")}</p>}<p className="update-last-check">{current?.lastCheckedAt ? `${zh ? "上次检查" : "Last checked"}: ${formatDateTime(current.lastCheckedAt)}` : (zh ? "尚未检查更新。" : "No update check yet.")}</p></div><footer className="modal-footer"><button className="text-button" onClick={onClose} type="button">{zh ? "关闭" : "Close"}</button><button className="secondary-button" disabled={checking} onClick={() => void refresh(true)} type="button">{checking ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "立即检查" : "Check now"}</button></footer></section></div>;
 }
 
-function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isOpen: boolean; language: Language; onClose: () => void; onLoad: (value: MCPSettingsResponse) => void; settings: MCPSettingsResponse | null }) {
+function MCPSettingsModal({ isOpen, language, onClose, onLoad, onNotice, settings }: { isOpen: boolean; language: Language; onClose: () => void; onLoad: (value: MCPSettingsResponse) => void; onNotice: (text: string, tone: "neutral" | "success" | "error") => void; settings: MCPSettingsResponse | null }) {
   const zh = language === "zh";
   const [current, setCurrent] = useState<MCPSettingsResponse | null>(settings);
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  useEffect(() => { if (!isOpen) return; void request<MCPSettingsResponse>("/api/settings/mcp").then((value) => { setCurrent(value); onLoad(value); setMessage(""); }).catch((reason) => setMessage(errorMessage(reason))); }, [isOpen]);
-  const apply = async (key: string, path: string, method = "POST") => { setBusy(key); setMessage(""); try { const value = await request<MCPSettingsResponse>(path, { method, body: method === "POST" ? JSON.stringify({}) : undefined }); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(null); } };
-  const inspectCodex = async () => { setBusy("codex-check"); setMessage(""); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(null); } };
-  const inspectWorkBuddy = async () => { setBusy("workbuddy-check"); setMessage(""); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); } catch (reason) { setMessage(errorMessage(reason)); } finally { setBusy(null); } };
+  useEffect(() => { if (!isOpen) return; void request<MCPSettingsResponse>("/api/settings/mcp").then((value) => { setCurrent(value); onLoad(value); }).catch((reason) => onNotice(errorMessage(reason), "error")); }, [isOpen]);
+  const apply = async (key: string, path: string, method = "POST") => { setBusy(key); try { const value = await request<MCPSettingsResponse>(path, { method, body: method === "POST" ? JSON.stringify({}) : undefined }); setCurrent(value); onLoad(value); onNotice(mcpActionNotice(key, zh), "success"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
+  const inspectCodex = async () => { setBusy("codex-check"); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); const status = value.codex?.status || "unavailable"; onNotice(mcpInspectionNotice("Codex", status, zh), status === "connected" ? "success" : "neutral"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
+  const inspectWorkBuddy = async () => { setBusy("workbuddy-check"); try { const value = await request<MCPSettingsResponse>("/api/settings/mcp"); setCurrent(value); onLoad(value); const status = value.workbuddy?.status || "unavailable"; onNotice(mcpInspectionNotice("WorkBuddy", status, zh), status === "connected" ? "success" : "neutral"); } catch (reason) { onNotice(errorMessage(reason), "error"); } finally { setBusy(null); } };
   if (!isOpen) return null;
   const installAvailable = Boolean(current?.enabled && current?.serviceReady && current?.installReady);
-  const installStatus = !current?.enabled ? (zh ? "先在上方批准本机 Agent 访问。" : "Approve local-agent access above first.") : !current?.serviceReady ? (zh ? "本机配对尚未准备好；请重新启用访问后再试。" : "Local pairing is not ready. Re-enable access and try again.") : null;
   const workBuddy = current?.workbuddy;
-  const workBuddyState = workBuddy?.status === "connected" ? (zh ? "已连接" : "Connected") : workBuddy?.status === "awaiting_trust" ? (zh ? "等待信任" : "Needs trust") : workBuddy?.status === "disabled" ? (zh ? "已停用" : "Disconnected") : workBuddy?.status === "protected" ? (zh ? "配置受保护" : "Protected") : workBuddy?.status === "unavailable" ? (zh ? "无法检测" : "Unavailable") : workBuddy?.status === "not_ready" ? (zh ? "等待 WorkBuddy" : "Open WorkBuddy first") : (zh ? "可连接" : "Ready to connect");
+  const workBuddyState = workBuddy?.status === "connected" ? (zh ? "已连接" : "Connected") : workBuddy?.status === "awaiting_trust" ? (zh ? "等待信任" : "Needs trust") : workBuddy?.status === "disabled" ? (zh ? "已停用" : "Disabled") : workBuddy?.status === "protected" ? (zh ? "配置受保护" : "Protected") : workBuddy?.status === "unavailable" ? (zh ? "无法检测" : "Unavailable") : workBuddy?.status === "not_ready" ? (zh ? "等待 WorkBuddy" : "Open WorkBuddy first") : (zh ? "可连接" : "Ready to connect");
   const workBuddyHint = workBuddy?.message || (zh ? "Desktop 会保持一条稳定的本地连接；首次仅需在 WorkBuddy 信任一次。" : "Desktop keeps one stable local connection; WorkBuddy asks for trust only once.");
   const codex = current?.codex;
   const codexState = codex?.status === "connected" ? (zh ? "已连接" : "Connected") : codex?.status === "repairable" ? (zh ? "需要修复" : "Needs repair") : codex?.status === "protected" ? (zh ? "配置受保护" : "Protected") : codex?.status === "unavailable" ? (zh ? "无法检测" : "Unavailable") : (zh ? "未连接" : "Not connected");
@@ -1397,7 +1394,7 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
     <section className="export-modal mcp-settings-modal">
       <header className="modal-head"><div><h2 id="mcp-settings-title">{zh ? "连接 Agent" : "Connect an Agent"}</h2><p>{zh ? "让本机 Agent 在你选择 Book 后安全使用资料。" : "Let a local Agent safely use sources after you choose a Book."}</p></div><button aria-label={zh ? "关闭" : "Close"} className="icon-button" onClick={onClose} type="button"><X size={16} /></button></header>
       <div className="mcp-settings-body">
-        <section className="mcp-access-panel"><div><span className={`mcp-access-indicator ${current?.enabled ? "is-enabled" : ""}`} aria-hidden="true" /><strong>{current?.enabled ? (zh ? "本机访问已开启" : "Local access is on") : (zh ? "先开启本机访问" : "Turn on local access first")}</strong><p>{zh ? "Agent可以获取Book数据，对Book的改动可在Agent提交窗口中查看" : "Agents can access Book data. Review proposed Book changes in Agent submissions."}</p></div>{!current?.enabled ? <button className="primary-button" disabled={Boolean(busy)} onClick={() => void apply("access", "/api/settings/mcp")} type="button">{busy === "access" ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "允许本机 Agent 访问" : "Allow local-agent access"}</button> : <button className="mcp-revoke-button" disabled={Boolean(busy)} onClick={() => void apply("access", "/api/settings/mcp", "DELETE")} type="button">{busy === "access" ? <LoaderCircle className="spin" size={14} /> : null}{zh ? "撤销访问" : "Revoke access"}</button>}</section>
+        <section className="mcp-access-panel"><div><span className={`mcp-access-indicator ${current?.enabled ? "is-enabled" : ""}`} aria-hidden="true" /><strong>{current?.enabled ? (zh ? "本机访问已开启" : "Local access is on") : (zh ? "先开启本机访问" : "Turn on local access first")}</strong><p>{zh ? "Agent可以获取Book数据，对Book的改动可在Agent提交窗口中查看" : "Agents can access Book data. Review proposed Book changes in Agent submissions."}</p></div>{!current?.enabled ? <button className="primary-button" disabled={Boolean(busy)} onClick={() => void apply("access-enable", "/api/settings/mcp")} type="button">{busy === "access-enable" ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{zh ? "允许本机 Agent 访问" : "Allow local-agent access"}</button> : <button className="mcp-revoke-button" disabled={Boolean(busy)} onClick={() => void apply("access-revoke", "/api/settings/mcp", "DELETE")} type="button">{busy === "access-revoke" ? <LoaderCircle className="spin" size={14} /> : null}{zh ? "撤销访问" : "Revoke access"}</button>}</section>
         <div className="mcp-host-list">
           <section className="mcp-host-card">
             <div aria-hidden="true" className="mcp-host-logo is-codex"><Sparkles size={20} /></div>
@@ -1407,10 +1404,9 @@ function MCPSettingsModal({ isOpen, language, onClose, onLoad, settings }: { isO
           <section className="mcp-host-card">
             <div aria-hidden="true" className="mcp-host-logo is-workbuddy"><Puzzle size={20} /></div>
             <div className="mcp-host-copy"><div className="mcp-host-heading"><h3>WorkBuddy</h3><span className={`mcp-host-status is-${workBuddy?.status || "ready"}`}>{workBuddyState}</span></div><p>{workBuddyHint}</p></div>
-            <div className="mcp-host-action">{workBuddy?.status === "connected" ? <><button className="secondary-button" disabled={Boolean(busy)} onClick={() => void inspectWorkBuddy()} type="button">{busy === "workbuddy-check" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "检测连接" : "Check"}</button><button className="mcp-host-remove" disabled={Boolean(busy)} onClick={() => void apply("workbuddy-remove", "/api/settings/mcp/workbuddy", "DELETE")} type="button"><Link2Off size={15} />{zh ? "移除" : "Remove"}</button></> : workBuddy?.status === "disabled" ? <button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "修复连接" : "Repair"}</button> : workBuddy?.status === "awaiting_trust" || workBuddy?.status === "protected" || workBuddy?.status === "unavailable" ? <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void inspectWorkBuddy()} type="button">{busy === "workbuddy-check" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "检测连接" : "Check"}</button> : <button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接" : "Connect"}</button>}</div>
+            <div className="mcp-host-action">{workBuddy?.status === "connected" ? <><button className="secondary-button" disabled={Boolean(busy)} onClick={() => void inspectWorkBuddy()} type="button">{busy === "workbuddy-check" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "检测连接" : "Check"}</button><button className="mcp-host-remove" disabled={Boolean(busy)} onClick={() => void apply("workbuddy-disable", "/api/settings/mcp/workbuddy", "DELETE")} type="button"><Link2Off size={15} />{zh ? "停用" : "Disable"}</button></> : workBuddy?.status === "disabled" ? <button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "修复连接" : "Repair"}</button> : workBuddy?.status === "awaiting_trust" || workBuddy?.status === "protected" || workBuddy?.status === "unavailable" ? <button className="secondary-button" disabled={Boolean(busy)} onClick={() => void inspectWorkBuddy()} type="button">{busy === "workbuddy-check" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{zh ? "检测连接" : "Check"}</button> : <button className="primary-button" disabled={!installAvailable || Boolean(busy)} onClick={() => void apply("workbuddy", "/api/settings/mcp/workbuddy")} type="button">{busy === "workbuddy" ? <LoaderCircle className="spin" size={15} /> : <Link2 size={15} />}{zh ? "连接" : "Connect"}</button>}</div>
           </section>
         </div>
-        {message ? <p className="mcp-host-message" role="status"><Info aria-hidden="true" size={15} />{message}</p> : installStatus ? <p className="mcp-host-message"><Info aria-hidden="true" size={15} />{installStatus}</p> : current?.codex?.message ? <p className="mcp-host-message"><Info aria-hidden="true" size={15} />{current.codex.message}</p> : current?.workbuddy?.message ? <p className="mcp-host-message"><Info aria-hidden="true" size={15} />{current.workbuddy.message}</p> : null}
       </div>
     </section>
   </div>;
@@ -2051,6 +2047,46 @@ function agentPageConnectionErrorMessage(error: unknown, language: Language) {
 function copiedForAgentMessage(count: number, kind: "file" | "link", language: Language) {
   if (language === "zh") return `已复制 ${count} 个${kind === "file" ? "文件" : "链接"}，请粘贴到 Agent 输入框。`;
   return `Copied ${count} ${kind}${count === 1 ? "" : "s"}. Paste ${count === 1 ? "it" : "them"} into the Agent input.`;
+}
+function mcpActionNotice(action: string, zh: boolean) {
+  if (zh) {
+    if (action === "access-enable") return "已允许本机 Agent 访问。";
+    if (action === "access-revoke") return "已撤销本机 Agent 访问。现有连接配置会保留，但后续调用会被拒绝。";
+    if (action === "codex") return "已配置 Codex。请新开 Codex 对话后使用 Sourcebook。";
+    if (action === "codex-remove") return "已移除由 Sourcebook Desktop 管理的 Codex 配置。";
+    if (action === "workbuddy") return "已写入 WorkBuddy 配置。请在 WorkBuddy 中信任 Sourcebook 后新开对话。";
+    if (action === "workbuddy-disable") return "已停用 WorkBuddy 配置。已有对话仍可能保留当前连接。";
+    return "连接设置已更新。";
+  }
+  if (action === "access-enable") return "Local-agent access is now allowed.";
+  if (action === "access-revoke") return "Local-agent access was revoked. Existing connection entries remain, but future calls will be rejected.";
+  if (action === "codex") return "Codex is configured. Start a new Codex conversation to use Sourcebook.";
+  if (action === "codex-remove") return "The Codex configuration managed by Sourcebook Desktop was removed.";
+  if (action === "workbuddy") return "WorkBuddy is configured. Trust Sourcebook in WorkBuddy, then start a new conversation.";
+  if (action === "workbuddy-disable") return "The WorkBuddy configuration is disabled. Existing conversations may keep their current connection.";
+  return "Connection settings were updated.";
+}
+function mcpInspectionNotice(host: "Codex" | "WorkBuddy", status: string, zh: boolean) {
+  if (zh) {
+    if (status === "connected") return `已检测到 ${host} 的 Sourcebook 配置。`;
+    if (status === "awaiting_trust") return "已检测到 WorkBuddy 配置，仍需在 WorkBuddy 中信任 Sourcebook。";
+    if (status === "disabled") return "WorkBuddy 的 Sourcebook 配置已停用。";
+    if (status === "not_connected") return `未检测到 ${host} 的 Sourcebook 配置。`;
+    if (status === "protected") return `检测到用户管理的 ${host} Sourcebook 配置；Sourcebook 未作修改。`;
+    if (status === "not_ready") return "请先打开 WorkBuddy 一次，再连接。";
+    if (status === "repairable") return "Codex 配置需要修复。";
+    if (status === "unavailable") return `暂时无法检测 ${host} 的 Sourcebook 配置。`;
+    return `${host} 尚未准备好连接。`;
+  }
+  if (status === "connected") return `Sourcebook configuration was found for ${host}.`;
+  if (status === "awaiting_trust") return "The WorkBuddy configuration was found. Trust Sourcebook in WorkBuddy to finish setup.";
+  if (status === "disabled") return "The WorkBuddy Sourcebook configuration is disabled.";
+  if (status === "not_connected") return `No Sourcebook configuration was found for ${host}.`;
+  if (status === "protected") return `A user-managed Sourcebook configuration was found for ${host}; Sourcebook left it unchanged.`;
+  if (status === "not_ready") return "Open WorkBuddy once before connecting it.";
+  if (status === "repairable") return "The Codex configuration needs repair.";
+  if (status === "unavailable") return `The ${host} Sourcebook configuration could not be checked right now.`;
+  return `${host} is not ready to connect yet.`;
 }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
 async function copyTextToClipboard(text: string) {

@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Simplify **Add materials** to records, local files, and clipboard import; Picker installation remains available from Settings. Tighten **Connect an Agent** by removing its redundant footer information, localizing action feedback, and showing every connect, check, remove, disable, or local-access result as a Toast. WorkBuddy’s secondary action now accurately reads **Disable** because it disables Sourcebook for new conversations rather than deleting its configuration.
 - Use one clear copy confirmation across files, links, and prompts: show the copied count and tell the user to paste it into the Agent input.
 - Make the Agent page connection action explicit: it shows an in-progress state and confirms whether the tab connected or its connection refreshed. If Desktop is unavailable, the page credential is no longer valid, or the Book disappeared, it shows the concrete recovery reason instead of silently failing.
 - Copy links and prompts directly through Sourcebook Desktop in WorkBuddy, where the embedded browser does not grant clipboard-write permission. The same direct-copy interaction remains intact.
