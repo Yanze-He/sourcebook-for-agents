@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Limit **Copy links** to selected materials that are available only as links. Materials with a transferable local file stay in **Copy files**, even when they also retain their original web address; the file-copy confirmation stays focused on the copied files and paste destination.
 - Add keyboard selection rules: `Ctrl/⌘ + A` selects all currently visible sources and enters selection mode when no popover or dialog is open; `Esc` closes an open surface, or exits selection mode when none is open.
 - Add the existing **Copy** action to the ordinary browser selection bar, immediately before **Send to AI**, using the same secondary button treatment as **More**. It retains the Agent-page behavior: copy directly when the selection has one transferable type, or choose files versus links when it has both.
 - Keep the **Send to Agent** prompt and its usage guidance in separate, sequential sections when a large material scope is expanded; the modal scrolls as one surface instead of allowing the prompt editor to overlap the guidance.

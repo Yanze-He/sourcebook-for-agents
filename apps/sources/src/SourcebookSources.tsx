@@ -581,9 +581,8 @@ export default function SourcebookSources() {
   }
   async function copyPackedMaterials() {
     try {
-      const result = await request<{ copied: number; skipped: number; linkReferences: number }>(bookPath("/api/source-packs/copy-materials", activeBookId), { method: "POST", body: JSON.stringify({ sourceItemIds: selectedIds }) });
-      const detail = result.skipped ? (language === "zh" ? `${result.skipped} 个没有本地文件的素材会在复制提示词时以链接提供。` : `${result.skipped} source${result.skipped === 1 ? "" : "s"} without a local file will be included as links when you copy the prompt.`) : "";
-      showSourcesMessage(copiedForAgentMessage(result.copied, "file", language) + detail, 3600, "success");
+      const result = await request<{ copied: number }>(bookPath("/api/source-packs/copy-materials", activeBookId), { method: "POST", body: JSON.stringify({ sourceItemIds: selectedIds }) });
+      showSourcesMessage(copiedForAgentMessage(result.copied, "file", language), 3600, "success");
       return true;
     } catch (error) {
       showSourcesMessage(language === "zh" ? `无法复制素材：${errorMessage(error)}` : `Could not copy sources: ${errorMessage(error)}`, 6000, "error");
@@ -591,7 +590,10 @@ export default function SourcebookSources() {
     }
   }
   async function copySelectedLinks() {
-    const links = selectedItems.map(webLinkFor).filter((link): link is string => Boolean(link));
+    const links = selectedItems
+      .filter(hasCopyablePackLink)
+      .map(webLinkFor)
+      .filter((link): link is string => Boolean(link));
     if (!links.length) return;
     try {
       await copyTextToClipboard(links.join("\n"));
@@ -990,7 +992,7 @@ export default function SourcebookSources() {
       {bootstrapError ? <EmptyState icon={<CloudOff size={24} />} title={language === "zh" ? "无法加载 Sourcebook" : "Could not load Sourcebook"} description={<>{language === "zh" ? "请确认 Sourcebook Desktop 已打开，然后重试。" : "Check that Sourcebook Desktop is open, then try again."}<small>{bootstrapError}</small></>} action={<button className="primary-button" onClick={() => void loadBooks()} type="button"><RefreshCw size={15} />{copy.retry}</button>} /> : null}
       {!loading && !bootstrapError && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
       {!loading && !bootstrapError && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onEnterBatchSelection={() => setIsBatchSelecting(true)} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onMarqueeSelect={addSelected} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onRevealLocal={revealLocalFile} onSelect={selectFromCard} onToggle={toggleSelected} /> : null}
-      {isBatchSelecting ? <SourcesSelectionFooter activeBookId={activeBookId} books={books} copy={copy} count={selectedIds.length} hasFiles={selectedItems.some(hasCopyablePackFile)} hasLinks={selectedItems.some((item) => Boolean(webLinkFor(item)))} hasReusableSelection={hasReusableSelection} isActionsOpen={isBatchActionsOpen} isAgentPage={Boolean(agentSessionIdRef.current && !agentPageDisconnected)} isBookTransferOpen={isBookTransferOpen} isCopyOpen={isBatchCopyOpen} isTransferring={isTransferringSelected} language={language} onAddNote={() => { setIsBatchActionsOpen(false); setIsBatchNoteOpen(true); }} onClear={exitBatchSelection} onCopyFiles={() => { setIsBatchCopyOpen(false); void copyPackedMaterials(); }} onCopyLinks={() => { setIsBatchCopyOpen(false); void copySelectedLinks(); }} onDelete={() => { setIsBatchActionsOpen(false); setIsDeleteOpen(true); }} onOpenPack={() => { setIsBatchActionsOpen(false); setIsBookTransferOpen(false); setIsPackOpen(true); }} onRestoreLastSelection={restoreLastSelection} onToggleAll={toggleVisibleSelection} onToggleActions={() => setIsBatchActionsOpen((open) => !open)} onToggleCopy={() => setIsBatchCopyOpen((open) => !open)} onToggleTransfer={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} onTransfer={transferSelectedSources} transferRef={bookTransferRef} visibleCount={visibleItems.length} /> : null}
+      {isBatchSelecting ? <SourcesSelectionFooter activeBookId={activeBookId} books={books} copy={copy} count={selectedIds.length} hasFiles={selectedItems.some(hasCopyablePackFile)} hasLinks={selectedItems.some(hasCopyablePackLink)} hasReusableSelection={hasReusableSelection} isActionsOpen={isBatchActionsOpen} isAgentPage={Boolean(agentSessionIdRef.current && !agentPageDisconnected)} isBookTransferOpen={isBookTransferOpen} isCopyOpen={isBatchCopyOpen} isTransferring={isTransferringSelected} language={language} onAddNote={() => { setIsBatchActionsOpen(false); setIsBatchNoteOpen(true); }} onClear={exitBatchSelection} onCopyFiles={() => { setIsBatchCopyOpen(false); void copyPackedMaterials(); }} onCopyLinks={() => { setIsBatchCopyOpen(false); void copySelectedLinks(); }} onDelete={() => { setIsBatchActionsOpen(false); setIsDeleteOpen(true); }} onOpenPack={() => { setIsBatchActionsOpen(false); setIsBookTransferOpen(false); setIsPackOpen(true); }} onRestoreLastSelection={restoreLastSelection} onToggleAll={toggleVisibleSelection} onToggleActions={() => setIsBatchActionsOpen((open) => !open)} onToggleCopy={() => setIsBatchCopyOpen((open) => !open)} onToggleTransfer={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} onTransfer={transferSelectedSources} transferRef={bookTransferRef} visibleCount={visibleItems.length} /> : null}
       {message ? <p aria-live={messageTone === "error" ? "assertive" : "polite"} className={`sources-message is-${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{isRefreshing || isImporting || isRefreshingAgentPageConnection ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
     <SourceDetailModal focusNote={focusDetailNote} item={detailItem} onClose={() => { setFocusDetailNote(false); setDetailItem(null); }} onContentSave={saveContent} onCopy={copySource} onDelete={removeItem} onFavorite={toggleFavorite} onNoteSave={saveNote} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={startDownload} onRevealLocal={revealLocalFile} onTitleSave={saveTitle} />
@@ -1675,7 +1677,7 @@ function PackHandoffModal({ bookName, isOpen, items, language, onClose, onCopyMa
   const [scopeOpen, setScopeOpen] = useState(true);
   const [prompt, setPrompt] = useState("");
   const files = items.filter(hasCopyablePackFile);
-  const links = items.filter((item) => !hasCopyablePackFile(item) && Boolean(webLinkFor(item)));
+  const links = items.filter(hasCopyablePackLink);
   const selectionKey = items.map((item) => item.id).join(":");
   const defaultPrompt = () => renderPromptTemplate(promptTemplate || defaultPromptTemplate(language), items, language, bookName);
   useEffect(() => { if (isOpen) { setScopeOpen(true); setPrompt(defaultPrompt()); } }, [bookName, isOpen, language, promptTemplate, selectionKey]);
@@ -1909,7 +1911,7 @@ function promptTemplateContext(items: SourceItem[], language: Language, bookName
     return { index: String(index + 1), title: item.itemTitle, file_name: kind === "file" ? packFileName(item) : "", url: kind === "link" ? webLinkFor(item) || "" : "", type: kindLabel(item.modality, language), note };
   };
   const files = items.filter(hasCopyablePackFile);
-  const links = items.filter((item) => !hasCopyablePackFile(item) && Boolean(webLinkFor(item)));
+  const links = items.filter(hasCopyablePackLink);
   return { book_name: bookName, source_count: String(items.length), local_file_count: String(files.length), link_count: String(links.length), files: files.map((item, index) => makeItem(item, index, "file")), links: links.map((item, index) => makeItem(item, index, "link")) };
 }
 
@@ -1965,6 +1967,7 @@ function buildPackPrompt(_template: PackTemplate, _values: Record<string, string
 }
 function hasLocalPackFile(item: SourceItem) { return item.assetCacheState === "cached" && Boolean(item.fileName); }
 function hasCopyablePackFile(item: SourceItem) { return hasLocalPackFile(item) || ((item.modality === "text" || item.modality === "conversation") && Boolean(item.contentText?.trim())); }
+function hasCopyablePackLink(item: SourceItem) { return !hasCopyablePackFile(item) && Boolean(webLinkFor(item)); }
 function packFileName(item: SourceItem) { return hasLocalPackFile(item) ? item.fileName || item.itemTitle : `${item.itemTitle.replace(/\.txt$/i, "")}.txt`; }
 function failurePreviewItems(bookId: string): SourceItem[] {
   const pickedAt = new Date().toISOString();
