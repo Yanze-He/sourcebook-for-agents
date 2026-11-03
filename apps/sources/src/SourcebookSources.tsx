@@ -417,10 +417,8 @@ export default function SourcebookSources() {
   useEffect(() => () => { if (messageTimeoutRef.current) window.clearTimeout(messageTimeoutRef.current); }, []);
   useEffect(() => {
     const closeIfOutside = (event: MouseEvent) => { if (!settingsRef.current?.contains(event.target as Node)) setIsSettingsOpen(false); if (!addMaterialsRef.current?.contains(event.target as Node)) setIsAddMaterialsOpen(false); if (!filterRef.current?.contains(event.target as Node)) setIsFiltersOpen(false); if (!bookRef.current?.contains(event.target as Node)) setIsBookOpen(false); if (!bookTransferRef.current?.contains(event.target as Node)) setIsBookTransferOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setIsSettingsOpen(false); setIsAddMaterialsOpen(false); setIsFiltersOpen(false); setIsBookOpen(false); setIsPackOpen(false); setClipboardPlan(null); setIsBookTransferOpen(false); } };
     document.addEventListener("mousedown", closeIfOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => { document.removeEventListener("mousedown", closeIfOutside); document.removeEventListener("keydown", closeOnEscape); };
+    return () => document.removeEventListener("mousedown", closeIfOutside);
   }, []);
   useEffect(() => { document.documentElement.lang = language === "zh" ? "zh-CN" : "en"; window.localStorage.setItem("sourcebook-language", language); }, [language]);
   useEffect(() => {
@@ -543,6 +541,29 @@ export default function SourcebookSources() {
     showSourcesMessage(language === "zh" ? `已恢复 ${available.length} 个上一次选择的素材${skipped ? `，跳过 ${skipped} 个已不存在的素材。` : "。"}` : `Restored ${available.length} source${available.length === 1 ? "" : "s"}${skipped ? `; skipped ${skipped} unavailable source${skipped === 1 ? "" : "s"}.` : "."}`, 3600, "success");
   };
   const exitBatchSelection = () => { rememberSelection(activeBookId, selectedIds); setSelectedIds([]); setIsBatchSelecting(false); setIsBatchActionsOpen(false); setIsBatchCopyOpen(false); setIsPackOpen(false); setIsBookTransferOpen(false); };
+  const hasOpenPopup = Boolean(isBookOpen || isCreateBookOpen || isCreateTextOpen || isAddMaterialsOpen || renameBookTarget || deleteBookTarget || transferItem || detailItem || previewItem || isPackOpen || clipboardPlan || isBookTransferOpen || isBatchActionsOpen || isBatchCopyOpen || isFiltersOpen || isSettingsOpen || isPromptSettingsOpen || isLibrarySettingsOpen || isUpdateSettingsOpen || isMCPSettingsOpen || isMCPSuggestionsOpen || isClearDataOpen || isBackupExportOpen || isDeleteOpen || isBatchNoteOpen || downloadConfirmItem);
+  useEffect(() => {
+    const handleKeyboardShortcut = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (hasOpenPopup) {
+          event.preventDefault();
+          setIsBookOpen(false); setIsCreateBookOpen(false); setIsCreateTextOpen(false); setIsAddMaterialsOpen(false); setRenameBookTarget(null); setDeleteBookTarget(null); setTransferItem(null); setDetailItem(null); setPreviewItem(null); setIsPackOpen(false); if (!isClipboardImporting) setClipboardPlan(null); setIsBookTransferOpen(false); setIsBatchActionsOpen(false); setIsBatchCopyOpen(false); setIsFiltersOpen(false); setIsSettingsOpen(false); setIsPromptSettingsOpen(false); setIsLibrarySettingsOpen(false); setIsUpdateSettingsOpen(false); setIsMCPSettingsOpen(false); setIsMCPSuggestionsOpen(false); if (!isClearingData) setIsClearDataOpen(false); setIsBackupExportOpen(false); setIsDeleteOpen(false); setIsBatchNoteOpen(false); setDownloadConfirmItem(null);
+          return;
+        }
+        if (isBatchSelecting) {
+          event.preventDefault();
+          exitBatchSelection();
+        }
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !hasOpenPopup && !isEditablePasteTarget(event.target) && visibleItems.length) {
+        event.preventDefault();
+        setIsBatchSelecting(true); setSelectedIds(visibleItems.map((item) => item.id)); setIsBatchActionsOpen(false); setIsBatchCopyOpen(false); setIsBookTransferOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyboardShortcut);
+    return () => document.removeEventListener("keydown", handleKeyboardShortcut);
+  }, [activeBookId, hasOpenPopup, isBatchSelecting, isClearingData, isClipboardImporting, selectedIds, visibleItems]);
   async function copySource(item: SourceItem) {
     try {
       if (hasCopyablePackFile(item)) {
@@ -1025,7 +1046,7 @@ function SourcesSelectionFooter({ activeBookId, books, copy, count, hasFiles, ha
   const copyLabel = language === "zh" ? "复制" : "Copy";
   const copyDirectly = hasFiles !== hasLinks;
   const doCopy = () => hasFiles ? onCopyFiles() : onCopyLinks();
-  const copyAction = <div className="sources-copy-actions">{isCopyOpen ? <div className="sources-more-actions-menu sources-copy-menu">{hasFiles ? <button onClick={onCopyFiles} type="button"><FileText size={15} />{language === "zh" ? "复制文件" : "Copy files"}</button> : null}{hasLinks ? <button onClick={onCopyLinks} type="button"><Link2 size={15} />{language === "zh" ? "复制链接" : "Copy links"}</button> : null}</div> : null}<button aria-expanded={isCopyOpen} className="primary-button sources-copy-button" onClick={copyDirectly ? doCopy : onToggleCopy} type="button"><Copy size={15} />{copyLabel}</button></div>;
+  const copyAction = <div className="sources-copy-actions">{isCopyOpen ? <div className="sources-more-actions-menu sources-copy-menu">{hasFiles ? <button onClick={onCopyFiles} type="button"><FileText size={15} />{language === "zh" ? "复制文件" : "Copy files"}</button> : null}{hasLinks ? <button onClick={onCopyLinks} type="button"><Link2 size={15} />{language === "zh" ? "复制链接" : "Copy links"}</button> : null}</div> : null}<button aria-expanded={isCopyOpen} className={`${isAgentPage ? "primary-button" : "secondary-button"} sources-copy-button`} onClick={copyDirectly ? doCopy : onToggleCopy} type="button"><Copy size={15} />{copyLabel}</button></div>;
 	return <footer className="sources-footer sources-batch-footer has-selection"><div className="sources-selection-context"><button aria-checked={selectionState} aria-label={allVisibleSelected ? (language === "zh" ? "取消全选" : "Clear selection") : copy.selectAll} className="source-selection-control sources-selection-toggle" onClick={onToggleAll} role="checkbox" type="button">{allVisibleSelected ? <Check size={14} strokeWidth={2.8} /> : <Minus size={14} strokeWidth={2.8} />}</button><strong>{selectionLabel}</strong></div><div className="sources-footer-actions"><div className="sources-more-actions" ref={transferRef}>{isActionsOpen ? <div className="sources-more-actions-menu"><button className="sources-delete-button" onClick={onDelete} type="button"><Trash2 size={15} />{copy.delete}</button><button aria-expanded={isBookTransferOpen} onClick={onToggleTransfer} type="button"><ArrowRightLeft size={15} />{copy.addToOtherBook}</button>{isBookTransferOpen ? <BookTransferPopover books={books.filter((book) => book.id !== activeBookId)} count={count} isTransferring={isTransferring} onClose={onToggleTransfer} onTransfer={onTransfer} /> : null}<button onClick={onAddNote} type="button"><MessageSquare size={15} />{copy.addNote}</button></div> : null}<button aria-expanded={isActionsOpen} className="secondary-button sources-more-button" onClick={onToggleActions} type="button"><EllipsisVertical size={18} />{language === "zh" ? "更多" : "More"}</button></div>{copyAction}{!isAgentPage ? <button className="primary-button sources-send-button" onClick={onOpenPack} type="button"><Send size={15} />{language === "zh" ? "发送给 AI" : "Send to AI"}</button> : null}<button aria-label={language === "zh" ? "退出选择" : "Exit selection"} className="secondary-button sources-cancel-button" onClick={onClear} type="button"><X size={17} /></button></div></footer>;
 }
 
