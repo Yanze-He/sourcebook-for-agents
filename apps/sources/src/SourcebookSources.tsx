@@ -155,6 +155,15 @@ const markdownSerializer = new TurndownService({ bulletListMarker: "-", codeBloc
 markdownSerializer.use(turndownTables);
 function toggleFilterValue<T>(values: T[], value: T) { return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value]; }
 
+function createAgentPageInstanceId() {
+  const bytes = new Uint8Array(12);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+    return `page-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
+  return `page-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function SourcebookSources() {
   const [items, setItems] = useState<SourceItem[]>([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -175,7 +184,7 @@ export default function SourcebookSources() {
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [isBatchActionsOpen, setIsBatchActionsOpen] = useState(false);
   const [isBatchCopyOpen, setIsBatchCopyOpen] = useState(false);
-  const [agentPageConnection, setAgentPageConnection] = useState<"connected" | "disconnected">("connected");
+  const [agentPageConnection, setAgentPageConnection] = useState<"active" | "passive" | "disconnected">("active");
   const [density, setDensity] = useState<CardDensity>(() => (window.localStorage.getItem("sourcebook-card-density") as CardDensity) || "standard");
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -236,6 +245,8 @@ export default function SourcebookSources() {
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
   const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
   const agentSessionTokenRef = useRef(new URLSearchParams(window.location.search).get("agentSessionToken"));
+  const agentPageInstanceIdRef = useRef(createAgentPageInstanceId());
+  const claimAgentPageRef = useRef<() => void>(() => undefined);
   const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
 
@@ -318,9 +329,9 @@ export default function SourcebookSources() {
     const pageToken = agentSessionTokenRef.current;
     if (sessionId && pageToken) {
       try {
-        const scope = await request<{ bookId?: string }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}`);
+        const scope = await request<{ bookId?: string; isActivePage?: boolean }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}&pageInstanceId=${encodeURIComponent(agentPageInstanceIdRef.current)}`);
         agentBookId = scope.bookId || "";
-        setAgentPageConnection("connected");
+        setAgentPageConnection(scope.isActivePage === false ? "passive" : "active");
       } catch (error) {
         if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
       }
@@ -436,27 +447,33 @@ export default function SourcebookSources() {
     const pageToken = agentSessionTokenRef.current;
     if (!sessionId || !pageToken || !activeBookId) return;
     let disposed = false;
-    const syncAgentPage = () => void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
+    const syncAgentPage = (claim = false) => void request<{ isActivePage?: boolean }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
       method: "PUT",
       body: JSON.stringify({
         pageToken,
+        pageInstanceId: agentPageInstanceIdRef.current,
+        claim,
         bookId: activeBookId,
         selectedSourceIds: selectedIds,
         filteredSourceIds: visibleItems.map((item) => item.id),
         filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites },
       }),
-    }).then(() => {
-      if (!disposed) setAgentPageConnection("connected");
+    }).then((scope) => {
+      if (!disposed) setAgentPageConnection(scope.isActivePage === false ? "passive" : "active");
     }).catch((error) => {
       if (!disposed && isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
     });
+    claimAgentPageRef.current = () => syncAgentPage(true);
     syncAgentPage();
     const interval = window.setInterval(syncAgentPage, 2500);
     const syncWhenVisible = () => { if (!document.hidden) syncAgentPage(); };
-    window.addEventListener("focus", syncWhenVisible);
+    const claimWhenUsed = () => { if (!document.hidden) syncAgentPage(true); };
+    window.addEventListener("focus", claimWhenUsed);
     window.addEventListener("pageshow", syncWhenVisible);
+    window.addEventListener("pointerdown", claimWhenUsed, { capture: true });
+    window.addEventListener("keydown", claimWhenUsed, { capture: true });
     document.addEventListener("visibilitychange", syncWhenVisible);
-    return () => { disposed = true; window.clearInterval(interval); window.removeEventListener("focus", syncWhenVisible); window.removeEventListener("pageshow", syncWhenVisible); document.removeEventListener("visibilitychange", syncWhenVisible); };
+    return () => { disposed = true; claimAgentPageRef.current = () => undefined; window.clearInterval(interval); window.removeEventListener("focus", claimWhenUsed); window.removeEventListener("pageshow", syncWhenVisible); window.removeEventListener("pointerdown", claimWhenUsed, { capture: true }); window.removeEventListener("keydown", claimWhenUsed, { capture: true }); document.removeEventListener("visibilitychange", syncWhenVisible); };
   }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, selectedIds, source, visibleItems]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const reusableSelectionIds = useMemo(() => (lastSelectedIdsByBook[activeBookId] || []).filter((id) => items.some((item) => item.id === id)), [activeBookId, items, lastSelectedIdsByBook]);
@@ -858,14 +875,13 @@ export default function SourcebookSources() {
   const hasUnreadBooks = unreadBookIds.some((bookId) => bookId !== activeBookId && books.some((book) => book.id === bookId));
   const agentPageHost = agentSessionIdRef.current ? new URLSearchParams(window.location.search).get("sourcebookHost") : null;
   const agentPageName = agentPageHost === "workbuddy" ? "WorkBuddy" : agentPageHost === "codex" ? "Codex" : (agentPageHost || "Agent");
-  const agentPageScopeMessage = agentPageHost === "workbuddy"
-    ? (language === "zh" ? "已连接 · WorkBuddy 当前使用共享页面" : "Connected · WorkBuddy currently uses a shared page")
-    : (language === "zh" ? "已连接 · 此页面的 Book 会与当前对话同步" : "Connected · This page's Book stays with this conversation");
+  const agentPageScopeMessage = language === "zh" ? "此页的 Book、选择和筛选范围会用于当前对话" : "This tab's Book, selection, and filters are used for this conversation";
   const agentPageDisconnected = Boolean(agentSessionIdRef.current && agentPageConnection === "disconnected");
+  const agentPagePassive = Boolean(agentSessionIdRef.current && agentPageConnection === "passive");
 
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className={`sources-page sources-surface public-sources-surface ${agentSessionIdRef.current ? "has-agent-banner" : ""}`} aria-label="Sources">
-      {agentSessionIdRef.current ? agentPageDisconnected ? <div className="agent-page-banner is-disconnected" role="status"><span className="agent-page-banner-mark"><Link2Off size={15} /></span><div className="agent-page-banner-copy"><strong>{language === "zh" ? "本标签页已断联" : "Disconnected"}</strong><span>{language === "zh" ? "请查看其他标签页或让 Agent 重连。" : "Check other tab or ask Agent to reconnect."}</span></div></div> : <div className="agent-page-banner" role="status"><span className="agent-page-banner-mark">{agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageName}</strong><span>{agentPageScopeMessage}</span></div></div> : null}
+      {agentSessionIdRef.current ? agentPageDisconnected ? <div className="agent-page-banner is-disconnected" role="status"><span className="agent-page-banner-mark"><Link2Off size={15} /></span><div className="agent-page-banner-copy"><strong>{language === "zh" ? "本标签页已断联" : "Disconnected"}</strong><span>{language === "zh" ? "请查看其他标签页或让 Agent 重连。" : "Check other tab or ask Agent to reconnect."}</span></div></div> : agentPagePassive ? <div className="agent-page-banner is-passive" role="status"><span className="agent-page-banner-mark"><Eye size={15} /></span><div className="agent-page-banner-copy"><strong>{language === "zh" ? "另一标签页正在用于此对话" : "Another tab is active"}</strong><span>{language === "zh" ? "此页不会覆盖 Agent 的当前范围。" : "This page will not replace the Agent's current scope."}</span></div><button className="agent-page-takeover" onClick={() => claimAgentPageRef.current()} type="button">{language === "zh" ? "使用此页" : "Use this tab"}</button></div> : <div className="agent-page-banner" role="status"><span className="agent-page-banner-mark">{agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageName}</strong><span>{agentPageScopeMessage}</span></div></div> : null}
       <header className="panel-head">
         <div className="panel-title-block">
           <div className="book-title-row">
@@ -975,7 +991,7 @@ function SourceMasonry({ density, isBatchSelecting, items, selectedIds, hasMore,
     const hits = hitItems(viewportLeft, viewportTop, width, height);
     onMarqueeSelect([...start.selectedIds, ...hits]);
   };
-  return <div className={`source-masonry density-${density} ${isBatchSelecting ? "is-selecting" : ""}`} onPointerDown={(event) => { if (event.button !== 0 || event.pointerType === "touch" || (event.target as HTMLElement).closest(".source-masonry-card, button, input, textarea, a")) return; event.preventDefault(); dragStartRef.current = { x: event.clientX, y: event.clientY, selectedIds: selectedIds }; dragActiveRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={updateMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} ref={ref}>{isBatchSelecting && !selectedIds.length ? <div aria-hidden="true" className="source-selection-empty-overlay"><div><MousePointer2 size={16} /><span>{language === "zh" ? "点选或框选素材" : "Click or drag to select materials"}</span></div></div> : null}{marquee ? <div aria-hidden="true" className="source-selection-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}<div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard isBatchSelecting={isBatchSelecting} item={item} key={item.id} selected={selectedIds.includes(item.id)} onCopy={() => void onCopy(item)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onRevealLocal={() => onRevealLocal(item)} onSelect={() => onSelect(item.id)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
+  return <div className={`source-masonry density-${density} ${isBatchSelecting ? "is-selecting" : ""}`} onPointerDown={(event) => { if (event.button !== 0 || event.pointerType === "touch" || (event.target as HTMLElement).closest(".source-masonry-card, button, input, textarea, a")) return; event.preventDefault(); dragStartRef.current = { x: event.clientX, y: event.clientY, selectedIds: selectedIds }; dragActiveRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={updateMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} ref={ref}>{marquee ? <div aria-hidden="true" className="source-selection-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}<div className="source-masonry-columns" style={{ "--source-column-count": columnCount } as React.CSSProperties}>{columns.map((column, index) => <div className="source-masonry-column" key={index}>{column.map((item) => <SourceCard isBatchSelecting={isBatchSelecting} item={item} key={item.id} selected={selectedIds.includes(item.id)} onCopy={() => void onCopy(item)} onFavorite={() => onFavorite(item.id, !item.favorite)} onOpen={() => onOpen(item)} onEditNote={() => onEditNote(item)} onOpenLocal={() => onOpenLocal(item)} onPreview={() => onPreview(item)} onRequestDownload={() => onRequestDownload(item)} onRetryDownload={() => onRetryDownload(item)} onRevealLocal={() => onRevealLocal(item)} onSelect={() => onSelect(item.id)} onToggle={() => onToggle(item.id)} />)}</div>)}</div>{hasMore ? <div className="source-load-more"><button className="secondary-button" disabled={isLoadingMore} onClick={onLoadMore} type="button">{isLoadingMore ? copy.loading : copy.loadMore}</button></div> : null}</div>;
 }
 
 function SourcesSelectionFooter({ activeBookId, agentName, books, copy, count, hasFiles, hasLinks, hasReusableSelection, isActionsOpen, isBookTransferOpen, isCopyOpen, isTransferring, language, onAddNote, onClear, onCopyFiles, onCopyLinks, onDelete, onOpenPack, onRestoreLastSelection, onToggleAll, onToggleActions, onToggleCopy, onToggleTransfer, onTransfer, transferRef, visibleCount }: { activeBookId: string; agentName: string | null; books: Book[]; copy: { selectAll: string; addNote: string; delete: string; addToOtherBook: string }; count: number; hasFiles: boolean; hasLinks: boolean; hasReusableSelection: boolean; isActionsOpen: boolean; isBookTransferOpen: boolean; isCopyOpen: boolean; isTransferring: boolean; language: Language; onAddNote: () => void; onClear: () => void; onCopyFiles: () => void; onCopyLinks: () => void; onDelete: () => void; onOpenPack: () => void; onRestoreLastSelection: () => void; onToggleAll: () => void; onToggleActions: () => void; onToggleCopy: () => void; onToggleTransfer: () => void; onTransfer: (targetBookId: string, mode: "copy" | "move") => void; transferRef: React.RefObject<HTMLDivElement | null>; visibleCount: number }) {

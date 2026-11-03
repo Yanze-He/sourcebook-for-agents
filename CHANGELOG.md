@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## Unreleased
 
+- Make duplicate browser views of one Agent session deterministic. Exactly one active page may write the conversation's Book, selection, and filter; background refreshes from another view remain passive. A passive page identifies itself and offers an explicit **Use this tab** action. Remove the central selection overlay so it no longer obscures materials.
 - Keep a WorkBuddy conversation connected to its existing Sourcebook page when WorkBuddy recreates its local MCP helper. The page restores its own Book, selected materials, and current filter instead of falling back to Desktop's global browsing Book or opening an extra tab.
 - Let an Agent read the current page scope directly: selected materials take priority, followed by the materials currently visible through the user's filter. Explicit reconnects retire the old page, which then displays its disconnected state.
 - Restore the compact selection workflow: card selection circles have no hover tooltip; selection keeps one row in narrow Agent panels; regular pages offer **More** and **Send to AI**, while Agent pages offer **More** and type-aware **Copy** actions.

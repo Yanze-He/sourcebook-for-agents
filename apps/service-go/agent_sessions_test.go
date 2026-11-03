@@ -87,6 +87,72 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	}
 }
 
+func TestDuplicateAgentPagesHaveOneExplicitScopeOwner(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	enable := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/settings/mcp", bytes.NewBufferString(`{}`))
+	enable.Host = "127.0.0.1:4177"
+	server.ServeHTTP(httptest.NewRecorder(), enable)
+	settings, err := server.readDesktopSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	register := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions", bytes.NewBufferString(`{"sessionId":"duplicate-page-test","pageToken":"duplicate-page-token-123456789","agentName":"Codex"}`))
+	register.Host = "127.0.0.1:4177"
+	register.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	if result := httptest.NewRecorder(); func() *httptest.ResponseRecorder { server.ServeHTTP(result, register); return result }().Code != http.StatusOK {
+		t.Fatalf("register = %d", result.Code)
+	}
+	update := func(instance string, claim bool, selected string) map[string]any {
+		body := `{"pageToken":"duplicate-page-token-123456789","pageInstanceId":"` + instance + `","bookId":"sourcebook","selectedSourceIds":["` + selected + `"]`
+		if claim {
+			body += `,"claim":true`
+		}
+		body += `}`
+		request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:4177/api/agent-sessions/duplicate-page-test/scope", bytes.NewBufferString(body))
+		request.Host = "127.0.0.1:4177"
+		result := httptest.NewRecorder()
+		server.ServeHTTP(result, request)
+		if result.Code != http.StatusOK {
+			t.Fatalf("scope update %s = %d: %s", instance, result.Code, result.Body.String())
+		}
+		payload := map[string]any{}
+		if err := json.NewDecoder(result.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+	if first := update("page-first", false, "first"); first["isActivePage"] != true {
+		t.Fatalf("first page must become active: %#v", first)
+	}
+	if duplicate := update("page-duplicate", false, "duplicate"); duplicate["isActivePage"] != false {
+		t.Fatalf("a duplicate page must stay passive: %#v", duplicate)
+	}
+	readScope := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions/duplicate-page-test", nil)
+	readScope.Host = "127.0.0.1:4177"
+	readScope.Header.Set("X-Sourcebook-MCP-Token", settings.MCPToken)
+	readResult := httptest.NewRecorder()
+	server.ServeHTTP(readResult, readScope)
+	if !strings.Contains(readResult.Body.String(), `"selectedSourceIds":["first"]`) {
+		t.Fatalf("passive page must not overwrite scope: %s", readResult.Body.String())
+	}
+	if claimed := update("page-duplicate", true, "duplicate"); claimed["isActivePage"] != true {
+		t.Fatalf("explicit claim must become active: %#v", claimed)
+	}
+	if former := update("page-first", false, "first-again"); former["isActivePage"] != false {
+		t.Fatalf("former page must become passive: %#v", former)
+	}
+	readResult = httptest.NewRecorder()
+	server.ServeHTTP(readResult, readScope)
+	if !strings.Contains(readResult.Body.String(), `"selectedSourceIds":["duplicate"]`) {
+		t.Fatalf("claimed page must own scope: %s", readResult.Body.String())
+	}
+}
+
 func TestReplacingAnOwnerPageKeepsTheOldPageAsDisconnectedTombstone(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
 	if err != nil {

@@ -11,17 +11,21 @@ import (
 // stdio process to the one browser page it opened; it is not a cross-device
 // identity, and disappears when Desktop restarts.
 type agentSessionScope struct {
-	Token             string
-	RetiredTokens     []string
-	AgentName         string
-	OwnerID           string
-	Retired           bool
-	BookID            string
-	SelectedSourceIDs []string
-	FilteredSourceIDs []string
-	Filters           map[string]any
-	Revision          int
-	UpdatedAt         time.Time
+	Token         string
+	RetiredTokens []string
+	AgentName     string
+	OwnerID       string
+	Retired       bool
+	// ActivePageInstanceID identifies the one browser view allowed to write
+	// this session's scope. A browser tab is not an MCP session: users can
+	// duplicate a URL, so the page itself supplies this short-lived ID.
+	ActivePageInstanceID string
+	BookID               string
+	SelectedSourceIDs    []string
+	FilteredSourceIDs    []string
+	Filters              map[string]any
+	Revision             int
+	UpdatedAt            time.Time
 }
 
 func (server *Server) registerAgentSession(response http.ResponseWriter, request *http.Request) error {
@@ -67,10 +71,14 @@ func (server *Server) registerAgentSession(response http.ResponseWriter, request
 		bookID = previous.BookID
 	}
 	retiredTokens := previous.RetiredTokens
+	activePageInstanceID := previous.ActivePageInstanceID
 	if previous.Token != "" && previous.Token != token {
 		retiredTokens = appendUniqueString(retiredTokens, previous.Token)
+		// A deliberate page replacement has a new browser view. It must become
+		// the first page eligible to claim the scope.
+		activePageInstanceID = ""
 	}
-	server.agentSessions[id] = agentSessionScope{Token: token, RetiredTokens: retiredTokens, AgentName: truncate(strings.TrimSpace(stringValue(payload["agentName"])), 80), OwnerID: ownerID, BookID: bookID, SelectedSourceIDs: previous.SelectedSourceIDs, FilteredSourceIDs: previous.FilteredSourceIDs, Filters: previous.Filters, Revision: previous.Revision + 1, UpdatedAt: time.Now()}
+	server.agentSessions[id] = agentSessionScope{Token: token, RetiredTokens: retiredTokens, AgentName: truncate(strings.TrimSpace(stringValue(payload["agentName"])), 80), OwnerID: ownerID, ActivePageInstanceID: activePageInstanceID, BookID: bookID, SelectedSourceIDs: previous.SelectedSourceIDs, FilteredSourceIDs: previous.FilteredSourceIDs, Filters: previous.Filters, Revision: previous.Revision + 1, UpdatedAt: time.Now()}
 	server.agentSessionMu.Unlock()
 	writeJSON(response, http.StatusOK, map[string]any{"sessionId": id, "bookId": bookID})
 	return nil
@@ -130,6 +138,7 @@ func (server *Server) routeBrowserAgentSession(response http.ResponseWriter, req
 		}
 	} else {
 		payload["pageToken"] = request.URL.Query().Get("pageToken")
+		payload["pageInstanceId"] = request.URL.Query().Get("pageInstanceId")
 	}
 	pageToken := strings.TrimSpace(stringValue(payload["pageToken"]))
 	server.agentSessionMu.Lock()
@@ -145,8 +154,36 @@ func (server *Server) routeBrowserAgentSession(response http.ResponseWriter, req
 	if subtle.ConstantTimeCompare([]byte(pageToken), []byte(session.Token)) != 1 {
 		return &apiError{status: http.StatusUnauthorized, code: "AGENT_SESSION_UNAUTHORIZED", message: "This Sourcebook page is not connected to the current Agent session."}
 	}
+	pageInstanceID := strings.TrimSpace(stringValue(payload["pageInstanceId"]))
+	if pageInstanceID != "" && !sourceBookPattern.MatchString(pageInstanceID) {
+		return &apiError{status: http.StatusBadRequest, code: "AGENT_PAGE_INSTANCE_INVALID", message: "This Sourcebook page identity is invalid."}
+	}
 	if request.Method == http.MethodGet {
-		writeJSON(response, http.StatusOK, agentSessionPayload(sessionID, session, false))
+		result := agentSessionPayload(sessionID, session, false)
+		result["isActivePage"] = pageInstanceID != "" && subtle.ConstantTimeCompare([]byte(pageInstanceID), []byte(session.ActivePageInstanceID)) == 1
+		writeJSON(response, http.StatusOK, result)
+		return nil
+	}
+	// A duplicate browser tab is a second view of the same Agent session, not
+	// another Agent context. The first page becomes active; a passive page may
+	// take ownership only through a direct user action (claim=true). In
+	// particular, the normal background sync can never win a timing race.
+	if pageInstanceID != "" {
+		if session.ActivePageInstanceID == "" || boolValue(payload["claim"]) {
+			session.ActivePageInstanceID = pageInstanceID
+		}
+		if subtle.ConstantTimeCompare([]byte(pageInstanceID), []byte(session.ActivePageInstanceID)) != 1 {
+			result := agentSessionPayload(sessionID, session, false)
+			result["isActivePage"] = false
+			writeJSON(response, http.StatusOK, result)
+			return nil
+		}
+	} else if session.ActivePageInstanceID != "" {
+		// Old Sources pages can still authenticate with the URL token, but cannot
+		// overwrite a newer client that understands page ownership.
+		result := agentSessionPayload(sessionID, session, false)
+		result["isActivePage"] = false
+		writeJSON(response, http.StatusOK, result)
 		return nil
 	}
 	bookID := strings.TrimSpace(stringValue(payload["bookId"]))
@@ -166,7 +203,9 @@ func (server *Server) routeBrowserAgentSession(response http.ResponseWriter, req
 	session.Revision++
 	session.UpdatedAt = time.Now()
 	server.agentSessions[sessionID] = session
-	writeJSON(response, http.StatusOK, agentSessionPayload(sessionID, session, false))
+	result := agentSessionPayload(sessionID, session, false)
+	result["isActivePage"] = true
+	writeJSON(response, http.StatusOK, result)
 	return nil
 }
 
