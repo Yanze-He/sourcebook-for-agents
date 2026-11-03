@@ -108,6 +108,35 @@ func TestSourcebookNavigationReusesOrReplacesOnlyThePageToken(t *testing.T) {
 	}
 }
 
+func TestSourcebookNavigationUsesLocalhostOnlyForCodexBrowserPages(t *testing.T) {
+	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
+	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/api/mcp/v1/books":
+			_ = json.NewEncoder(response).Encode(map[string]any{"activeBookId": "research", "books": []map[string]any{{"id": "research", "name": "Research"}}})
+		case strings.HasPrefix(request.URL.Path, "/api/mcp/v1/agent-sessions/") && request.Method == http.MethodGet:
+			_ = json.NewEncoder(response).Encode(map[string]any{"bookId": "research"})
+		case request.URL.Path == "/api/mcp/v1/agent-sessions" && request.Method == http.MethodPost:
+			_ = json.NewEncoder(response).Encode(map[string]any{"ok": true})
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer bridge.Close()
+	client := &bridgeClient{config: bridgeConfig{MCPEnabled: true, MCPToken: "test-token", MCPServiceURL: bridge.URL}, http: bridge.Client()}
+	navigationURL, err := sourcebookNavigationURL(client, &sessionState{}, bridge.URL, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(navigationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Hostname() != "localhost" {
+		t.Fatalf("Codex browser page must use localhost, got %q", navigationURL)
+	}
+}
+
 func containsString(items []string, target string) bool {
 	for _, item := range items {
 		if item == target {
@@ -391,7 +420,8 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 		t.Fatalf("Codex resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
+	bridgeURL, parseErr := url.Parse(bridge.URL)
+	if err != nil || parseErr != nil || opened.IsError || !strings.Contains(textResult(opened), "http://localhost:"+bridgeURL.Port()) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	cancel()

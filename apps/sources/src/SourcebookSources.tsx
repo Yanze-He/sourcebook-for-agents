@@ -203,6 +203,7 @@ export default function SourcebookSources() {
   const [isClearingData, setIsClearingData] = useState(false);
   const [language, setLanguage] = useState<"en" | "zh">(() => window.localStorage.getItem("sourcebook-language") === "zh" || (window.localStorage.getItem("sourcebook-language") === null && navigator.language.toLowerCase().startsWith("zh")) ? "zh" : "en");
   const [loading, setLoading] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isBackupExportOpen, setIsBackupExportOpen] = useState(false);
@@ -311,6 +312,8 @@ export default function SourcebookSources() {
     }
   }
   async function loadBooks() {
+    setBootstrapError(null);
+    try {
     let response = await request<BookManifest>("/api/books");
     const requestedBookId = requestedBookIdRef.current;
     let agentBookId = "";
@@ -337,6 +340,10 @@ export default function SourcebookSources() {
       window.history.replaceState({}, "", window.location.pathname + (query.toString() ? "?" + query.toString() : ""));
     }
     setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId);
+    } catch (error) {
+      setBootstrapError(errorMessage(error));
+      setLoading(false);
+    }
   }
   useEffect(() => { void loadBooks(); }, []);
   useEffect(() => { activeBookIdRef.current = activeBookId; }, [activeBookId]);
@@ -936,9 +943,10 @@ export default function SourcebookSources() {
           <input accept={localImportAccept} className="visually-hidden" multiple onChange={(event) => { if (event.target.files?.length) void importLocalFiles(Array.from(event.target.files)); event.currentTarget.value = ""; }} ref={localImportInputRef} type="file" /><input accept=".sourcebook-backup" className="visually-hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importBackup(file); event.currentTarget.value = ""; }} ref={backupInputRef} type="file" />
         </div>
       </div>
-      {loading ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
-      {!loading && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
-      {!loading && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onEnterBatchSelection={() => setIsBatchSelecting(true)} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onMarqueeSelect={addSelected} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onRevealLocal={revealLocalFile} onSelect={selectFromCard} onToggle={toggleSelected} /> : null}
+      {loading && !bootstrapError ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
+      {bootstrapError ? <EmptyState icon={<CloudOff size={24} />} title={language === "zh" ? "无法加载 Sourcebook" : "Could not load Sourcebook"} description={<>{language === "zh" ? "请确认 Sourcebook Desktop 已打开，然后重试。" : "Check that Sourcebook Desktop is open, then try again."}<small>{bootstrapError}</small></>} action={<button className="primary-button" onClick={() => void loadBooks()} type="button"><RefreshCw size={15} />{copy.retry}</button>} /> : null}
+      {!loading && !bootstrapError && visibleItems.length === 0 ? <EmptyState icon={<Package size={24} />} title={items.length ? copy.noMatches : copy.noSources} description={items.length ? copy.tryAnother : emptySourceDescription} /> : null}
+      {!loading && !bootstrapError && visibleItems.length > 0 ? <SourceMasonry density={density} isBatchSelecting={isBatchSelecting} items={visibleItems} selectedIds={selectedIds} hasMore={Boolean(nextCursor)} isLoadingMore={isLoadingMore} onCopy={copySource} onEnterBatchSelection={() => setIsBatchSelecting(true)} onFavorite={toggleFavorite} onLoadMore={() => void loadMoreItems()} onMarqueeSelect={addSelected} onOpen={(item) => { setFocusDetailNote(false); setDetailItem(item); }} onEditNote={(item) => { setFocusDetailNote(true); setDetailItem(item); }} onOpenLocal={openLocalFile} onPreview={setPreviewItem} onRequestDownload={setDownloadConfirmItem} onRetryDownload={setDownloadConfirmItem} onRevealLocal={revealLocalFile} onSelect={selectFromCard} onToggle={toggleSelected} /> : null}
       {isBatchSelecting ? <SourcesSelectionFooter activeBookId={activeBookId} books={books} copy={copy} count={selectedIds.length} hasFiles={selectedItems.some(hasCopyablePackFile)} hasLinks={selectedItems.some((item) => Boolean(webLinkFor(item)))} hasReusableSelection={hasReusableSelection} isActionsOpen={isBatchActionsOpen} isAgentPage={Boolean(agentSessionIdRef.current && !agentPageDisconnected)} isBookTransferOpen={isBookTransferOpen} isCopyOpen={isBatchCopyOpen} isTransferring={isTransferringSelected} language={language} onAddNote={() => { setIsBatchActionsOpen(false); setIsBatchNoteOpen(true); }} onClear={exitBatchSelection} onCopyFiles={() => { setIsBatchCopyOpen(false); void copyPackedMaterials(); }} onCopyLinks={() => { setIsBatchCopyOpen(false); void copySelectedLinks(); }} onDelete={() => { setIsBatchActionsOpen(false); setIsDeleteOpen(true); }} onOpenPack={() => { setIsBatchActionsOpen(false); setIsBookTransferOpen(false); setIsPackOpen(true); }} onRestoreLastSelection={restoreLastSelection} onToggleAll={toggleVisibleSelection} onToggleActions={() => setIsBatchActionsOpen((open) => !open)} onToggleCopy={() => setIsBatchCopyOpen((open) => !open)} onToggleTransfer={() => { setIsPackOpen(false); setIsBookTransferOpen((open) => !open); }} onTransfer={transferSelectedSources} transferRef={bookTransferRef} visibleCount={visibleItems.length} /> : null}
       {message ? <p className={`sources-message is-${messageTone}`} role="status">{isRefreshing || isImporting ? <LoaderCircle className="spin" size={14} /> : messageTone === "success" ? <CircleCheck aria-hidden="true" size={15} /> : messageTone === "error" ? <CircleX aria-hidden="true" size={15} /> : null}{message}</p> : null}
     </section>
@@ -1737,7 +1745,7 @@ function PackModal({ items, isOpen, language, onClose }: { items: SourceItem[]; 
 
 void PackModal;
 
-function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: React.ReactNode }) { return <div className="empty-panel public-empty-panel">{icon}<strong>{title}</strong><span>{description}</span></div>; }
+function EmptyState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description: React.ReactNode; action?: React.ReactNode }) { return <div className="empty-panel public-empty-panel">{icon}<strong>{title}</strong><span>{description}</span>{action}</div>; }
 function descriptionFor(item: SourceItem) { if (item.modality === "image" || item.modality === "video") return ""; return (item.resourceSummary || item.metadata.description || item.contentText || item.userNote || "").replace(/\s+/g, " ").trim().slice(0, 360); }
 function sourceLabel(item: SourceItem) { if (item.modality === "post") return sourceHost(item.sourceUrl) || "Browser"; return item.metadata.siteName || item.sourceTitle || item.sourceOrigin || "Browser"; }
 function sourceHost(value: string) { try { return new URL(value).hostname.replace(/^www\./, ""); } catch { return value; } }

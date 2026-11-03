@@ -380,6 +380,17 @@ func sourcebookNavigationURL(client *bridgeClient, state *sessionState, serviceU
 	if err != nil {
 		return "", errors.New("Sourcebook local URL is invalid")
 	}
+	// The Desktop service remains bound to the IPv4 loopback address for its
+	// local-only bridge. Codex's embedded browser, however, reliably reaches
+	// that same service through localhost. This affects only the browser URL;
+	// MCP-to-Desktop calls keep using the configured 127.0.0.1 endpoint.
+	if isCodex() && parsed.Hostname() == "127.0.0.1" {
+		port := parsed.Port()
+		parsed.Host = "localhost"
+		if port != "" {
+			parsed.Host += ":" + port
+		}
+	}
 	query := parsed.Query()
 	if bookID := stringArg(args, "book_id"); bookID != "" {
 		query.Set("bookId", bookID)
