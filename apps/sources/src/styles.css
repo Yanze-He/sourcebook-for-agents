@@ -179,8 +179,8 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   .sources-more-button { min-width:0; flex:1; }
 }
 @media (min-width:701px) {
-  .sources-page.sources-surface.has-agent-banner .sources-batch-footer.has-selection,
-  .sources-page.sources-surface.has-agent-banner .sources-batch-footer.is-empty {
+  .sources-page.sources-surface .sources-batch-footer.has-selection,
+  .sources-page.sources-surface .sources-batch-footer.is-empty {
     width:fit-content;
     max-width:calc(100% - 40px);
     margin:10px auto 14px;
