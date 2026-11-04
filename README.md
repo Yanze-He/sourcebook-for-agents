@@ -4,7 +4,7 @@
 
 As agents take on more execution, creators can spend less time specifying every step and more time setting the goal, choosing references, and judging the result. Sourcebook keeps those references in a growing local Book and helps you bring the right set into each AI task.
 
-[Visit the website](https://sourcebook.online) · [Chinese README](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
+[Visit the website](https://sourcebook.online) · [简体中文](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
