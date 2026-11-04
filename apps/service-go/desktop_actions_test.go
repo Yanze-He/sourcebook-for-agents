@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -45,7 +46,7 @@ func TestParseClipboardFilePathsRejectsMalformedClipboardOutput(t *testing.T) {
 func TestRevealLocalFileCommandUsesFolderOnWindows(t *testing.T) {
 	filePath := `C:\Users\Zeke\Documents\Sourcebook\Book\assets\设计参考.zip`
 	command := revealLocalFileCommand("windows", filePath)
-	if command.Path != "explorer.exe" {
+	if filepath.Base(command.Path) != "explorer.exe" {
 		t.Fatalf("command = %q, want explorer.exe", command.Path)
 	}
 	if got, want := command.Args, []string{"explorer.exe", `C:\Users\Zeke\Documents\Sourcebook\Book\assets`}; !reflect.DeepEqual(got, want) {

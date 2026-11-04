@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,7 +37,8 @@ func TestWebsiteEntryDoesNotCacheStaleBundleReferences(t *testing.T) {
 		t.Fatalf("entry = %d, cache %q", entry.Code, entry.Header().Get("Cache-Control"))
 	}
 	asset := request("/assets/current.js")
-	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "text/javascript; charset=utf-8" {
+	contentType := asset.Header().Get("Content-Type")
+	if asset.Code != http.StatusOK || !(strings.HasPrefix(contentType, "text/javascript") || strings.HasPrefix(contentType, "application/javascript")) {
 		t.Fatalf("current bundle = %d, type %q", asset.Code, asset.Header().Get("Content-Type"))
 	}
 	missing := request("/assets/previous.js")

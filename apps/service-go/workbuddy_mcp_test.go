@@ -13,6 +13,9 @@ import (
 func TestDesktopManagedWorkBuddyConnectionPreservesOtherServersAndUsesStableLauncher(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+	}
 	data := t.TempDir()
 	t.Setenv("SOURCEBOOK_DATA_DIR", data)
 	launcher := filepath.Join(data, "sourcebook-mcp-launcher")

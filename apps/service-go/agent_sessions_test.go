@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -418,7 +419,10 @@ func TestAgentPageOwnershipAndScopeSurviveDesktopRestart(t *testing.T) {
 		t.Fatalf("own conversation must restore active token = %d: %s", result.Code, result.Body.String())
 	}
 	info, err := os.Stat(server.agentSessionsPath)
-	if err != nil || info.Mode().Perm() != 0600 {
+	if err != nil {
+		t.Fatalf("persisted page credentials are missing: %v", err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("persisted page credentials need private permissions: %v, %v", info, err)
 	}
 	if err := server.resetLibrary(httptest.NewRecorder()); err != nil {

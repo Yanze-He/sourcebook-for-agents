@@ -38,7 +38,11 @@ func TestLibrarySettingsRequireFirstConfirmation(t *testing.T) {
 	if !before.IsEmpty {
 		t.Fatal("new library should be treated as empty for first-run onboarding")
 	}
-	confirm := httptest.NewRequest(http.MethodPut, "/api/settings/library", bytes.NewBufferString(`{"destination":"`+root+`"}`))
+	confirmBody, err := json.Marshal(map[string]string{"destination": root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirm := httptest.NewRequest(http.MethodPut, "/api/settings/library", bytes.NewReader(confirmBody))
 	confirm.Host = "127.0.0.1:4177"
 	confirm.Header.Set("content-type", "application/json")
 	confirmed := httptest.NewRecorder()
@@ -129,15 +133,28 @@ func TestPlatformReleaseAssetsExcludeOtherInstaller(t *testing.T) {
 
 func TestSameVersionUpdateRequiresNewerPlatformRevision(t *testing.T) {
 	originalVersion, originalBuild := appVersion, appBuild
-	appVersion, appBuild = "0.1.4", "mac.080"
 	t.Cleanup(func() { appVersion, appBuild = originalVersion, originalBuild })
-	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "mac.080"}) {
+	appVersion = "0.1.4"
+	prefix := platformBuildPrefix(updatePlatform())
+	if prefix == "" {
+		appBuild = "mac.080"
+		if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "mac.081"}) {
+			t.Fatal("an unsupported platform must not offer a same-version replacement")
+		}
+		return
+	}
+	otherPrefix := "mac."
+	if prefix == otherPrefix {
+		otherPrefix = "win."
+	}
+	appBuild = prefix + "080"
+	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: prefix + "080"}) {
 		t.Fatal("the installed candidate must not be offered again")
 	}
-	if !updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "mac.081"}) {
+	if !updateIsNewer(releaseInfo{Version: "0.1.4", Revision: prefix + "081"}) {
 		t.Fatal("a newer platform revision should be offered")
 	}
-	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "win.081"}) {
+	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: otherPrefix + "081"}) {
 		t.Fatal("a revision for another platform must be ignored")
 	}
 }

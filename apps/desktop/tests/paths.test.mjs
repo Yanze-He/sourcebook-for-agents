@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { join } from "node:path";
 import { sourcebookDataDirectory, sourcebookLibraryDirectory, sourcebookUrl } from "../src/paths.mjs";
 
 test("uses platform-native Sourcebook data directories", () => {
-  assert.equal(sourcebookDataDirectory({}, "darwin", "/Users/test"), "/Users/test/Library/Application Support/Sourcebook for Agents");
-  assert.equal(sourcebookDataDirectory({ APPDATA: "C:\\Users\\test\\AppData\\Roaming" }, "win32", "C:\\Users\\test"), "C:\\Users\\test\\AppData\\Roaming/Sourcebook for Agents");
+  assert.equal(sourcebookDataDirectory({}, "darwin", "/Users/test"), join("/Users/test", "Library", "Application Support", "Sourcebook for Agents"));
+  assert.equal(sourcebookDataDirectory({ APPDATA: "C:\\Users\\test\\AppData\\Roaming" }, "win32", "C:\\Users\\test"), join("C:\\Users\\test\\AppData\\Roaming", "Sourcebook for Agents"));
 });
 
 test("uses the loopback Sources URL", () => {
