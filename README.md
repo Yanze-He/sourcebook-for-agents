@@ -1,47 +1,29 @@
-# Sourcebook — Creative Asset Relay for AI Agents
+# Sourcebook — The Creative Materials Hub for AI
 
-**A local-first visual reference library and creative asset relay for AI agents.** Keep images, files, media references, and links together for a quick task or an ongoing project, then bring the right materials into the AI tool you use.
+**Collect references. Relay the right materials across AI tools. Keep building on the same Book.**
+
+Sourcebook keeps images, files, links, and notes in a local Book you can draw from for one prompt or an ongoing project.
 
 [Visit the website](https://sourcebook.online) · [Chinese README](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## One place for materials across tasks and AI tools
+## Material that keeps working
 
-**Quick needs and lasting projects.** Collect a few references for one prompt or keep building a Book for work that spans weeks. Search, filter, and select what matters now. Your useful references remain easy to find later, without requiring an elaborate asset-management system for every task.
-
-**One source for many AI tools.** Keep images, files, source links, and notes together in Sourcebook while using a different selection for each task. Bring that set into Codex or WorkBuddy through the connected page, or copy available files, links, and a Pack prompt into another AI tool. You can reuse the same references without rebuilding the collection in every conversation.
-
-This is what **relay** means here: the connected Agent can read the current Book, selection, and filter through local MCP tools when asked, and retrieve available files. In other AI tools, you paste the copied materials yourself. Selecting a card does not itself send a chat message.
-
-Sourcebook stores your Books on your computer. An Agent's proposed changes appear in Sourcebook for your review and are saved only after you accept them.
+- **Relay across tools.** Choose a set for this task and use it in Codex or WorkBuddy, or copy it into another AI tool.
+- **Use now, keep for later.** Gather a few references for today's prompt or keep adding to a project Book over time.
+- **Grow with the work.** Agents can propose additions or edits; you review them before they become part of a Book.
 
 <img width="1672" height="743" alt="Sourcebook project Books and material cards" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
 
-## Collect with Picker
+## How it works today
 
-Sourcebook Picker is a Chrome and Edge extension for collecting references from webpages, feeds, and supported AI conversations. It can keep source links and available previews alongside the material.
+Use Picker to collect from webpages in Chrome or Edge, or add files, text, links, and clipboard content in Desktop. [See supported sites and media limits](docs/supported-sites.md).
 
 <img width="1920" height="600" alt="Collecting material from a webpage with Sourcebook Picker" src="https://github.com/user-attachments/assets/691e3784-55f6-49fd-8ef7-a020021cffad" />
 
-| Material | Current support |
-| --- | --- |
-| Pages, links, selected text, and images | Webpages |
-| AI conversations | ChatGPT, Gemini, DeepSeek, and Grok |
-| Posts | X and Xiaohongshu |
-| Video and audio | Source links and available previews |
-
-Some sites restrict media downloads. In those cases Sourcebook may keep the original link or preview without a local media file. See [supported sites and limits](docs/supported-sites.md).
-
-## Two ways to use materials with AI
-
-| | Connected Agent | Copy or Pack |
-| --- | --- | --- |
-| **Best for** | Working with materials while chatting in Codex or WorkBuddy | Bringing a chosen set of materials into another AI tool |
-| **How it works** | Connect from Desktop once. In the Agent's Sourcebook page, choose a Book, select or filter materials, then ask the Agent to use them. | Select materials in Sourcebook, then copy available files or links. Pack can prepare a prompt with the chosen sources and notes. Paste what you need into the AI tool. |
-| **Setup** | Desktop connects directly to Codex or WorkBuddy through its built-in local MCP server. No separate Sourcebook Agent plugin or Skill is needed. | No Agent connection is needed. |
-
-An Agent can also submit suggested additions or edits to a Book. They take effect only after you review and accept them.
+- **Codex and WorkBuddy:** Connect from Desktop. When asked, the Agent can read the Book and the selection or filter in its connected Sourcebook page through local MCP. No separate Agent plugin or Skill is needed.
+- **Other AI tools:** Copy selected files or links, or prepare a Pack with a prompt, then paste them into the tool yourself.
 
 <img width="1470" height="855" alt="Connected Agent working with a Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
 

@@ -1,47 +1,29 @@
-# Sourcebook — 面向 AI Agent 的创作素材中转站
+# Sourcebook — 面向 AI 的创作素材枢纽
 
-**本地优先的视觉参考库与创作素材中转站。** 把图片、文件、媒体参考和链接放在一起，既能应对一次临时任务，也能支持长期项目；需要时，再把合适的素材交给正在使用的 AI 工具。
+**收集参考素材。按任务中转给不同 AI 工具。在同一个 Book 里持续积累。**
+
+Sourcebook 将图片、文件、链接和备注保存在本地 Book 中，供一次临时任务或长期项目取用。
 
 [访问官网](https://sourcebook.online) · [English README](README.md) · [入门指南（英文）](docs/getting-started.md) · [连接 Agent（英文）](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## 一个素材入口，服务不同任务与 AI 工具
+## 让素材持续发挥作用
 
-**临时需求与长期积累。** 可以为一次提示词收集几张参考图，也可以持续为一个项目积累素材。通过搜索、筛选和选择，只取出眼下需要的内容；值得保留的参考资料之后仍能找到，不必为每个临时任务搭建复杂的素材管理体系。
-
-**一份素材，供多个 AI 工具使用。** 图片、文件、链接和备注集中保存在 Sourcebook 中，不同任务可以从同一个 Book 选取不同素材。通过已连接的页面交给 Codex 或 WorkBuddy 使用，或把可用文件、链接和 Pack 提示词复制到其他 AI 工具；不需要在每段对话里重新收集一遍。
-
-这里的**“中转”**有明确的方式：在已连接的页面中，你提出请求后，Agent 可以通过本机 MCP 工具读取当前 Book、选择和筛选，并获取可用的文件。使用其他 AI 工具时，由你自行粘贴复制的素材。单击选中卡片不会自动发出聊天消息。
-
-Sourcebook 将 Book 保存在你的电脑上。Agent 建议新增或修改的内容会先出现在 Sourcebook 中，只有你审核并接受后才会保存。
+- **跨工具中转。** 为当前任务选出一组素材，交给 Codex 或 WorkBuddy 使用，或复制到其他 AI 工具。
+- **临时取用，长期留存。** 可以为今天的提示词收集几张参考图，也可以持续丰富一个项目的 Book。
+- **随创作丰富。** Agent 可以提出新增或修改建议；由你审核后，内容才会进入 Book。
 
 <img width="1672" height="743" alt="Sourcebook 的项目 Book 与素材卡片" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
 
-## 用 Picker 收集素材
+## 现在怎么用
 
-Sourcebook Picker 是适用于 Chrome 和 Edge 的浏览器扩展，可以从网页、信息流和受支持的 AI 对话中收集参考资料，并尽可能保留来源链接和预览。
+用 Picker 在 Chrome 或 Edge 中收集网页素材，也可以在 Desktop 中添加文件、文字、链接和剪贴板内容。[查看支持的网站与媒体限制](docs/supported-sites.md)（英文）。
 
 <img width="1920" height="600" alt="使用 Sourcebook Picker 从网页收集素材" src="https://github.com/user-attachments/assets/691e3784-55f6-49fd-8ef7-a020021cffad" />
 
-| 素材 | 当前支持的来源 |
-| --- | --- |
-| 页面、链接、选中文字和图片 | 网页 |
-| AI 对话 | ChatGPT、Gemini、DeepSeek、Grok |
-| 帖子 | X、小红书 |
-| 视频和音频 | 来源链接和可获取的预览 |
-
-部分网站会限制媒体下载。遇到这种情况，Sourcebook 可能只能保留原始链接或预览，无法保存媒体文件。详见[支持的网站与限制](docs/supported-sites.md)（英文）。
-
-## 两种与 AI 配合的方式
-
-| | 连接 Agent | 复制或 Pack |
-| --- | --- | --- |
-| **适用场景** | 在 Codex 或 WorkBuddy 对话中使用素材 | 把选定的一组素材带到其他 AI 工具中 |
-| **使用方式** | 在 Desktop 中连接一次。在 Agent 的 Sourcebook 页面选择 Book、点选或筛选素材，再让 Agent 使用。 | 在 Sourcebook 中选择素材，复制可用的文件或链接；Pack 可以根据素材与备注准备提示词。随后自行粘贴到 AI 工具中。 |
-| **设置要求** | Desktop 通过内置的本地 MCP Server 直接连接 Codex 或 WorkBuddy，无需单独安装 Sourcebook Agent 插件或 Skill。 | 无需连接 Agent。 |
-
-Agent 也可以建议向 Book 新增内容或修改现有素材。只有你审核并接受后，这些改动才会生效。
+- **Codex 和 WorkBuddy：** 在 Desktop 中连接。你提出请求后，Agent 可以通过本机 MCP 读取其已连接 Sourcebook 页面中的 Book、选择或筛选范围，无需单独安装 Agent 插件或 Skill。
+- **其他 AI 工具：** 复制所选文件或链接，或用 Pack 准备提示词，再自行粘贴到 AI 工具中。
 
 <img width="1470" height="855" alt="已连接的 Agent 使用 Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
 
