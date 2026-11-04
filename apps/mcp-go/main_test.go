@@ -373,6 +373,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "right-side WorkBuddy browser panel") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
+	assertManualOpenLink(t, opened)
 	reopened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
 	if err != nil || reopened.IsError || !strings.Contains(textResult(reopened), "do not call present_files") {
 		t.Fatalf("reused WorkBuddy page must not create another preview: %#v, %v", reopened, err)
@@ -425,9 +426,10 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
 	bridgeURL, parseErr := url.Parse(bridge.URL)
-	if err != nil || parseErr != nil || opened.IsError || !strings.Contains(textResult(opened), "http://localhost:"+bridgeURL.Port()) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "tab.markDeliverable()") {
+	if err != nil || parseErr != nil || opened.IsError || !strings.Contains(textResult(opened), "http://localhost:"+bridgeURL.Port()) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "open_in_codex") || !strings.Contains(textResult(opened), "do not use CUA to open or verify") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
+	assertManualOpenLink(t, opened)
 	cancel()
 	<-serverDone
 }
@@ -523,4 +525,19 @@ func textResult(result *mcp.CallToolResult) string {
 		return text.Text
 	}
 	return ""
+}
+
+func assertManualOpenLink(t *testing.T, result *mcp.CallToolResult) {
+	t.Helper()
+	var payload struct {
+		URL            string `json:"url"`
+		ManualOpenLink string `json:"manualOpenLink"`
+		NextStep       string `json:"nextStep"`
+	}
+	if err := json.Unmarshal([]byte(textResult(result)), &payload); err != nil {
+		t.Fatalf("decode open_sourcebook result: %v", err)
+	}
+	if payload.URL == "" || payload.ManualOpenLink != "[Open Sourcebook]("+payload.URL+")" || !strings.Contains(payload.NextStep, "Include manualOpenLink in the user-facing reply") {
+		t.Fatalf("missing conversation-specific manual link: %#v", payload)
+	}
 }

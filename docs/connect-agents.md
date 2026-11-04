@@ -38,6 +38,8 @@ After connecting, simply say something like: **“Open my Sourcebook and let me 
 
 Before its first Sourcebook data or page action, the MCP server checks the local connection and can start an installed Desktop app. A returned URL confirms that Desktop is available, but does **not** prove a panel opened. A proposal is delivered to the bound page's **Agent submissions** queue; it never opens a new browser page just to display the review. If Desktop cannot be started, it tells you to open or reinstall it; if local access is off, it tells you to open **Settings → Connect an Agent → Allow local-agent access**. MCP updates come from Desktop updates.
 
+When you ask Codex or WorkBuddy to open Sourcebook, the Agent also replies with a link for that conversation's local page. You can use it to open the page manually in the Agent's side browser if the automatic panel request does not appear. The link contains the page's session token, so keep it within that conversation. In Codex, the Agent uses the native right-side panel opener first and does not repeatedly try browser automation to verify an accepted request. WorkBuddy keeps its existing right-side panel flow.
+
 A host may additionally surface an MCP Prompt as a slash command, but its exact
 syntax is host-specific and optional.
 
