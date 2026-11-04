@@ -7,6 +7,7 @@ All notable user-facing changes are documented here.
 - Pair Desktop with Picker 0.1.6. A picked webpage keeps its visible snapshot as a local card preview while the original URL remains the material link.
 - Show captured webpage previews in Book cards and details after a refresh or restart.
 - Remove the extra space between webpage previews and titles. Posts with thumbnails now show their covers in Book cards, and long post detail previews keep the text area bounded while the cover fills its side.
+- Keep the Version & updates dialog within the viewport when release notes are long; its content scrolls while the header and actions remain visible.
 - On Windows, keep the material library and Picker available while hiding the Agent connection action in Settings and the Agent submissions entry in the header.
 - Picker 0.1.6 adds page and area capture, plus note editing and Book changes directly in the Pick success notice. The extension is versioned and distributed separately from Desktop.
 

@@ -94,6 +94,15 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix apps/picker
       - run: npm ci --prefix apps/sources
+      - name: Verify native services on Windows
+        run: go test ./...
+        working-directory: apps/service-go
+      - run: go test ./...
+        working-directory: apps/mcp-go
+      - run: go test ./...
+        working-directory: apps/mcp-launcher-go
+      - name: Verify Picker, Sources, and Desktop on Windows
+        run: npm test
       - run: npm run build
       - run: npm --prefix apps/desktop run package:windows
       - name: Install Inno Setup
