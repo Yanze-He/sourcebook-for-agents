@@ -8,11 +8,11 @@ Sourcebook keeps images, files, links, and notes in a local Book you can draw fr
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## Material that keeps working
+## References that travel and grow
 
-- **Relay across tools.** Choose a set for this task and use it in Codex or WorkBuddy, or copy it into another AI tool.
-- **Use now, keep for later.** Gather a few references for today's prompt or keep adding to a project Book over time.
-- **Grow with the work.** Agents can propose additions or edits; you review them before they become part of a Book.
+- **Keep the source of an idea.** Save images, links, and notes in a Book so a useful reference remains available after the prompt is over.
+- **Switch AI tools without collecting again.** Choose what each task needs from the same Book instead of rebuilding your references across chats.
+- **Let each round inform the next.** Review Agent-proposed additions or edits and keep the useful ones in the Book for future work.
 
 <img width="1672" height="743" alt="Sourcebook project Books and material cards" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
 
