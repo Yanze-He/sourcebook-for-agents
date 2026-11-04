@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
 ## 现在怎么用
 
-用 Picker 在 Chrome 或 Edge 中收集网页素材，也可以在 Desktop 中添加文件、文字、链接和剪贴板内容。[查看支持的网站与媒体限制](docs/supported-sites.md)（英文）。
+Picker 可以保存 X、小红书帖子的正文及可获取的作者与来源信息，也能保存 ChatGPT、Gemini、DeepSeek、Grok 中选中或当前已加载的对话消息。普通网页上的图片和选中文字同样能拾取，保存的不只是一条网址。你还可以在 Desktop 中添加本地文件、链接和剪贴板内容。[查看支持的网站与媒体限制](docs/supported-sites.md)（英文）。
 
 <img width="1920" height="600" alt="使用 Sourcebook Picker 从网页收集素材" src="https://github.com/user-attachments/assets/691e3784-55f6-49fd-8ef7-a020021cffad" />
 
@@ -26,6 +26,10 @@ https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 - **其他 AI 工具：** 复制所选文件或链接，或用 Pack 准备提示词，再自行粘贴到 AI 工具中。
 
 <img width="1470" height="855" alt="已连接的 Agent 使用 Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
+
+## 本地优先
+
+Picker 将保存的素材交给你电脑上的 Sourcebook Desktop。Book 和成功保存的媒体文件存放在本地，无需 Sourcebook 账号或云同步。连接 Agent 后，它读取的内容可能发往所使用的模型服务。[阅读隐私说明](docs/privacy.md)（英文）。
 
 ## 安装
 

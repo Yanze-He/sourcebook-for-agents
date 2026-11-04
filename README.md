@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
 ## How it works today
 
-Use Picker to collect from webpages in Chrome or Edge, or add files, text, links, and clipboard content in Desktop. [See supported sites and media limits](docs/supported-sites.md).
+Picker can save X and Xiaohongshu post text with available author and source details, plus selected or loaded messages from ChatGPT, Gemini, DeepSeek, and Grok conversations. It also captures images and selected text from ordinary webpages—more than a URL bookmark. You can add local files, links, and clipboard content in Desktop. [See supported sites and media limits](docs/supported-sites.md).
 
 <img width="1920" height="600" alt="Collecting material from a webpage with Sourcebook Picker" src="https://github.com/user-attachments/assets/691e3784-55f6-49fd-8ef7-a020021cffad" />
 
@@ -26,6 +26,10 @@ Use Picker to collect from webpages in Chrome or Edge, or add files, text, links
 - **Other AI tools:** Copy selected files or links, or prepare a Pack with a prompt, then paste them into the tool yourself.
 
 <img width="1470" height="855" alt="Connected Agent working with a Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
+
+## Local-first by design
+
+Picker sends saved materials to Sourcebook Desktop on your computer. Books and successfully saved media files stay in your local library; no Sourcebook account or cloud sync is required. A connected Agent may send content it reads to its model provider. [Read the privacy details](docs/privacy.md).
 
 ## Install
 
