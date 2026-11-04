@@ -6,13 +6,13 @@
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## Collect, choose, relay
+## From saved references to an AI task
 
-1. **Collect.** Use Sourcebook Picker to capture visual references from supported webpages, or add files, links, text, and clipboard content in Desktop.
-2. **Organize.** Keep each project in a Book. Browse, search, filter, annotate, and select only the materials relevant to the task.
-3. **Relay.** Make the chosen materials available to a connected Agent, or copy them into another AI tool.
+1. **Save references.** Capture images and links from supported webpages with Picker, or add files, text, and clipboard content in Desktop.
+2. **Prepare a set for the task.** Keep materials in a project Book, then search, filter, select, and annotate what matters now.
+3. **Use the set with AI.** Ask a connected Codex or WorkBuddy Agent to use it, or copy files, links, and a Pack prompt into another AI tool.
 
-Here, **relay** means bringing selected creative references—such as images, files, media links, and notes—into an AI task. A Book is your saved collection; its current selection and filter define the materials you want the Agent to consider. In a Codex or WorkBuddy conversation, the connected Sourcebook page makes that set available through local MCP tools. When you ask the Agent to use it, the Agent can read the selected items and retrieve available files. Selecting a card does not itself send a chat message. With other AI tools, you copy files or links, or prepare a Pack with a prompt, then paste them into the task yourself.
+The **relay** is this last step: bringing selected creative references—images, files, media links, and notes—into a task. Your Book remains the saved collection. In a connected Codex or WorkBuddy page, the current selection and filter tell the Agent which materials to consider; it can read them and retrieve available files through local MCP tools when asked. Selecting a card does not itself send a chat message. For other AI tools, you paste the copied materials and prompt yourself.
 
 Sourcebook stores your Books on your computer. An Agent's proposed changes appear in Sourcebook for your review and are saved only after you accept them.
 
