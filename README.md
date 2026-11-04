@@ -1,18 +1,18 @@
-# Sourcebook
+# Sourcebook — Local Context Relay for AI Agents
 
 **你的 AI 素材中转站。** 从网页和本地收集素材，按项目放进 Book，挑出当前任务需要的内容，再交给 AI 使用。
 
-**A local material hub for AI work.** Collect from the browser or your computer, organize materials in project Books, and choose what to bring into your next AI task.
+**A local-first context relay for AI agents.** Collect references, files, links, and AI conversations from the browser or your computer. Organize them in project Books, then hand off only the context you choose through MCP or copy and paste.
 
 [Visit the website](https://sourcebook.online) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## From material to useful context
+## Collect, choose, relay
 
 1. **Collect.** Use Sourcebook Picker on supported webpages, or add files, links, text, and clipboard content in Desktop.
 2. **Organize.** Keep each project in a Book. Browse, search, filter, annotate, and select only the materials relevant to the task.
-3. **Use with AI.** Connect Codex or WorkBuddy so the Agent can read the current Book and the selection or filter in its connected page. For other AI tools, copy selected files or links, or prepare a Pack with a prompt you can paste yourself.
+3. **Relay.** Connect Codex or WorkBuddy so the Agent can read the current Book and the selection or filter in its connected page. For other AI tools, copy selected files or links, or prepare a Pack with a prompt you can paste yourself.
 
 Sourcebook keeps the library on your computer. It does not send a Pack or a prompt to an AI tool on your behalf. A connected Agent can read materials when you ask it to; review its proposed changes in Sourcebook before they are saved.
 
