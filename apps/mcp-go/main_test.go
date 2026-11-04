@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +57,11 @@ func TestMCPInstructionsContainOnlyCrossToolRules(t *testing.T) {
 	for _, required := range []string{"never opens a browser page", "Do not call open_sourcebook merely to start Desktop", "do not infer a replacement from an ambiguous request", "A proposal is already delivered", "Never replace a page merely to show a proposal"} {
 		if !strings.Contains(instructions, required) {
 			t.Fatalf("server instruction is missing explicit page-binding rule %q: %q", required, instructions)
+		}
+	}
+	for _, required := range []string{"including a file the user selected", "prepare_context_files", "The user need not supply filenames", "never inspect its database"} {
+		if !strings.Contains(instructions, required) {
+			t.Fatalf("server instruction is missing image-access guidance %q", required)
 		}
 	}
 	for _, toolSpecific := range []string{"tab.markDeliverable()", "right-side browser panel"} {
@@ -464,6 +470,28 @@ func TestInstalledDesktopPathRejectsUnpackagedHelper(t *testing.T) {
 	}
 	if _, err := installedDesktopPath("/tmp/sourcebook-mcp", "windows"); err == nil {
 		t.Fatal("unpackaged helper must not guess a Desktop executable path")
+	}
+}
+
+func TestServiceOnlyLaunchRequestIsPrivateAndShortLived(t *testing.T) {
+	marker, err := writeServiceOnlyLaunchRequest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("service-only launch request permissions = %o", info.Mode().Perm())
+	}
+	value, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline, err := strconv.ParseInt(string(value), 10, 64)
+	if err != nil || deadline <= time.Now().Unix() || deadline > time.Now().Add(16*time.Second).Unix() {
+		t.Fatalf("service-only launch deadline = %q, %v", value, err)
 	}
 }
 

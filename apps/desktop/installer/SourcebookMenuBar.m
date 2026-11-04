@@ -15,6 +15,7 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
 
 @interface SourcebookMenuBar : NSObject <NSApplicationDelegate>
 @property(nonatomic, strong) NSTask *sourcebookTask;
+@property(nonatomic, strong) NSDate *suppressStartupReopenUntil;
 @end
 
 @implementation SourcebookMenuBar
@@ -23,7 +24,20 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   [self configureApplicationMenu];
   [self recordDesktopInstallation];
-  [self startServiceOpeningBrowser:YES];
+  BOOL serviceOnly = [self consumeServiceOnlyLaunchRequest] || [[NSProcessInfo processInfo].arguments containsObject:@"--sourcebook-service-only"];
+  if (serviceOnly) self.suppressStartupReopenUntil = [NSDate dateWithTimeIntervalSinceNow:3];
+  [self startServiceOpeningBrowser:!serviceOnly];
+}
+
+- (BOOL)consumeServiceOnlyLaunchRequest {
+  NSURL *support = [[NSFileManager defaultManager] URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:NO error:nil];
+  NSURL *marker = [[support URLByAppendingPathComponent:@"Sourcebook for Agents" isDirectory:YES] URLByAppendingPathComponent:@"service-only-launch.txt"];
+  if (!marker) return NO;
+  NSString *value = [NSString stringWithContentsOfURL:marker encoding:NSUTF8StringEncoding error:nil];
+  if (!value) return NO;
+  [[NSFileManager defaultManager] removeItemAtURL:marker error:nil];
+  NSTimeInterval remaining = value.doubleValue - NSDate.date.timeIntervalSince1970;
+  return remaining > 0 && remaining <= 15;
 }
 
 - (void)recordDesktopInstallation {
@@ -70,6 +84,10 @@ static NSString *const SourcebookDesktopBuild = @SOURCEBOOK_DESKTOP_BUILD;
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)hasVisibleWindows {
+  if ([self consumeServiceOnlyLaunchRequest] || (self.suppressStartupReopenUntil && [self.suppressStartupReopenUntil timeIntervalSinceNow] > 0)) {
+    [self startServiceOpeningBrowser:NO];
+    return NO;
+  }
   [self openSourcebook:nil];
   return NO;
 }

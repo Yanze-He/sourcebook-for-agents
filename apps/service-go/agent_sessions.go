@@ -15,9 +15,8 @@ import (
 	"time"
 )
 
-// agentSessionScope is intentionally memory-only. It connects one local MCP
-// stdio process to the one browser page it opened; it is not a cross-device
-// identity, and disappears when Desktop restarts.
+// agentSessionScope persists the local Agent chat's page credentials and scope
+// across Desktop restarts. It is not a cross-device identity.
 type agentSessionScope struct {
 	Token             string
 	RetiredTokens     []string

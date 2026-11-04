@@ -19,35 +19,36 @@ import (
 )
 
 const (
-	wmDestroy          = 0x0002
-	wmClose            = 0x0010
-	wmNull             = 0x0000
-	wmCommand          = 0x0111
-	wmContextMenu      = 0x007B
-	wmApp              = 0x8000
-	wmLeftButtonUp     = 0x0202
-	wmLeftButtonDblClk = 0x0203
-	wmRightButtonUp    = 0x0205
-	ninSelect          = 0x0400
-	ninKeySelect       = 0x0401
-	wsExToolWindow     = 0x00000080
-	imageIcon          = 1
-	lrLoadFromFile     = 0x0010
-	nimAdd             = 0x00000000
-	nimDelete          = 0x00000002
-	nimSetVersion      = 0x00000004
-	nifMessage         = 0x00000001
-	nifIcon            = 0x00000002
-	nifTip             = 0x00000004
-	nifGuid            = 0x00000020
-	notifyIconVersion4 = 4
-	mfString           = 0x0000
-	mfSeparator        = 0x0800
-	tpmRightButton     = 0x0002
-	trayCallback       = wmApp + 1
-	trayIconID         = 1
-	openCommandID      = 0x5001
-	quitCommandID      = 0x5002
+	wmDestroy            = 0x0002
+	wmClose              = 0x0010
+	wmNull               = 0x0000
+	wmCommand            = 0x0111
+	wmContextMenu        = 0x007B
+	wmApp                = 0x8000
+	wmLeftButtonUp       = 0x0202
+	wmLeftButtonDblClk   = 0x0203
+	wmRightButtonUp      = 0x0205
+	ninSelect            = 0x0400
+	ninKeySelect         = 0x0401
+	wsExToolWindow       = 0x00000080
+	imageIcon            = 1
+	lrLoadFromFile       = 0x0010
+	nimAdd               = 0x00000000
+	nimDelete            = 0x00000002
+	nimSetVersion        = 0x00000004
+	nifMessage           = 0x00000001
+	nifIcon              = 0x00000002
+	nifTip               = 0x00000004
+	nifGuid              = 0x00000020
+	notifyIconVersion4   = 4
+	mfString             = 0x0000
+	mfSeparator          = 0x0800
+	tpmRightButton       = 0x0002
+	trayCallback         = wmApp + 1
+	trayIconID           = 1
+	openCommandID        = 0x5001
+	serviceOnlyCommandID = 0x5003
+	quitCommandID        = 0x5002
 )
 
 var (
@@ -139,6 +140,7 @@ type notifyIconData struct {
 }
 
 func main() {
+	serviceOnly := len(os.Args) > 1 && os.Args[1] == "--sourcebook-service-only"
 	mutexName := syscall.StringToUTF16Ptr("Local\\SourcebookDesktopTray")
 	mutex, _, mutexErr := procCreateMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName)))
 	if mutex == 0 {
@@ -149,7 +151,11 @@ func main() {
 		className := syscall.StringToUTF16Ptr("SourcebookDesktopWindow")
 		title := syscall.StringToUTF16Ptr("Sourcebook Desktop")
 		if window, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title))); window != 0 {
-			procPostMessage.Call(window, wmCommand, openCommandID, 0)
+			if serviceOnly {
+				procPostMessage.Call(window, wmCommand, serviceOnlyCommandID, 0)
+			} else {
+				procPostMessage.Call(window, wmCommand, openCommandID, 0)
+			}
 		}
 		return
 	}
@@ -184,7 +190,7 @@ func main() {
 		return
 	}
 	defer removeTrayIcon(syscall.Handle(window))
-	if startService() {
+	if startService() && !serviceOnly {
 		openSourcebookWhenReady(0)
 	}
 
@@ -277,6 +283,9 @@ func windowProcedure(window syscall.Handle, messageID uint32, wParam, lParam uin
 		switch wParam & 0xffff {
 		case openCommandID:
 			openSourcebookWhenReady(0)
+			return 0
+		case serviceOnlyCommandID:
+			startService()
 			return 0
 		case quitCommandID:
 			procDestroyWindow.Call(uintptr(window))

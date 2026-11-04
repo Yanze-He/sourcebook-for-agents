@@ -247,8 +247,17 @@ export default function SourcebookSources() {
   const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
   const agentSessionTokenRef = useRef(new URLSearchParams(window.location.search).get("agentSessionToken"));
   const pageInstanceIdRef = useRef(window.crypto.randomUUID());
+  const ownershipCheckSequenceRef = useRef(0);
   const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
+
+  function announceAgentPageClaim() {
+    const sessionId = agentSessionIdRef.current;
+    if (!sessionId || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(`sourcebook-agent-page:${sessionId}`);
+    channel.postMessage({ type: "claimed", pageInstanceId: pageInstanceIdRef.current });
+    channel.close();
+  }
 
   function restoreAgentPageScope(scope: AgentPageScope) {
     const selection = scope.selectedSourceIds || [];
@@ -366,9 +375,11 @@ export default function SourcebookSources() {
         let scope = await requestWithTimeout<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}&pageInstanceId=${encodeURIComponent(pageInstanceIdRef.current)}`, 10_000);
         if (scope.pageState === "pending" || scope.pageState === "unclaimed") {
           scope = await request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current }) });
+          announceAgentPageClaim();
         }
         agentBookId = scope.bookId || "";
         if (!agentScopeHydratedRef.current && !activeBookIdRef.current) restoreAgentPageScope(scope);
+        ownershipCheckSequenceRef.current++;
         setAgentPageConnection(scope.pageState === "observer" || scope.pageState === "replaced" ? "disconnected" : "connected");
       } catch (error) {
         // A busy or temporarily unreachable service has not revoked this page.
@@ -398,6 +409,39 @@ export default function SourcebookSources() {
     }
   }
   useEffect(() => { void loadBooks(); }, []);
+  useEffect(() => {
+    const sessionId = agentSessionIdRef.current;
+    const pageToken = agentSessionTokenRef.current;
+    if (!sessionId || !pageToken) return;
+    let disposed = false;
+    const verifyOwnership = async () => {
+      const sequence = ++ownershipCheckSequenceRef.current;
+      try {
+        const scope = await requestWithTimeout<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}&pageInstanceId=${encodeURIComponent(pageInstanceIdRef.current)}`, 10_000);
+        if (!disposed && sequence === ownershipCheckSequenceRef.current) setAgentPageConnection(scope.pageState === "active" ? "connected" : "disconnected");
+      } catch (error) {
+        if (!disposed && sequence === ownershipCheckSequenceRef.current) setAgentPageConnection(isDisconnectedAgentPageError(error) ? "disconnected" : "unavailable");
+      }
+    };
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel(`sourcebook-agent-page:${sessionId}`);
+      channel.onmessage = (event: MessageEvent<{ type?: string; pageInstanceId?: string }>) => {
+        if (event.data?.type === "claimed" && event.data.pageInstanceId !== pageInstanceIdRef.current) void verifyOwnership();
+      };
+    }
+    const verifyVisiblePage = () => { if (!document.hidden) void verifyOwnership(); };
+    window.addEventListener("focus", verifyVisiblePage);
+    window.addEventListener("pageshow", verifyVisiblePage);
+    document.addEventListener("visibilitychange", verifyVisiblePage);
+    return () => {
+      disposed = true;
+      channel?.close();
+      window.removeEventListener("focus", verifyVisiblePage);
+      window.removeEventListener("pageshow", verifyVisiblePage);
+      document.removeEventListener("visibilitychange", verifyVisiblePage);
+    };
+  }, []);
   useEffect(() => { activeBookIdRef.current = activeBookId; }, [activeBookId]);
   useEffect(() => () => loadMoreAbortRef.current?.abort(), []);
   useEffect(() => { window.localStorage.setItem("sourcebook-card-density", density); }, [density]);
@@ -496,7 +540,14 @@ export default function SourcebookSources() {
     try {
       const host = new URLSearchParams(window.location.search).get("sourcebookHost") || "Agent";
       let bindingCode = selectedBindingCode;
-      if (!bindingCode) {
+      const claim = (code?: string) => request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/${code ? "bind" : "reconnect"}`, { method: "POST", body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current, ...(code ? { code, agentName: host, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } } : {}) }), signal: controller.signal });
+      let restored: AgentPageScope;
+      try {
+        // A tab with a valid session must reclaim that same conversation.
+        // Pending requests from other chats must not silently redirect it.
+        restored = await claim(bindingCode);
+      } catch (error) {
+        if (bindingCode || !/not connected to the current Agent session/i.test(errorMessage(error))) throw error;
         const pending = await request<{ requests: { code: string; agentName: string }[] }>(`/api/agent-page-bindings?agentName=${encodeURIComponent(host)}`, { signal: controller.signal });
         if (pending.requests.length > 1) {
           setPendingPageBindings(pending.requests);
@@ -504,8 +555,9 @@ export default function SourcebookSources() {
           return;
         }
         bindingCode = pending.requests[0]?.code;
+        if (!bindingCode) throw error;
+        restored = await claim(bindingCode);
       }
-      const restored = await request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/${bindingCode ? "bind" : "reconnect"}`, { method: "POST", body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current, ...(bindingCode ? { code: bindingCode, agentName: host, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } } : {}) }), signal: controller.signal });
       if (activeBookId) {
         await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
           method: "PUT",
@@ -527,8 +579,14 @@ export default function SourcebookSources() {
         setActiveBookId(bookId);
         restoreAgentPageScope(restored);
       }
+      const confirmed = await request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}&pageInstanceId=${encodeURIComponent(pageInstanceIdRef.current)}`, { signal: controller.signal });
+      if (confirmed.pageState !== "active") throw new Error(language === "zh" ? "此页尚未取得连接，请重试。" : "This tab did not take over the connection. Try again.");
+      pendingAgentScopeRef.current = null;
+      lastAgentScopeSignatureRef.current = "";
+      ownershipCheckSequenceRef.current++;
       setAgentPageConnection("connected");
       setPendingPageBindings([]);
+      announceAgentPageClaim();
       showSourcesMessage(bindingCode ? (language === "zh" ? "已将此页绑定到目标 Agent 对话。" : "This tab is bound to the chosen Agent conversation.") : wasDisconnected ? (language === "zh" ? "此页已连接 Desktop。" : "This tab is connected to Desktop.") : (language === "zh" ? "此页与 Desktop 已同步。" : "This tab is synced with Desktop."), 3600, "success");
     } catch (error) {
       setAgentPageConnection(isUnavailableAgentPageError(error) ? "unavailable" : "disconnected");

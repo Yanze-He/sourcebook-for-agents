@@ -160,6 +160,60 @@ func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	}
 }
 
+func TestReplacedAgentTabCanExplicitlyReclaimItsConversation(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	oldToken := "old-page-token-1234567890123456"
+	newToken := "new-page-token-1234567890123456"
+	server.agentSessions["codex-chat"] = agentSessionScope{Token: oldToken, AgentName: "Codex", BookID: "sourcebook", UpdatedAt: time.Now()}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(method, "http://127.0.0.1:4177"+path, strings.NewReader(body))
+		request.Host = "127.0.0.1:4177"
+		result := httptest.NewRecorder()
+		server.ServeHTTP(result, request)
+		return result
+	}
+	claim := func(token, instance string) {
+		body := `{"pageToken":"` + token + `","pageInstanceId":"` + instance + `"}`
+		if result := call(http.MethodPost, "/api/agent-sessions/codex-chat/reconnect", body); result.Code != http.StatusOK {
+			t.Fatalf("claim %s = %d: %s", instance, result.Code, result.Body.String())
+		}
+	}
+	state := func(token, instance string) string {
+		path := "/api/agent-sessions/codex-chat/scope?pageToken=" + token + "&pageInstanceId=" + instance
+		result := call(http.MethodGet, path, "")
+		if result.Code != http.StatusOK {
+			t.Fatalf("read %s = %d: %s", instance, result.Code, result.Body.String())
+		}
+		var scope map[string]any
+		if err := json.NewDecoder(result.Body).Decode(&scope); err != nil {
+			t.Fatal(err)
+		}
+		return stringValue(scope["pageState"])
+	}
+	claim(oldToken, "old-tab")
+	register := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4177/api/mcp/v1/agent-sessions", strings.NewReader(`{"sessionId":"codex-chat","pageToken":"`+newToken+`","agentName":"Codex"}`))
+	register.Host = "127.0.0.1:4177"
+	if err := server.registerAgentSession(httptest.NewRecorder(), register); err != nil {
+		t.Fatal(err)
+	}
+	claim(newToken, "new-tab")
+	if got := state(oldToken, "old-tab"); got != "replaced" {
+		t.Fatalf("old tab state after replacement = %q", got)
+	}
+	claim(oldToken, "old-tab")
+	if got := state(oldToken, "old-tab"); got != "active" {
+		t.Fatalf("old tab state after explicit reconnect = %q", got)
+	}
+	if got := state(newToken, "new-tab"); got != "replaced" {
+		t.Fatalf("new tab state after old tab reconnect = %q", got)
+	}
+}
+
 func TestDuplicateAgentPagesWithTheSameTokenRemainConnected(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
 	if err != nil {
