@@ -1,10 +1,8 @@
 # Sourcebook — Creative Asset Relay for AI Agents
 
-**你的 AI 创作素材中转站。** 把图片、视频参考、文件和链接收集到 Book；开始创作时，选出需要的素材交给 AI 使用。
-
 **A local-first visual reference library and creative asset relay for AI agents.** Save images, files, media references, and links in project Books. Choose the materials for your next creative task and bring them into the AI tool you use.
 
-[Visit the website](https://sourcebook.online) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
+[Visit the website](https://sourcebook.online) · [Chinese README](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
