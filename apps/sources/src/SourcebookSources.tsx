@@ -300,6 +300,8 @@ export default function SourcebookSources() {
     } catch (error) { if (activeBookIdRef.current === bookId && latestItemsRequestRef.current === requestId) showSourcesMessage(announce ? `Could not refresh sources: ${errorMessage(error)}` : errorMessage(error), announce ? 6000 : 3600, "error"); }
     finally { if (activeBookIdRef.current === bookId && latestItemsRequestRef.current === requestId) { setIsRefreshing(false); setLoading(false); } }
   }
+  const loadItemsRef = useRef(loadItems);
+  loadItemsRef.current = loadItems;
   async function loadMoreItems() {
     if (!nextCursor || isLoadingMore) return;
     const bookId = activeBookId;
@@ -339,7 +341,9 @@ export default function SourcebookSources() {
         agentBookId = scope.bookId || "";
         setAgentPageConnection("connected");
       } catch (error) {
-        setAgentPageConnection("disconnected");
+        // A busy or temporarily unreachable service has not revoked this page.
+        // Only an explicit session response can mark it as disconnected.
+        if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
         if (!activeBookIdRef.current) throw error;
       }
     }
@@ -379,46 +383,36 @@ export default function SourcebookSources() {
     void request<MCPSettingsResponse>("/api/settings/mcp").then(setMCPSettings).catch(() => undefined);
     void refreshMCPSuggestions();
   }, []);
-  useEffect(() => {
-    // Agent proposals can target a Book other than the one currently open in
-    // Sources, so the active-Book event stream alone cannot reliably surface
-    // them. Poll only while the window is visible; this keeps the review queue
-    // responsive without turning it into a persistent background task.
-    const refreshSuggestions = () => {
-      if (!document.hidden) void refreshMCPSuggestions({ openOnNew: true });
-    };
-    const timer = window.setInterval(refreshSuggestions, 3000);
-    document.addEventListener("visibilitychange", refreshSuggestions);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", refreshSuggestions);
-    };
-  }, []);
   useEffect(() => { if (activeBookId) void loadItems(); }, [activeBookId]);
   useEffect(() => { if (activeBookId && (query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites)) void loadItems({ limit: bookSourceLimit }); }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, source]);
   useEffect(() => { if (!items.some((item) => item.assetCacheState === "downloading")) return; const timer = window.setInterval(() => void loadItems({ background: true }), 1500); return () => window.clearInterval(timer); }, [activeBookId, items]);
   useEffect(() => {
     if (!activeBookId) return;
-    let refreshTimer: number | undefined;
-    const refresh = () => void loadItems({ background: true, bookId: activeBookId });
-    const queueRefresh = () => {
-      window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(refresh, 180);
-      void refreshMCPSuggestions({ openOnNew: true });
+    // Embedded browsers can keep every open tab "visible". A persistent SSE
+    // connection per tab then exhausts their small HTTP/1.1 connection pool,
+    // blocking images, page scope updates, and even new page navigation.
+    // Use the existing short refresh cadence for both sources and proposals.
+    let polling = false;
+    const refresh = async () => {
+      if (document.hidden || polling) return;
+      polling = true;
+      try {
+        await Promise.all([
+          loadItemsRef.current({ background: true, bookId: activeBookId }),
+          refreshMCPSuggestions({ openOnNew: true }),
+        ]);
+      } finally { polling = false; }
     };
-    const stream = new EventSource(`/api/events?bookId=${encodeURIComponent(activeBookId)}`);
-    stream.addEventListener("sources", queueRefresh);
-    const refreshWhenVisible = () => { if (!document.hidden) { refresh(); void loadBooks(); } };
-    const refreshWhenFocused = () => { refresh(); void loadBooks(); };
+    const refreshWhenFocused = () => { if (document.hidden) return; void refresh(); void loadBooks(); };
+    const timer = window.setInterval(() => void refresh(), 3000);
     window.addEventListener("focus", refreshWhenFocused);
     window.addEventListener("pageshow", refreshWhenFocused);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenFocused);
     return () => {
-      window.clearTimeout(refreshTimer);
-      stream.close();
+      window.clearInterval(timer);
       window.removeEventListener("focus", refreshWhenFocused);
       window.removeEventListener("pageshow", refreshWhenFocused);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenFocused);
     };
   }, [activeBookId]);
   useEffect(() => () => { if (messageTimeoutRef.current) window.clearTimeout(messageTimeoutRef.current); }, []);
@@ -488,6 +482,7 @@ export default function SourcebookSources() {
   async function flushAgentScope() {
     if (syncingAgentScopeRef.current) return;
     syncingAgentScopeRef.current = true;
+    let retryOnNextInteraction = false;
     try {
       while (pendingAgentScopeRef.current) {
         const update = pendingAgentScopeRef.current;
@@ -498,16 +493,37 @@ export default function SourcebookSources() {
           await request(`/api/agent-sessions/${encodeURIComponent(update.sessionId)}/scope`, { method: "PUT", body: JSON.stringify(update.payload), signal: controller.signal });
           if (!pendingAgentScopeRef.current) setAgentPageConnection("connected");
         } catch (error) {
-          if (!pendingAgentScopeRef.current) setAgentPageConnection("disconnected");
+          if (isDisconnectedAgentPageError(error)) {
+            if (!pendingAgentScopeRef.current) setAgentPageConnection("disconnected");
+          } else {
+            // Keep the newest scope for the next focus or user action. A
+            // transport timeout must not turn a valid tab into a dead one.
+            if (!pendingAgentScopeRef.current) pendingAgentScopeRef.current = update;
+            retryOnNextInteraction = true;
+            break;
+          }
         } finally {
           window.clearTimeout(timeout);
         }
       }
     } finally {
       syncingAgentScopeRef.current = false;
-      if (pendingAgentScopeRef.current) void flushAgentScope();
+      if (pendingAgentScopeRef.current && !retryOnNextInteraction) void flushAgentScope();
     }
   }
+  useEffect(() => {
+    const retryPendingScope = () => {
+      if (!document.hidden && pendingAgentScopeRef.current) void flushAgentScope();
+    };
+    window.addEventListener("focus", retryPendingScope);
+    window.addEventListener("pageshow", retryPendingScope);
+    document.addEventListener("visibilitychange", retryPendingScope);
+    return () => {
+      window.removeEventListener("focus", retryPendingScope);
+      window.removeEventListener("pageshow", retryPendingScope);
+      document.removeEventListener("visibilitychange", retryPendingScope);
+    };
+  }, []);
   useEffect(() => {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
