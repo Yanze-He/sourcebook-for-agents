@@ -230,8 +230,8 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 15 {
-		t.Fatalf("tools = %d, want 15", len(tools.Tools))
+	if len(tools.Tools) != 16 {
+		t.Fatalf("tools = %d, want 16", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, registered := range tools.Tools {
@@ -269,9 +269,17 @@ func TestMCPInitializesListsToolsAndRequiresBookSelection(t *testing.T) {
 			t.Fatalf("%s must be exposed", name)
 		}
 	}
+	unbound, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_current_scope"})
+	if err != nil || unbound.IsError || !strings.Contains(textResult(unbound), `"pageConnection":"not_bound"`) || !strings.Contains(textResult(unbound), `"bookSource":"desktop_default"`) {
+		t.Fatalf("a fresh helper must not present Desktop's default Book as the Agent page: %#v, %v", unbound, err)
+	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
 	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL) || !strings.Contains(textResult(opened), "agentSession=") || !strings.Contains(textResult(opened), "Returning the URL alone does not open it") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
+	}
+	bound, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_current_scope"})
+	if err != nil || bound.IsError || !strings.Contains(textResult(bound), `"pageConnection":"connected"`) || !strings.Contains(textResult(bound), `"bookSource":"agent_page"`) {
+		t.Fatalf("the bound Agent page must be identified separately from Desktop's default Book: %#v, %v", bound, err)
 	}
 	navigated, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook", Arguments: map[string]any{"book_id": "research", "panel": "agent-submissions", "batch_id": "agent-batch-1"}})
 	if err != nil || navigated.IsError || !strings.Contains(textResult(navigated), "bookId=research") || !strings.Contains(textResult(navigated), "panel=agent-submissions") || !strings.Contains(textResult(navigated), "batchId=agent-batch-1") {
@@ -373,7 +381,7 @@ func TestWorkBuddyUsesRightSidebarBrowserWithoutInlineApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 15 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {
@@ -428,7 +436,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 15 {
+	if err != nil || len(listed.Tools) != 16 {
 		t.Fatalf("tools = %#v, %v", listed, err)
 	}
 	for _, registered := range listed.Tools {

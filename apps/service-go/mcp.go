@@ -489,12 +489,15 @@ func (server *Server) routeMCPBridge(response http.ResponseWriter, request *http
 			"bridgeVersionMax": 1,
 			"appVersion":       appVersion,
 			"appBuild":         appBuild,
-			"capabilities":     []string{"books", "sources", "context-files", "submissions", "submission-batches", "navigation"},
+			"capabilities":     []string{"books", "sources", "context-files", "submissions", "submission-batches", "navigation", "agent-page-bindings"},
 		})
 		return nil
 	}
 	if request.Method == http.MethodPost && request.URL.Path == mcpBridgePrefix+"/agent-sessions" {
 		return server.registerAgentSession(response, request)
+	}
+	if request.Method == http.MethodPost && request.URL.Path == mcpBridgePrefix+"/agent-page-bindings" {
+		return server.createAgentPageBinding(response, request)
 	}
 	if request.Method == http.MethodGet && request.URL.Path == mcpBridgePrefix+"/agent-sessions/active" {
 		return server.readActiveAgentSession(response, request)

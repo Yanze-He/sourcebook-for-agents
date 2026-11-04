@@ -57,18 +57,21 @@ var sourceBookPattern = regexp.MustCompile(`^[\w-]+$`)
 var bookIDPattern = regexp.MustCompile(`^[^/\x00-\x1f\x7f]{1,160}$`)
 
 type Server struct {
-	library            *Library
-	webRoot            string
-	settingsPath       string
-	settingsMu         sync.Mutex
-	libraryOperationMu sync.RWMutex
-	changeMu           sync.Mutex
-	changeSubscribers  map[string]map[chan struct{}]struct{}
-	mcpMu              sync.Mutex
-	agentSessionMu     sync.Mutex
-	agentSessions      map[string]agentSessionScope
-	clipboardMu        sync.Mutex
-	clipboardSnapshots map[string]clipboardSnapshot
+	library                *Library
+	webRoot                string
+	settingsPath           string
+	settingsMu             sync.Mutex
+	libraryOperationMu     sync.RWMutex
+	changeMu               sync.Mutex
+	changeSubscribers      map[string]map[chan struct{}]struct{}
+	mcpMu                  sync.Mutex
+	agentSessionMu         sync.Mutex
+	agentSessions          map[string]agentSessionScope
+	agentSessionsPath      string
+	agentSessionsLoadError error
+	agentPageBindings      map[string]agentPageBindingRequest
+	clipboardMu            sync.Mutex
+	clipboardSnapshots     map[string]clipboardSnapshot
 }
 
 type clipboardSnapshot struct {
@@ -99,7 +102,8 @@ func NewServer(library *Library, webRoot string) http.Handler {
 		// successful library migration.
 		settingsRoot = filepath.Dir(library.locationConfigPath)
 	}
-	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}, agentSessions: map[string]agentSessionScope{}, clipboardSnapshots: map[string]clipboardSnapshot{}}
+	server := &Server{library: library, webRoot: webRoot, settingsPath: filepath.Join(settingsRoot, "desktop-settings.json"), agentSessionsPath: filepath.Join(settingsRoot, "agent-sessions.json"), changeSubscribers: map[string]map[chan struct{}]struct{}{}, agentSessions: map[string]agentSessionScope{}, agentPageBindings: map[string]agentPageBindingRequest{}, clipboardSnapshots: map[string]clipboardSnapshot{}}
+	server.loadAgentSessions()
 	server.cleanupExpiredMCPContextFiles()
 	return server
 }
@@ -231,6 +235,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	}
 	if strings.HasPrefix(path, "/api/agent-sessions/") {
 		return server.routeBrowserAgentSession(response, request)
+	}
+	if request.Method == http.MethodGet && path == "/api/agent-page-bindings" {
+		return server.listAgentPageBindings(response, request)
 	}
 	if request.Method == http.MethodGet && path == "/api/mcp/suggestions" {
 		return server.listMCPSuggestions(response, request, request.URL.Query().Get("batchId"))
@@ -550,6 +557,16 @@ func (server *Server) resetLibrary(response http.ResponseWriter) error {
 	if err != nil {
 		return err
 	}
+	server.agentSessionMu.Lock()
+	previousSessions := server.agentSessions
+	server.agentSessions = map[string]agentSessionScope{}
+	server.agentPageBindings = map[string]agentPageBindingRequest{}
+	if err := server.saveAgentSessionsLocked(); err != nil {
+		server.agentSessions = previousSessions
+		server.agentSessionMu.Unlock()
+		return agentSessionSaveError(err)
+	}
+	server.agentSessionMu.Unlock()
 	writeJSON(response, http.StatusOK, map[string]any{"activeBookId": manifest.ActiveBookID, "books": manifest.Books})
 	return nil
 }

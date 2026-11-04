@@ -29,6 +29,7 @@ type LinkFilter = "all" | "linked" | "invalid";
 type LocalFilter = "all" | "pending" | "local" | "missing" | "failed" | "downloading";
 type Book = { id: string; name: string; createdAt?: string; revision?: number };
 type BookManifest = { activeBookId: string; books: Book[]; unreadBookIds?: string[] };
+type AgentPageScope = { bookId?: string; pageState?: "active" | "observer" | "pending" | "unclaimed" | "replaced"; selectedSourceIds?: string[]; filters?: { query?: string; kind?: Modality[]; source?: string[]; linkFilter?: Exclude<LinkFilter, "all">[]; localFilter?: Exclude<LocalFilter, "all">[]; dateFilter?: DateFilter; dateStart?: string; dateEnd?: string; onlyFavorites?: boolean } };
 type BackupRestoreResponse = BookManifest & { imported?: Book[] };
 type PromptSettingsResponse = { template: string };
 type ClipboardFileModality = "image" | "video" | "audio" | "file";
@@ -175,7 +176,8 @@ export default function SourcebookSources() {
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [isBatchActionsOpen, setIsBatchActionsOpen] = useState(false);
   const [isBatchCopyOpen, setIsBatchCopyOpen] = useState(false);
-  const [agentPageConnection, setAgentPageConnection] = useState<"connected" | "disconnected">("connected");
+  const [agentPageConnection, setAgentPageConnection] = useState<"checking" | "connected" | "disconnected" | "unavailable">("checking");
+  const [pendingPageBindings, setPendingPageBindings] = useState<{ code: string; agentName: string }[]>([]);
   const [density, setDensity] = useState<CardDensity>(() => (window.localStorage.getItem("sourcebook-card-density") as CardDensity) || "standard");
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -234,15 +236,37 @@ export default function SourcebookSources() {
   const knownPendingSuggestionIdsRef = useRef<Set<string> | null>(null);
   const bookTransferRef = useRef<HTMLDivElement | null>(null);
   const activeBookIdRef = useRef("");
+  const itemsLoadedBookRef = useRef("");
+  const agentScopeHydratedRef = useRef(false);
   const latestItemsRequestRef = useRef(0);
   const pendingAgentScopeRef = useRef<{ sessionId: string; payload: Record<string, unknown> } | null>(null);
+  const lastAgentScopeSignatureRef = useRef("");
   const syncingAgentScopeRef = useRef(false);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
   const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
   const agentSessionTokenRef = useRef(new URLSearchParams(window.location.search).get("agentSessionToken"));
+  const pageInstanceIdRef = useRef(window.crypto.randomUUID());
   const requestedSubmissionBatchIdRef = useRef(new URLSearchParams(window.location.search).get("panel") === "agent-submissions" ? new URLSearchParams(window.location.search).get("batchId") : null);
   const copy = interfaceCopy[language];
+
+  function restoreAgentPageScope(scope: AgentPageScope) {
+    const selection = scope.selectedSourceIds || [];
+    setSelectedIds(selection);
+    setIsBatchSelecting(selection.length > 0);
+    if (scope.filters) {
+      setQuery(scope.filters.query || "");
+      setKind(scope.filters.kind || []);
+      setSource(scope.filters.source || []);
+      setLinkFilter(scope.filters.linkFilter || []);
+      setLocalFilter(scope.filters.localFilter || []);
+      setDateFilter(scope.filters.dateFilter || "all");
+      setDateStart(scope.filters.dateStart || "");
+      setDateEnd(scope.filters.dateEnd || "");
+      setOnlyFavorites(Boolean(scope.filters.onlyFavorites));
+    }
+    agentScopeHydratedRef.current = true;
+  }
 
   const agentSuggestionPath = useCallback((path: string) => {
     const sessionId = agentSessionIdRef.current;
@@ -294,7 +318,9 @@ export default function SourcebookSources() {
       }));
       setTotalItems(response.total + (failurePreviewEnabled ? 3 : 0));
       setNextCursor(response.nextCursor);
-      setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
+      // A page of sources may not contain every selected item. Keep selections
+      // from the session when pagination or a filter hides those cards.
+      itemsLoadedBookRef.current = bookId;
       if (announce) showSourcesMessage(`Refreshed ${response.total} source${response.total === 1 ? "" : "s"}.`, 3600, "success");
       else setMessage(null);
     } catch (error) { if (activeBookIdRef.current === bookId && latestItemsRequestRef.current === requestId) showSourcesMessage(announce ? `Could not refresh sources: ${errorMessage(error)}` : errorMessage(error), announce ? 6000 : 3600, "error"); }
@@ -337,18 +363,23 @@ export default function SourcebookSources() {
     const pageToken = agentSessionTokenRef.current;
     if (sessionId && pageToken) {
       try {
-        const scope = await requestWithTimeout<{ bookId?: string }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}`, 10_000);
+        let scope = await requestWithTimeout<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}&pageInstanceId=${encodeURIComponent(pageInstanceIdRef.current)}`, 10_000);
+        if (scope.pageState === "pending" || scope.pageState === "unclaimed") {
+          scope = await request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current }) });
+        }
         agentBookId = scope.bookId || "";
-        setAgentPageConnection("connected");
+        if (!agentScopeHydratedRef.current && !activeBookIdRef.current) restoreAgentPageScope(scope);
+        setAgentPageConnection(scope.pageState === "observer" || scope.pageState === "replaced" ? "disconnected" : "connected");
       } catch (error) {
         // A busy or temporarily unreachable service has not revoked this page.
         // Only an explicit session response can mark it as disconnected.
-        if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
+        setAgentPageConnection(isDisconnectedAgentPageError(error) ? "disconnected" : "unavailable");
         if (!activeBookIdRef.current) throw error;
       }
     }
     const currentBookId = activeBookIdRef.current;
-    const targetBookId = currentBookId && response.books.some((book) => book.id === currentBookId) ? currentBookId : requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : response.activeBookId;
+    const targetBookId = currentBookId && response.books.some((book) => book.id === currentBookId) ? currentBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : sessionId ? "" : response.activeBookId;
+    if (sessionId && !targetBookId) throw new Error(language === "zh" ? "此页的 Book 状态无法恢复。请让 Agent 重新打开 Sourcebook。" : "This tab's Book state cannot be restored. Ask the Agent to reopen Sourcebook.");
     // Agent pages retain their own Book in the server-side page scope. Do not
     // mutate Desktop's shared browsing default just to restore that page.
     if (!sessionId && targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
@@ -361,6 +392,7 @@ export default function SourcebookSources() {
     }
     setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId);
     } catch (error) {
+      if (agentSessionIdRef.current) setAgentPageConnection(isUnavailableAgentPageError(error) ? "unavailable" : "disconnected");
       setBootstrapError(errorMessage(error));
       setLoading(false);
     }
@@ -448,7 +480,7 @@ export default function SourcebookSources() {
     const matchesQuery = !normalizedQuery || [item.itemTitle, item.sourceTitle, item.sourceOrigin, item.sourceUrl, item.contentUrl, item.userNote, item.contentText, item.resourceSummary, item.metadata.description, item.metadata.pageTitle, item.metadata.ogTitle, item.metadata.siteName, item.metadata.canonicalUrl, item.metadata.conversation?.provider, post?.title, post?.bodyText, post?.author?.displayName, post?.author?.handle, ...(post?.tags ?? [])].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery));
     return matchesQuery && matchesDate(item.pickedAt, dateFilter, dateStart, dateEnd) && (!kind.length || kind.includes(item.modality)) && (!source.length || source.includes(sourceLabel(item))) && (!linkFilter.length || linkFilter.includes(item.linkState as Exclude<LinkFilter, "all">)) && (!localFilter.length || localFilter.includes(localState(item) as Exclude<LocalFilter, "all">)) && (!onlyFavorites || item.favorite);
   }), [dateEnd, dateFilter, items, kind, linkFilter, localFilter, onlyFavorites, query, source]);
-  const refreshAgentPageConnection = async () => {
+  const refreshAgentPageConnection = async (selectedBindingCode?: string) => {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
     const wasDisconnected = agentPageConnection === "disconnected";
@@ -457,25 +489,49 @@ export default function SourcebookSources() {
       showSourcesMessage(language === "zh" ? "此页缺少连接信息。请让 Agent 重新打开 Sourcebook。" : "This tab is missing its connection details. Ask the Agent to reopen Sourcebook.", 5000, "error");
       return;
     }
-    if (!activeBookId) {
-      showSourcesMessage(language === "zh" ? "当前 Book 尚未加载完成。请稍后重试。" : "The current Book has not finished loading. Try again shortly.", 5000, "error");
-      return;
-    }
     setIsRefreshingAgentPageConnection(true);
     showSourcesMessage(wasDisconnected ? (language === "zh" ? "正在连接此页…" : "Connecting this tab…") : (language === "zh" ? "正在刷新连接…" : "Refreshing connection…"), 0);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {
-      await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken }), signal: controller.signal });
-      await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
-        method: "PUT",
-        body: JSON.stringify({ pageToken, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } }),
-        signal: controller.signal,
-      });
+      const host = new URLSearchParams(window.location.search).get("sourcebookHost") || "Agent";
+      let bindingCode = selectedBindingCode;
+      if (!bindingCode) {
+        const pending = await request<{ requests: { code: string; agentName: string }[] }>(`/api/agent-page-bindings?agentName=${encodeURIComponent(host)}`, { signal: controller.signal });
+        if (pending.requests.length > 1) {
+          setPendingPageBindings(pending.requests);
+          showSourcesMessage(language === "zh" ? "多个对话正在等待连接。请选择 Agent 对话中显示的代码。" : "Multiple conversations are waiting. Choose the code shown in your Agent chat.", 6000);
+          return;
+        }
+        bindingCode = pending.requests[0]?.code;
+      }
+      const restored = await request<AgentPageScope>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/${bindingCode ? "bind" : "reconnect"}`, { method: "POST", body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current, ...(bindingCode ? { code: bindingCode, agentName: host, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } } : {}) }), signal: controller.signal });
+      if (activeBookId) {
+        await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
+          method: "PUT",
+          body: JSON.stringify({ pageToken, pageInstanceId: pageInstanceIdRef.current, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } }),
+          signal: controller.signal,
+        });
+      } else {
+        // A failed initial scope read can leave this tab without a rendered
+        // Book. Restore only the Book and scope already owned by this page.
+        // Desktop's browsing default belongs to another context.
+        const manifest = await request<BookManifest>("/api/books", { signal: controller.signal });
+        const bookId = restored.bookId && manifest.books.some((book) => book.id === restored.bookId) ? restored.bookId : "";
+        if (!bookId) throw new Error(language === "zh" ? "此页的 Book 状态无法恢复。请让 Agent 重新打开 Sourcebook。" : "This tab's Book state cannot be restored. Ask the Agent to reopen Sourcebook.");
+        setBootstrapError(null);
+        setLoading(true);
+        setBooks(manifest.books);
+        setUnreadBookIds(manifest.unreadBookIds || []);
+        activeBookIdRef.current = bookId;
+        setActiveBookId(bookId);
+        restoreAgentPageScope(restored);
+      }
       setAgentPageConnection("connected");
-      showSourcesMessage(wasDisconnected ? (language === "zh" ? "此页已连接。" : "This tab is connected.") : (language === "zh" ? "连接已刷新。" : "Connection refreshed."), 3600, "success");
+      setPendingPageBindings([]);
+      showSourcesMessage(bindingCode ? (language === "zh" ? "已将此页绑定到目标 Agent 对话。" : "This tab is bound to the chosen Agent conversation.") : wasDisconnected ? (language === "zh" ? "此页已连接 Desktop。" : "This tab is connected to Desktop.") : (language === "zh" ? "此页与 Desktop 已同步。" : "This tab is synced with Desktop."), 3600, "success");
     } catch (error) {
-      if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
+      setAgentPageConnection(isUnavailableAgentPageError(error) ? "unavailable" : "disconnected");
       showSourcesMessage(agentPageConnectionErrorMessage(error, language), 5000, "error");
     } finally { window.clearTimeout(timeout); setIsRefreshingAgentPageConnection(false); }
   };
@@ -500,6 +556,7 @@ export default function SourcebookSources() {
             // transport timeout must not turn a valid tab into a dead one.
             if (!pendingAgentScopeRef.current) pendingAgentScopeRef.current = update;
             retryOnNextInteraction = true;
+            setAgentPageConnection("unavailable");
             break;
           }
         } finally {
@@ -527,17 +584,19 @@ export default function SourcebookSources() {
   useEffect(() => {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
-    if (!sessionId || !pageToken || !activeBookId || agentPageConnection === "disconnected") return;
-    pendingAgentScopeRef.current = {
-      sessionId,
-      payload: {
+    if (!sessionId || !pageToken || !activeBookId || itemsLoadedBookRef.current !== activeBookId || agentPageConnection !== "connected") return;
+    const payload = {
         pageToken,
+        pageInstanceId: pageInstanceIdRef.current,
         bookId: activeBookId,
-        selectedSourceIds: selectedIds.filter((id) => items.some((item) => item.bookId === activeBookId && item.id === id)),
+        selectedSourceIds: selectedIds,
         filteredSourceIds: visibleItems.filter((item) => item.bookId === activeBookId).map((item) => item.id),
         filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites },
-      },
     };
+    const signature = JSON.stringify(payload);
+    if (signature === lastAgentScopeSignatureRef.current) return;
+    lastAgentScopeSignatureRef.current = signature;
+    pendingAgentScopeRef.current = { sessionId, payload };
     void flushAgentScope();
   }, [activeBookId, agentPageConnection, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, selectedIds, source, visibleItems, items]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
@@ -965,12 +1024,14 @@ export default function SourcebookSources() {
   const hasUnreadBooks = unreadBookIds.some((bookId) => bookId !== activeBookId && books.some((book) => book.id === bookId));
   const agentPageHost = agentSessionIdRef.current ? new URLSearchParams(window.location.search).get("sourcebookHost") : null;
   const agentPageName = agentPageHost === "workbuddy" ? "WorkBuddy" : agentPageHost === "codex" ? "Codex" : (agentPageHost || "Agent");
-  const agentPageScopeMessage = language === "zh" ? "此页的 Book、选择和筛选范围会用于当前对话" : "This tab's Book, selection, and filters are used for this conversation";
-  const agentPageDisconnected = Boolean(agentSessionIdRef.current && agentPageConnection === "disconnected");
+  const agentPageScopeMessage = language === "zh" ? "此页的 Book 和选择可供已绑定的对话读取" : "This tab's Book and selection are available to its bound conversation";
+  const agentPageDisconnected = Boolean(agentSessionIdRef.current && agentPageConnection !== "connected");
+  const agentPageUnavailable = agentPageConnection === "unavailable";
+  const agentPageChecking = agentPageConnection === "checking";
 
   return <LanguageContext.Provider value={language}><main className="app-shell public-sources-shell">
     <section className={`sources-page sources-surface public-sources-surface ${agentSessionIdRef.current ? "has-agent-banner" : ""}`} aria-label="Sources">
-      {agentSessionIdRef.current ? <div className={`agent-page-banner ${agentPageDisconnected ? "is-disconnected" : ""}`} role="status"><span className="agent-page-banner-mark">{agentPageDisconnected ? <Link2Off size={15} /> : agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageDisconnected ? (language === "zh" ? "本标签页未连接" : "Disconnected") : agentPageName}</strong><span>{agentPageDisconnected ? (language === "zh" ? "点击“连接此页”重新连接。" : "Connect this tab to reconnect.") : agentPageScopeMessage}</span></div><button aria-busy={isRefreshingAgentPageConnection} className="agent-page-connection-action" disabled={isRefreshingAgentPageConnection} onClick={() => void refreshAgentPageConnection()} type="button">{isRefreshingAgentPageConnection ? <LoaderCircle className="spin" size={13} /> : null}{isRefreshingAgentPageConnection ? (language === "zh" ? "连接中…" : "Connecting…") : agentPageDisconnected ? (language === "zh" ? "连接此页" : "Connect this tab") : (language === "zh" ? "刷新连接" : "Refresh connection")}</button></div> : null}
+      {agentSessionIdRef.current ? <><div className={`agent-page-banner ${agentPageDisconnected ? "is-disconnected" : ""}`} role="status"><span className="agent-page-banner-mark">{agentPageDisconnected ? <Link2Off size={15} /> : agentPageHost === "workbuddy" ? <Puzzle size={15} /> : <Sparkles size={15} />}</span><div className="agent-page-banner-copy"><strong>{agentPageUnavailable ? (language === "zh" ? "Desktop 暂不可用" : "Desktop unavailable") : agentPageChecking ? (language === "zh" ? "正在验证此页" : "Checking this tab") : agentPageDisconnected ? (language === "zh" ? "本标签页未连接" : "Disconnected") : agentPageName}</strong><span>{agentPageUnavailable ? (language === "zh" ? "请确认 Desktop 正在运行，然后重试。" : "Make sure Desktop is running, then retry.") : agentPageChecking ? (language === "zh" ? "正在读取此页的连接状态…" : "Reading this tab's connection…") : agentPageDisconnected ? (language === "zh" ? "点击“连接此页”重新连接。" : "Connect this tab to reconnect.") : agentPageScopeMessage}</span></div><button aria-busy={isRefreshingAgentPageConnection} className="agent-page-connection-action" disabled={isRefreshingAgentPageConnection} onClick={() => void refreshAgentPageConnection()} type="button">{isRefreshingAgentPageConnection ? <LoaderCircle className="spin" size={13} /> : null}{isRefreshingAgentPageConnection ? (language === "zh" ? "连接中…" : "Connecting…") : agentPageDisconnected ? (language === "zh" ? "连接此页" : "Connect this tab") : (language === "zh" ? "刷新连接" : "Refresh connection")}</button></div>{pendingPageBindings.length > 1 ? <div className="agent-page-binding-choices"><span>{language === "zh" ? "选择 Agent 对话中的代码：" : "Choose the code shown in your Agent chat:"}</span>{pendingPageBindings.map((binding) => <button key={binding.code} onClick={() => void refreshAgentPageConnection(binding.code)} type="button">{binding.code}</button>)}</div> : null}</> : null}
       <header className="panel-head">
         <div className="panel-title-block">
           <div className="book-title-row">
@@ -2133,7 +2194,8 @@ function clipboardErrorReason(message: string, language: Language) {
 function bookPath(path: string, bookId: string | undefined) { if (!bookId || !path.startsWith("/api/")) return path; return `${path}${path.includes("?") ? "&" : "?"}bookId=${encodeURIComponent(bookId)}`; }
 async function fileToBase64(file: File) { const buffer = await file.arrayBuffer(); let value = ""; const bytes = new Uint8Array(buffer); for (let index = 0; index < bytes.length; index += 0x8000) value += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(value); }
 async function requestBackupRestore(file: File, mode: "append" | "replace") { const response = await fetch(`/api/library/restore?mode=${encodeURIComponent(mode)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<BackupRestoreResponse>; }
-function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)/i.test(errorMessage(error)); }
+function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)|Another Sourcebook tab is currently connected/i.test(errorMessage(error)); }
+function isUnavailableAgentPageError(error: unknown) { return isAbortedRequest(error) || /failed to fetch|networkerror|load failed|network request failed/i.test(errorMessage(error)); }
 function agentPageConnectionErrorMessage(error: unknown, language: Language) {
   const message = errorMessage(error);
   if (isAbortedRequest(error)) return language === "zh" ? "连接超时。请确认 Sourcebook Desktop 正在运行，然后重试。" : "Connection timed out. Make sure Sourcebook Desktop is running, then try again.";

@@ -2761,3 +2761,6 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   .clipboard-import-modal { width:calc(100vw - 20px); max-height:calc(100dvh - 20px); }
   .clipboard-import-modal .modal-head,.clipboard-import-scope,.clipboard-import-ignored,.clipboard-import-modal .modal-footer { padding-right:14px; padding-left:14px; }
 }
+.agent-page-binding-choices { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 18px; background:#f7f0fb; color:#5c315e; font-size:12px; }
+.agent-page-binding-choices button { border:1px solid #c7a5d0; border-radius:6px; padding:4px 9px; background:#fff; color:#5c315e; font:inherit; font-weight:750; cursor:pointer; }
+.agent-page-binding-choices button:hover { background:#f4e6f8; }
