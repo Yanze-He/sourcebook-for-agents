@@ -773,10 +773,17 @@ func sourcebookOwnerID() string {
 
 func workBuddyConversationID(contextValue string) string {
 	parts := strings.Split(strings.TrimSpace(contextValue), ".")
-	if len(parts) < 2 || len(parts[1]) > 16*1024 {
+	// WorkBuddy supplies base64(payload).signature. Some hosts use the JWT
+	// header.payload.signature form; accept both without treating the opaque
+	// signature as JSON.
+	if len(parts) != 2 && len(parts) != 3 {
 		return ""
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(parts[1])
+	payloadPart := parts[len(parts)-2]
+	if len(payloadPart) > 16*1024 {
+		return ""
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(payloadPart)
 	if err != nil {
 		return ""
 	}

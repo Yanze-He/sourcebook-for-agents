@@ -234,6 +234,9 @@ export default function SourcebookSources() {
   const knownPendingSuggestionIdsRef = useRef<Set<string> | null>(null);
   const bookTransferRef = useRef<HTMLDivElement | null>(null);
   const activeBookIdRef = useRef("");
+  const latestItemsRequestRef = useRef(0);
+  const pendingAgentScopeRef = useRef<{ sessionId: string; payload: Record<string, unknown> } | null>(null);
+  const syncingAgentScopeRef = useRef(false);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
   const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
@@ -271,12 +274,14 @@ export default function SourcebookSources() {
     }
   }
 
-  async function loadItems({ announce = false, background = false, bookId = activeBookId, limit = sourcePageSize }: { announce?: boolean; background?: boolean; bookId?: string; limit?: number } = {}) {
+  async function loadItems({ announce = false, background = false, bookId = activeBookId, limit = query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites ? bookSourceLimit : sourcePageSize }: { announce?: boolean; background?: boolean; bookId?: string; limit?: number } = {}) {
+    const requestId = ++latestItemsRequestRef.current;
     const requestStartedAt = Date.now();
     if (announce) { setIsRefreshing(true); showSourcesMessage("Refreshing sources…", 0); }
     else if (!background) setLoading(true);
     try {
-      const response = await request<SourcePage>(bookPath(`/api/sources?limit=${limit}`, bookId));
+      const response = await requestWithTimeout<SourcePage>(bookPath(`/api/sources?limit=${limit}`, bookId), 10_000);
+      if (activeBookIdRef.current !== bookId || latestItemsRequestRef.current !== requestId) return;
       const nextItems = failurePreviewEnabled ? [...failurePreviewItems(bookId), ...response.items] : response.items;
       setItems((current) => nextItems.map((item) => {
         const downloadStartedAt = downloadStartTimesRef.current.get(item.id);
@@ -292,8 +297,8 @@ export default function SourcebookSources() {
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
       if (announce) showSourcesMessage(`Refreshed ${response.total} source${response.total === 1 ? "" : "s"}.`, 3600, "success");
       else setMessage(null);
-    } catch (error) { showSourcesMessage(announce ? `Could not refresh sources: ${errorMessage(error)}` : errorMessage(error), announce ? 6000 : 3600, "error"); }
-    finally { if (announce) setIsRefreshing(false); else if (!background) setLoading(false); }
+    } catch (error) { if (activeBookIdRef.current === bookId && latestItemsRequestRef.current === requestId) showSourcesMessage(announce ? `Could not refresh sources: ${errorMessage(error)}` : errorMessage(error), announce ? 6000 : 3600, "error"); }
+    finally { if (activeBookIdRef.current === bookId && latestItemsRequestRef.current === requestId) { setIsRefreshing(false); setLoading(false); } }
   }
   async function loadMoreItems() {
     if (!nextCursor || isLoadingMore) return;
@@ -323,21 +328,23 @@ export default function SourcebookSources() {
   async function loadBooks() {
     setBootstrapError(null);
     try {
-    let response = await request<BookManifest>("/api/books");
+    let response = await requestWithTimeout<BookManifest>("/api/books", 10_000);
     const requestedBookId = requestedBookIdRef.current;
     let agentBookId = "";
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
     if (sessionId && pageToken) {
       try {
-        const scope = await request<{ bookId?: string }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}`);
+        const scope = await requestWithTimeout<{ bookId?: string }>(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope?pageToken=${encodeURIComponent(pageToken)}`, 10_000);
         agentBookId = scope.bookId || "";
         setAgentPageConnection("connected");
       } catch (error) {
-        if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
+        setAgentPageConnection("disconnected");
+        if (!activeBookIdRef.current) throw error;
       }
     }
-    const targetBookId = requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : response.activeBookId;
+    const currentBookId = activeBookIdRef.current;
+    const targetBookId = currentBookId && response.books.some((book) => book.id === currentBookId) ? currentBookId : requestedBookId && response.books.some((book) => book.id === requestedBookId) ? requestedBookId : agentBookId && response.books.some((book) => book.id === agentBookId) ? agentBookId : response.activeBookId;
     // Agent pages retain their own Book in the server-side page scope. Do not
     // mutate Desktop's shared browsing default just to restore that page.
     if (!sessionId && targetBookId !== response.activeBookId) response = await request<BookManifest>(`/api/books/${encodeURIComponent(targetBookId)}/activate`, { method: "POST" });
@@ -478,28 +485,45 @@ export default function SourcebookSources() {
       showSourcesMessage(agentPageConnectionErrorMessage(error, language), 5000, "error");
     } finally { window.clearTimeout(timeout); setIsRefreshingAgentPageConnection(false); }
   };
+  async function flushAgentScope() {
+    if (syncingAgentScopeRef.current) return;
+    syncingAgentScopeRef.current = true;
+    try {
+      while (pendingAgentScopeRef.current) {
+        const update = pendingAgentScopeRef.current;
+        pendingAgentScopeRef.current = null;
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 8_000);
+        try {
+          await request(`/api/agent-sessions/${encodeURIComponent(update.sessionId)}/scope`, { method: "PUT", body: JSON.stringify(update.payload), signal: controller.signal });
+          if (!pendingAgentScopeRef.current) setAgentPageConnection("connected");
+        } catch (error) {
+          if (!pendingAgentScopeRef.current) setAgentPageConnection("disconnected");
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      }
+    } finally {
+      syncingAgentScopeRef.current = false;
+      if (pendingAgentScopeRef.current) void flushAgentScope();
+    }
+  }
   useEffect(() => {
     const sessionId = agentSessionIdRef.current;
     const pageToken = agentSessionTokenRef.current;
-    if (!sessionId || !pageToken || !activeBookId) return;
-    let disposed = false;
-    const syncAgentPage = () => void request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
-      method: "PUT",
-      body: JSON.stringify({
+    if (!sessionId || !pageToken || !activeBookId || agentPageConnection === "disconnected") return;
+    pendingAgentScopeRef.current = {
+      sessionId,
+      payload: {
         pageToken,
         bookId: activeBookId,
-        selectedSourceIds: selectedIds,
-        filteredSourceIds: visibleItems.map((item) => item.id),
+        selectedSourceIds: selectedIds.filter((id) => items.some((item) => item.bookId === activeBookId && item.id === id)),
+        filteredSourceIds: visibleItems.filter((item) => item.bookId === activeBookId).map((item) => item.id),
         filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites },
-      }),
-    }).then(() => {
-      if (!disposed) setAgentPageConnection("connected");
-    }).catch((error) => {
-      if (!disposed && isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
-    });
-    syncAgentPage();
-    return () => { disposed = true; };
-  }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, selectedIds, source, visibleItems]);
+      },
+    };
+    void flushAgentScope();
+  }, [activeBookId, agentPageConnection, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, selectedIds, source, visibleItems, items]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const reusableSelectionIds = useMemo(() => (lastSelectedIdsByBook[activeBookId] || []).filter((id) => items.some((item) => item.id === id)), [activeBookId, items, lastSelectedIdsByBook]);
   const hasReusableSelection = reusableSelectionIds.length > 0;
@@ -704,7 +728,7 @@ export default function SourcebookSources() {
         ? { ...(await request<BookManifest>("/api/books")), activeBookId: bookId }
         : await request<BookManifest>(`/api/books/${encodeURIComponent(bookId)}/activate`, { method: "POST" });
       if (isBatchSelecting) rememberSelection(activeBookId, selectedIds);
-      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null);
+      setBooks(response.books); setUnreadBookIds(response.unreadBookIds || []); activeBookIdRef.current = response.activeBookId; setActiveBookId(response.activeBookId); setItems([]); setTotalItems(0); setNextCursor(null); setSelectedIds([]); setIsBatchSelecting(false); setIsPackOpen(false); setIsBookTransferOpen(false); setDetailItem(null);
     } catch (error) { setMessage(errorMessage(error)); }
   }
   async function createBook(name: string) {
@@ -2148,6 +2172,7 @@ function mcpInspectionNotice(host: "Codex" | "WorkBuddy", status: string, zh: bo
   return `${host} is not ready to connect yet.`;
 }
 async function request<T = unknown>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed (${response.status})`); return response.json() as Promise<T>; }
+async function requestWithTimeout<T>(path: string, milliseconds: number): Promise<T> { const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), milliseconds); try { return await request<T>(path, { signal: controller.signal }); } catch (error) { if (isAbortedRequest(error)) throw new Error(`Sourcebook did not respond within ${Math.round(milliseconds / 1000)} seconds.`); throw error; } finally { window.clearTimeout(timeout); } }
 async function copyTextToClipboard(text: string) {
   const host = new URLSearchParams(window.location.search).get("sourcebookHost");
   if (host === "workbuddy") {

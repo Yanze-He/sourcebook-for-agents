@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,18 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestWorkBuddyConversationIDAcceptsHostContextFormats(t *testing.T) {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sessionId":"workbuddy-chat-123"}`))
+	for _, contextValue := range []string{payload + ".signature", "header." + payload + ".signature"} {
+		if got := workBuddyConversationID(contextValue); got != "workbuddy-chat-123" {
+			t.Fatalf("conversation ID = %q for context with %d parts", got, len(strings.Split(contextValue, ".")))
+		}
+	}
+	if got := workBuddyConversationID("invalid.signature"); got != "" {
+		t.Fatalf("invalid context returned %q", got)
+	}
+}
 
 func TestNewSourceProposalsRequireContextNotes(t *testing.T) {
 	for _, fields := range [][]any{

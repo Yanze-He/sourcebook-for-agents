@@ -2196,14 +2196,25 @@ func serveWebsite(response http.ResponseWriter, request *http.Request, root stri
 	}
 	relative := strings.TrimPrefix(filepath.Clean("/"+request.URL.Path), "/")
 	candidate := filepath.Join(root, relative)
+	staticAsset := strings.HasPrefix(relative, "assets/") || relative == "assets" || filepath.Ext(relative) != ""
 	if request.URL.Path == "/" || !strings.HasPrefix(candidate, root) {
 		candidate = filepath.Join(root, "index.html")
 	}
 	if _, err := os.Stat(candidate); err != nil {
+		if staticAsset {
+			return &apiError{status: http.StatusNotFound, code: "STATIC_ASSET_NOT_FOUND", message: "Sourcebook asset was not found. Refresh the page to load the current version."}
+		}
 		candidate = filepath.Join(root, "index.html")
 	}
 	if _, err := os.Stat(candidate); err != nil {
 		return &apiError{status: 503, code: "BUILD_MISSING", message: "Sourcebook Sources build is missing"}
+	}
+	if filepath.Base(candidate) == "index.html" {
+		// A cached entry page can reference JavaScript from an older Desktop
+		// package. The filenames are versioned, so always revalidate the entry.
+		response.Header().Set("Cache-Control", "no-store")
+	} else if strings.HasPrefix(relative, "assets/") {
+		response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
 	response.Header().Set("content-type", mime.TypeByExtension(filepath.Ext(candidate)))
 	http.ServeFile(response, request, candidate)

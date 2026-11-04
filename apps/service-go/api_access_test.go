@@ -4,9 +4,46 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestWebsiteEntryDoesNotCacheStaleBundleReferences(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	webRoot := t.TempDir()
+	if err := os.Mkdir(filepath.Join(webRoot, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte(`<script type="module" src="/assets/current.js"></script>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "assets", "current.js"), []byte(`export const ready = true;`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(library, webRoot)
+	request := func(path string) *httptest.ResponseRecorder {
+		result := httptest.NewRecorder()
+		server.ServeHTTP(result, httptest.NewRequest(http.MethodGet, "http://localhost:4177"+path, nil))
+		return result
+	}
+	entry := request("/")
+	if entry.Code != http.StatusOK || entry.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("entry = %d, cache %q", entry.Code, entry.Header().Get("Cache-Control"))
+	}
+	asset := request("/assets/current.js")
+	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "text/javascript; charset=utf-8" {
+		t.Fatalf("current bundle = %d, type %q", asset.Code, asset.Header().Get("Content-Type"))
+	}
+	missing := request("/assets/previous.js")
+	if missing.Code != http.StatusNotFound || missing.Body.String() == entry.Body.String() {
+		t.Fatalf("missing old bundle = %d: %s", missing.Code, missing.Body.String())
+	}
+}
 
 func TestLocalAPIAcceptsOnlyDesktopAndApprovedPickerBuilds(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
