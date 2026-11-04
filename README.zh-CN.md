@@ -2,7 +2,7 @@
 
 **收集参考素材。按任务中转给不同 AI 工具。在同一个 Book 里持续积累。**
 
-Sourcebook 将图片、文件、链接和备注保存在本地 Book 中，供一次临时任务或长期项目取用。
+当 Agent 承担更多执行工作，创作者就可以少花精力描述每一步，更多地决定目标、挑选参考、判断结果。Sourcebook 将这些参考素材保存在持续丰富的本地 Book 中，帮助你按任务选出并交给合适的 AI 工具。
 
 [访问官网](https://sourcebook.online) · [English README](README.md) · [入门指南（英文）](docs/getting-started.md) · [连接 Agent（英文）](docs/connect-agents.md)
 

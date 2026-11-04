@@ -2,7 +2,7 @@
 
 **Collect references. Relay the right materials across AI tools. Keep building on the same Book.**
 
-Sourcebook keeps images, files, links, and notes in a local Book you can draw from for one prompt or an ongoing project.
+As agents take on more execution, creators can spend less time specifying every step and more time setting the goal, choosing references, and judging the result. Sourcebook keeps those references in a growing local Book and helps you bring the right set into each AI task.
 
 [Visit the website](https://sourcebook.online) · [Chinese README](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
