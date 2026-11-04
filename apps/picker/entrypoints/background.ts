@@ -2,7 +2,7 @@ import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { PICKER_LANGUAGE_KEY, storedPickerLanguage, type UiLanguage } from "../src/shared/i18n";
 import { uniqueCoverCandidates } from "../src/shared/page";
-import type { PickerMessage, PickerMessageResponse, PickResponse, PickerBook, PickerStatusResponse, PickPayload, RecentPickSummary, ResolvedPickPayload } from "../src/shared/types";
+import type { PickerMessage, PickerMessageResponse, PickResponse, PickerBook, PickerStatusResponse, PickPayload, RecentPickSummary, ResolvedPickPayload, CaptureReference } from "../src/shared/types";
 
 const DEFAULT_SERVICE_ORIGINS = ["http://127.0.0.1:4177", "http://127.0.0.1:4297"];
 const SERVICE_ORIGIN_KEY = "sourcebookServiceOrigin";
@@ -109,9 +109,11 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message: PickerMessage): Promise<PickerMessageResponse> | undefined => {
     if (message.type === "SAVE_PICK") return savePick(message.payload);
+    if (message.type === "CAPTURE_AREA") return captureAreaImage(message.capture);
+    if (message.type === "CAPTURE_PAGE_PREVIEW") return captureVisiblePagePreview();
     if (message.type === "OPEN_SOURCES") return openSources(message.bookId);
     if (message.type === "OPEN_PICKER_POPUP") return openPickerPopup();
-    if (message.type === "UPDATE_SOURCE_NOTE") return updateSourceNote(message.sourceItemId, message.note);
+    if (message.type === "UPDATE_SOURCE_NOTE") return updateSourceNote(message.sourceItemId, message.note, message.bookId);
     if (message.type === "GET_PICKER_STATUS") return getActivePickerStatus();
     if (message.type === "SET_PICKER_ENABLED") return setPickerEnabled(message.enabled);
     if (message.type === "SET_ACTIVE_BOOK") return setActiveBook(message.bookId);
@@ -122,6 +124,7 @@ export default defineBackground(() => {
     if (message.type === "STAGE_OBSIDIAN_PAIRING_CODE") return stageObsidianPairingCode(message.code);
     return undefined;
   });
+
 });
 
 async function refreshLanguage() {
@@ -327,7 +330,8 @@ function isOffline(error: unknown): boolean {
 
 async function savePick(payload: PickPayload): Promise<PickerMessageResponse> {
   try {
-    const preparedPayload = await prepareMediaPayload(await withActiveBook(payload));
+    let preparedPayload = await withActiveBook(payload);
+    preparedPayload = await prepareMediaPayload(preparedPayload);
     const response = await serviceFetch("/picks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -343,6 +347,59 @@ async function savePick(payload: PickPayload): Promise<PickerMessageResponse> {
   } catch (error) {
     return { status: "error", message: isOffline(error) ? text.desktopUnavailable : error instanceof Error ? error.message : text.pickFailed };
   }
+}
+
+async function captureAreaImage(reference: CaptureReference): Promise<PickerMessageResponse> {
+  try {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return { status: "error", message: "The selected tab is no longer available." };
+  const screenshot = await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+  const source = await (await fetch(screenshot)).blob();
+  const bitmap = await createImageBitmap(source);
+  try {
+    const scaleX = bitmap.width / Math.max(1, reference.viewport.width);
+    const scaleY = bitmap.height / Math.max(1, reference.viewport.height);
+    const left = Math.max(0, Math.floor(reference.bounds.left * scaleX));
+    const top = Math.max(0, Math.floor(reference.bounds.top * scaleY));
+    const width = Math.min(bitmap.width - left, Math.max(1, Math.ceil(reference.bounds.width * scaleX)));
+    const height = Math.min(bitmap.height - top, Math.max(1, Math.ceil(reference.bounds.height * scaleY)));
+    if (width < 1 || height < 1) return { status: "error", message: "The selected area is no longer visible." };
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    if (!context) return { status: "error", message: "Screenshot capture is unavailable." };
+    context.drawImage(bitmap, left, top, width, height, 0, 0, width, height);
+    // Full-resolution PNG encoding is disproportionately slow for a large
+    // webpage crop and expands again when passed through JSON/Base64. WebP is
+    // supported by Sourcebook, preserves UI detail at this quality, and keeps
+    // the local-only save path substantially smaller.
+    const cropped = await canvas.convertToBlob({ type: "image/webp", quality: 0.92 });
+    const contentBase64 = await blobToBase64(cropped);
+    return { status: "captured", contentBase64, contentMimeType: "image/webp" };
+  } finally {
+    bitmap.close();
+  }
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Screenshot capture failed." };
+  }
+}
+
+async function captureVisiblePagePreview(): Promise<PickerMessageResponse> {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return { status: "error", message: "The current page is no longer available." };
+    const screenshot = await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    const source = await (await fetch(screenshot)).blob();
+    return { status: "captured", contentBase64: await blobToBase64(source), contentMimeType: "image/png" };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Page screenshot capture failed." };
+  }
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
 }
 
 async function prepareMediaPayload(payload: ResolvedPickPayload): Promise<ResolvedPickPayload> {
@@ -560,11 +617,11 @@ async function openPickerPopup(): Promise<PickerMessageResponse> {
   }
 }
 
-async function updateSourceNote(sourceItemId: string, note: string): Promise<PickerMessageResponse> {
+async function updateSourceNote(sourceItemId: string, note: string, bookId?: string): Promise<PickerMessageResponse> {
   try {
-    const { activeBookId } = await getBookState();
-    if (!activeBookId) throw new PickerApiError("BOOK_SELECTION_REQUIRED", text.chooseBookBeforeEditing, 400);
-    const response = await serviceFetch(`/sources/${encodeURIComponent(sourceItemId)}/note?bookId=${encodeURIComponent(activeBookId)}`, {
+    const targetBookId = bookId || (await getBookState()).activeBookId;
+    if (!targetBookId) throw new PickerApiError("BOOK_SELECTION_REQUIRED", text.chooseBookBeforeEditing, 400);
+    const response = await serviceFetch(`/sources/${encodeURIComponent(sourceItemId)}/note?bookId=${encodeURIComponent(targetBookId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note })

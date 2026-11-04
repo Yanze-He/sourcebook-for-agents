@@ -9,9 +9,10 @@ export default defineConfig({
   manifest: {
     name: "Sourcebook Picker",
     description: "Pick web content and AI chats into local Sourcebook for Obsidian or Desktop.",
-    // Keep Chrome's manifest version aligned with package.json so an installed
-    // Picker is actually updated instead of continuing to run an old popup.
-    version: "0.1.5",
+    // Local candidates retain the public semantic baseline. Their distinct
+    // `build.NNN` label belongs to the test ZIP name and release registry, so
+    // candidate churn never masquerades as a public Picker release.
+    version: "0.1.6",
     // A public key gives unpacked builds a stable Chrome extension ID. The
     // production Store package deliberately omits it so Chrome keeps the ID
     // assigned to the Store listing.

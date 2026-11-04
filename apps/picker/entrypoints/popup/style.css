@@ -16,7 +16,7 @@
 
 html, body {
   height: auto;
-  max-height: 520px;
+  max-height: 640px;
   min-width: 392px;
   width: 392px;
 }
@@ -56,7 +56,7 @@ button:disabled:hover, button[aria-disabled="true"]:hover { background: #efeee9;
   display: flex;
   flex-direction: column;
   height: auto;
-  max-height: 520px;
+  max-height: 640px;
   min-height: 0;
   overflow: hidden;
   padding: 14px 14px 10px;
@@ -124,19 +124,19 @@ button:disabled:hover, button[aria-disabled="true"]:hover { background: #efeee9;
 .book-switcher-menu button svg { fill: none; height: 14px; stroke: var(--muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 14px; }
 
 .tools-panel { border-bottom: 1px solid var(--line); padding-bottom: 11px; }
-.action-grid { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.action-grid { display: grid; gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .action-tool { min-width: 0; position: relative; }
-.action-card { align-items: center; background: var(--surface); border-color: var(--line-strong); display: flex; gap: 5px; height: 40px; justify-content: center; min-height: 40px; min-width: 0; padding: 0 5px; width: 100%; }
+.action-card { align-items: center; background: var(--surface); border-color: var(--line-strong); display: flex; gap: 7px; height: 42px; justify-content: center; min-height: 42px; min-width: 0; padding: 0 9px; width: 100%; }
 .action-card:hover { background: var(--surface-hover); border-color: #aaa79e; }
 .action-card:not([aria-disabled="true"]):hover .button-icon { color: var(--accent); }
 .action-card[data-active="true"] { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
 .action-card[aria-disabled="true"] { background: #efeee9; border-color: #e2e0da; }
 .button-icon { align-items: center; color: var(--ink); display: inline-flex; flex: 0 0 auto; height: 18px; justify-content: center; width: 18px; }
 .button-icon svg { fill: none; height: 18px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; width: 18px; }
-.button-label { font-size: 11px; font-weight: 720; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.button-label { font-size: 12px; font-weight: 720; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button[aria-disabled="true"] .button-icon { color: #999790; }
-.action-tooltip { background: var(--ink); border-radius: 6px; box-shadow: 0 8px 20px rgba(17, 17, 15, 0.18); color: #fff; font-size: 11px; font-weight: 580; left: 0; line-height: 1.4; max-width: 280px; opacity: 0; padding: 7px 8px; pointer-events: none; position: absolute; text-align: left; top: calc(100% + 7px); transform: translateY(-3px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease; visibility: hidden; white-space: pre-line; width: max-content; z-index: 20; }
-.action-tool:last-child .action-tooltip { left: auto; right: 0; }
+.action-tooltip { background: var(--ink); border-radius: 6px; box-shadow: 0 8px 20px rgba(17, 17, 15, 0.18); color: #fff; font-size: 11px; font-weight: 580; left: 0; line-height: 1.4; max-width: min(320px, calc(100vw - 30px)); opacity: 0; padding: 7px 8px; pointer-events: none; position: absolute; text-align: left; top: calc(100% + 7px); transform: translateY(-3px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease; visibility: hidden; white-space: normal; width: max-content; z-index: 20; }
+.action-tool:nth-child(even) .action-tooltip { left: auto; right: 0; }
 .action-tool:has(.action-card:hover) .action-tooltip, .action-tool:has(.action-card:focus-visible) .action-tooltip { opacity: 1; transform: translateY(0); visibility: visible; }
 
 .recent-panel { display: grid; flex: 0 0 auto; gap: 9px; grid-template-rows: auto auto; min-height: 0; }
@@ -165,7 +165,7 @@ button[aria-disabled="true"] .button-icon { color: #999790; }
 .connection-targets { display: grid; gap: 12px; }
 .connection-target { border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .connection-target { border-color: var(--line-strong); }
-.connection-target-button { align-items: center; display: flex; gap: 11px; height: 72px; min-height: 72px; padding: 12px 16px; text-align: left; width: 100%; }
+.connection-target-button { align-items: center; display: flex; gap: 11px; min-height: 72px; padding: 12px 16px; text-align: left; width: 100%; }
 .connection-target-button > span:last-child { display: grid; gap: 4px; min-width: 0; }
 .connection-target-button b { font-size: 15px; font-weight: 760; letter-spacing: -0.015em; }
 .connection-target-button small { color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.35; }

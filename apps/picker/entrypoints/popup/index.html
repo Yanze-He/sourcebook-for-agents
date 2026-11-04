@@ -108,6 +108,18 @@
             <span id="media-action-tooltip" class="action-tooltip" role="tooltip"></span>
           </div>
           <div class="action-tool">
+            <button id="pick-ui" class="action-card" type="button" aria-disabled="true" title="截取网页的组件或自选范围">
+              <span class="button-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="4" y="4" width="16" height="16" rx="1" />
+                  <path d="M8 4v3M16 4v3M8 17v3M16 17v3M4 8h3M17 8h3M4 16h3M17 16h3" />
+                </svg>
+              </span>
+              <span class="button-label">Capture</span>
+            </button>
+            <span id="ui-action-tooltip" class="action-tooltip" role="tooltip"></span>
+          </div>
+          <div class="action-tool">
             <button id="pick-page" class="action-card" type="button" aria-disabled="true" title="保存当前网页">
               <span class="button-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
@@ -143,7 +155,7 @@
         </div>
         <div class="connection-targets">
           <section class="connection-target" data-connection-target="obsidian">
-            <div class="connection-target-button"><span class="connection-target-icon is-obsidian" aria-hidden="true"><img src="https://obsidian.md/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" /></span><span><b>方式1: 连接 Obsidian</b><small>连接当前 Vault 中的 Sourcebook</small></span></div>
+            <div class="connection-target-button"><span class="connection-target-icon is-obsidian" aria-hidden="true"><img src="https://obsidian.md/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" /></span><span><b>方式1: 连接 Obsidian</b><small>在社区插件市场搜索 Sourcebook 安装</small></span></div>
             <form id="connection-obsidian-form" class="connection-pair-form">
               <label><span>配对码</span><input id="connection-code" autocomplete="one-time-code" placeholder="请输入配对码…" /></label>
               <button id="connection-pair" class="connection-primary" type="submit">连接</button>

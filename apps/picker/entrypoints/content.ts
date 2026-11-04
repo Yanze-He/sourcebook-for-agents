@@ -9,7 +9,7 @@ import { collectPageMetadata, collectVideoCoverCandidates, getFaviconUrl, getPag
 import { detectPost } from "../src/post/adapters";
 import { cssPath, isEditableTarget, isSensitivePage, quoteWithContext, textPositionInBody } from "../src/shared/selector";
 import { truncatePickTitle } from "../src/shared/title";
-import type { PickerMessage, PickerMessageResponse, PickResponse, ChatMessageCandidate, ChatProvider, PickerMode, PickPayload } from "../src/shared/types";
+import type { PickerMessage, PickerMessageResponse, PickResponse, ChatMessageCandidate, ChatProvider, PickerMode, PickPayload, CaptureReference } from "../src/shared/types";
 import { tldrawImageAtPoint } from "../src/canvas/tldraw";
 
 type RectLike = Pick<DOMRect, "top" | "left" | "width" | "height">;
@@ -32,8 +32,12 @@ type PickTask = {
   payload: PickPayload;
   sourceItemId?: string;
   sourceBookId?: string;
+  note?: string;
+  noteEditor?: HTMLElement;
   dismissTimer?: number;
   dismissalBound?: boolean;
+  dismissalScheduled?: boolean;
+  pointerInside?: boolean;
 };
 
 type ToastTask = {
@@ -60,6 +64,12 @@ const copy = {
     selectedCount: (count: number) => `已选择 ${count} 个`,
     pickMediaMode: "Pick 媒体",
     pickChatMode: "Pick 对话",
+    pickUiMode: "截取",
+    pickUiTitle: "点击组件，或拖拽选择区域",
+    uiSelected: "已选择范围",
+    windowRange: "截取当前窗口",
+    capture: "截图",
+    uiUnsupported: "这个区域太小，无法捕捉。",
     pickModeTitle: "移动鼠标选择图片、视频或链接",
     confirmPick: "确定",
     confirmCount: (_count: number) => "确定",
@@ -93,7 +103,12 @@ const copy = {
     addNote: "添加备注",
     addNotePlaceholder: "添加备注...",
     addNoteAria: "为这个 Pick 添加备注",
+    notePrefix: "备注：",
+    editNoteAria: "编辑备注",
+    saveToPrefix: "保存至：",
     save: "保存",
+    saveNoteAria: "保存备注",
+    noteSaveFailed: "备注保存失败，请重试。",
     cancel: "取消",
     noteCancelled: "已取消 Note",
     noteSaved: "Note 已保存"
@@ -114,6 +129,12 @@ const copy = {
     selectedCount: (count: number) => `${count} selected`,
     pickMediaMode: "Pick media",
     pickChatMode: "Pick chat",
+    pickUiMode: "Capture",
+    pickUiTitle: "Click a component, or drag to capture an area",
+    uiSelected: "Area selected",
+    windowRange: "Capture current window",
+    capture: "Capture",
+    uiUnsupported: "This area is too small to capture.",
     pickModeTitle: "Move over images, videos, or links",
     confirmPick: "Confirm",
     confirmCount: (_count: number) => "Confirm",
@@ -147,7 +168,12 @@ const copy = {
     addNote: "Add note",
     addNotePlaceholder: "Add note...",
     addNoteAria: "Add note to this Pick",
+    notePrefix: "Note: ",
+    editNoteAria: "Edit note",
+    saveToPrefix: "Save to: ",
     save: "Save",
+    saveNoteAria: "Save note",
+    noteSaveFailed: "Note could not be saved. Try again.",
     cancel: "Cancel",
     noteCancelled: "Note cancelled",
     noteSaved: "Note saved"
@@ -177,7 +203,9 @@ class WebPicker {
   private cameraFrame = document.createElement("div");
   private multiPickBar = document.createElement("div");
   private taskStack = document.createElement("div");
+  private pickTasks = new Set<PickTask>();
   private overlayLayer = document.createElement("div");
+  private uiProcessingShield = document.createElement("div");
   private lastHoverTarget: HTMLImageElement | HTMLVideoElement | HTMLAudioElement | null = null;
   private hoverPosition: PickerOverlayPosition = DEFAULT_PICKER_OVERLAY_POSITION;
   private lastChatTarget: ChatMessageCandidate | null = null;
@@ -194,6 +222,16 @@ class WebPicker {
   private chatSelectionHoverId: string | null = null;
   private selectionTimer: number | undefined;
   private hoverIntentTimer: number | undefined;
+  private uiHoverElement: HTMLElement | null = null;
+  private uiSelectedElement: HTMLElement | null = null;
+  private captureBounds: { left: number; top: number; width: number; height: number } | null = null;
+  private capturePointerStart: { x: number; y: number } | null = null;
+  private captureDragging = false;
+  private captureSuppressClick = false;
+  // Resize handles are useful while composing a capture, but must never be
+  // painted inside the pixels that are saved. The outline itself may stay:
+  // CSS draws its stroke outside the exact capture rectangle.
+  private captureControlsHidden = false;
 
   mount() {
     this.host.setAttribute("aria-hidden", "false");
@@ -201,6 +239,7 @@ class WebPicker {
     this.shadow.append(
       this.styles(),
       this.overlayLayer,
+      this.uiProcessingShield,
       this.cameraFrame,
       this.selectionToolbar,
       this.hoverButton,
@@ -210,6 +249,8 @@ class WebPicker {
     );
 
     this.overlayLayer.className = "overlay-layer";
+    this.uiProcessingShield.className = "ui-processing-shield";
+    this.uiProcessingShield.hidden = true;
     this.selectionToolbar.className = "pick-button selection";
     this.setPickButtonContent(this.selectionToolbar, text.pick);
     this.selectionToolbar.type = "button";
@@ -238,6 +279,8 @@ class WebPicker {
     document.addEventListener("keyup", () => this.scheduleSelectionToolbar());
     document.addEventListener("mousemove", (event) => this.handlePointerMove(event), { passive: true });
     document.addEventListener("pointerdown", (event) => this.handlePointerDown(event), true);
+    document.addEventListener("pointermove", (event) => this.handleCapturePointerMove(event), true);
+    document.addEventListener("pointerup", (event) => this.handlePointerUp(event), true);
     document.addEventListener("click", (event) => void this.handleDocumentClick(event), true);
     document.addEventListener("keydown", (event) => this.handleKeydown(event), true);
     const handleViewportChange = () => this.handleViewportChange();
@@ -285,6 +328,7 @@ class WebPicker {
       if (message.type === "PICK_VISIBLE_CHAT") return this.pickVisibleChat();
       if (message.type === "START_PICK_MODE") return Promise.resolve(this.startPickMode());
       if (message.type === "STOP_PICK_MODE") return Promise.resolve(this.stopPickMode());
+      if (message.type === "START_UI_PICK_MODE") return Promise.resolve(this.startUiPickMode());
       if (message.type === "CONFIRM_PICK_MODE") return this.confirmStagedPick();
       if (message.type === "GET_PICKER_STATUS") return Promise.resolve(this.getPickerStatus());
       if (message.type === "SET_PICKER_ENABLED") return Promise.resolve(this.setPickerEnabled(message.enabled));
@@ -377,6 +421,27 @@ class WebPicker {
       return;
     }
 
+    if (this.mode === "ui_pick_mode") {
+      if (this.updateCaptureDrag(event)) return;
+      // A locked range is intentionally quiet: hover feedback only helps
+      // before the user has committed to a capture area.
+      if (this.captureBounds) {
+        this.clearUiFrame("hover");
+        return;
+      }
+      const uiTarget = this.uiTargetFromElement(target);
+      if (uiTarget) {
+        this.uiHoverElement = uiTarget;
+        // Keep the locked selection and the current hover affordance separate
+        // so a click can replace the selected capture area.
+        this.showUiFrame(uiTarget, "hover");
+      } else {
+        this.uiHoverElement = null;
+        this.clearUiFrame("hover");
+      }
+      return;
+    }
+
     if (this.mode === "pick_mode") {
       const pickTarget = this.pickTargetFromElement(target, event);
       if (pickTarget) {
@@ -421,9 +486,22 @@ class WebPicker {
   }
 
   private async handleDocumentClick(event: MouseEvent) {
+    if (this.isUiProcessing()) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (this.isPickerEvent(event)) return;
+    if (this.captureSuppressClick) {
+      this.captureSuppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (!this.pickerEnabled) return;
-    if (this.mode !== "pick_mode" && this.mode !== "chat_select_mode") return;
+    if (this.mode !== "pick_mode" && this.mode !== "chat_select_mode" && this.mode !== "ui_pick_mode") return;
 
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
@@ -438,6 +516,16 @@ class WebPicker {
       return;
     }
 
+    if (this.mode === "ui_pick_mode") {
+      const uiTarget = this.uiTargetFromElement(target);
+      if (!uiTarget) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this.selectUiTarget(uiTarget);
+      return;
+    }
+
     const pickTarget = this.pickTargetFromElement(target, event);
     if (pickTarget) {
       event.preventDefault();
@@ -448,11 +536,29 @@ class WebPicker {
   }
 
   private handlePointerDown(event: PointerEvent) {
+    if (this.isUiProcessing()) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (this.isPickerEvent(event)) return;
-    if (!this.pickerEnabled || (this.mode !== "pick_mode" && this.mode !== "chat_select_mode")) return;
+    if (!this.pickerEnabled || (this.mode !== "pick_mode" && this.mode !== "chat_select_mode" && this.mode !== "ui_pick_mode")) return;
 
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
+
+    if (this.mode === "ui_pick_mode") {
+      this.capturePointerStart = { x: event.clientX, y: event.clientY };
+      this.captureDragging = false;
+      // A drag starts from a clean selection surface instead of retaining the
+      // component hover frame until the pointer has moved several pixels.
+      this.clearUiFrame("hover");
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
 
     const shouldBlock =
       this.mode === "chat_select_mode"
@@ -465,7 +571,58 @@ class WebPicker {
     event.stopImmediatePropagation();
   }
 
+  private handleCapturePointerMove(event: PointerEvent) {
+    if (!this.updateCaptureDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }
+
+  private updateCaptureDrag(event: Pick<MouseEvent, "clientX" | "clientY">): boolean {
+    if (this.mode !== "ui_pick_mode" || !this.capturePointerStart) return false;
+    const dx = event.clientX - this.capturePointerStart.x;
+    const dy = event.clientY - this.capturePointerStart.y;
+    if (!this.captureDragging && Math.abs(dx) <= 4 && Math.abs(dy) <= 4) return false;
+    this.captureDragging = true;
+    this.uiSelectedElement = null;
+    this.captureBounds = this.normalizedCaptureBounds(this.capturePointerStart.x, this.capturePointerStart.y, event.clientX, event.clientY);
+    this.clearUiFrame("hover");
+    this.showUiFrame(this.captureBounds, "selected");
+    this.renderUiPickBar("selected");
+    return true;
+  }
+
+  private handlePointerUp(event: PointerEvent) {
+    if (this.mode !== "ui_pick_mode" || !this.capturePointerStart) return;
+    const started = this.capturePointerStart;
+    this.capturePointerStart = null;
+    if (!this.captureDragging) return;
+    this.captureDragging = false;
+    const bounds = this.normalizedCaptureBounds(started.x, started.y, event.clientX, event.clientY);
+    if (bounds.width < 24 || bounds.height < 24) return;
+    this.captureBounds = bounds;
+    this.uiSelectedElement = null;
+    this.captureSuppressClick = true;
+    this.showUiFrame(bounds, "selected");
+    this.renderUiPickBar("selected");
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }
+
   private handleKeydown(event: KeyboardEvent) {
+    if (this.isUiProcessing()) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (this.mode === "ui_pick_mode" && this.captureBounds && event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.saveUiSnapshot();
+      return;
+    }
     if (event.key !== "Escape" || this.mode === "idle") return;
     event.preventDefault();
     this.stopPickMode();
@@ -503,6 +660,10 @@ class WebPicker {
     this.hideHoverButton();
     this.hideChatHoverButton();
     this.clearHoverFrame();
+    if (this.mode === "ui_pick_mode") {
+      this.clearUiFrame("hover");
+      if (this.captureBounds) this.showUiFrame(this.captureBounds, "selected");
+    }
     this.chatCacheAt = 0;
     this.refreshStagedPickFrames();
     this.refreshMultiPickControls();
@@ -521,6 +682,14 @@ class WebPicker {
     return event.composedPath().includes(this.host);
   }
 
+  private isolatePickerTextInput(input: HTMLInputElement) {
+    // Keep delegated page handlers (for example AI chat shortcuts) from
+    // receiving keystrokes or edits made inside Picker's shadow UI.
+    for (const type of ["keydown", "keyup", "keypress", "input", "change"]) {
+      input.addEventListener(type, (event) => event.stopPropagation());
+    }
+  }
+
   private pickTargetFromElement(target: Element, event?: Pick<MouseEvent, "clientX" | "clientY">): HoverPickTarget | null {
     const image = target.closest("img") || this.linkedImageFromElement(target);
     if (image && this.isPickableImage(image)) return { kind: "image", element: image };
@@ -537,6 +706,143 @@ class WebPicker {
     if (audio && this.isPickableAudio(audio)) return { kind: "audio", element: audio };
 
     return null;
+  }
+
+  private uiTargetFromElement(target: Element): HTMLElement | null {
+    let candidate: HTMLElement | null = target instanceof HTMLElement ? target : target.parentElement;
+    while (candidate && candidate !== document.body) {
+      if (candidate === this.host || candidate.closest("sourcebook-picker-root")) return null;
+      const tag = candidate.tagName.toLowerCase();
+      const rect = candidate.getBoundingClientRect();
+      const display = window.getComputedStyle(candidate).display;
+      const isInline = display === "inline" || ["span", "strong", "em", "b", "i", "svg", "path", "use"].includes(tag);
+      if (!isInline && rect.width >= 48 && rect.height >= 32 && rect.bottom > 0 && rect.top < window.innerHeight && !["html", "body", "script", "style", "meta", "link"].includes(tag)) return candidate;
+      candidate = candidate.parentElement;
+    }
+    return null;
+  }
+
+  private showUiFrame(target: HTMLElement | { left: number; top: number; width: number; height: number }, state: "hover" | "selected") {
+    this.clearUiFrame(state);
+    const rect = target instanceof HTMLElement ? target.getBoundingClientRect() : target;
+    const frame = document.createElement("div");
+    frame.className = `ui-pick-frame ${state}`;
+    // The frame's geometry is the saved geometry. `outline` intentionally
+    // paints outwards, so the visual boundary touches the capture range
+    // without becoming part of it.
+    frame.style.top = `${rect.top}px`;
+    frame.style.left = `${rect.left}px`;
+    frame.style.width = `${Math.max(1, rect.width)}px`;
+    frame.style.height = `${Math.max(1, rect.height)}px`;
+    if (state === "selected" || !this.captureBounds) this.renderCaptureMask(rect);
+    if (state === "selected" && !this.captureControlsHidden) this.appendCaptureResizeHandles(frame);
+    this.overlayLayer.append(frame);
+  }
+
+  private clearUiFrame(state?: "hover" | "selected") {
+    const selector = state ? `.ui-pick-frame.${state}` : ".ui-pick-frame";
+    for (const frame of Array.from(this.overlayLayer.querySelectorAll(selector))) frame.remove();
+    if (!state) this.clearCaptureMask();
+  }
+
+  private selectUiTarget(element: HTMLElement) {
+    this.uiSelectedElement = element;
+    this.uiHoverElement = element;
+    this.captureBounds = this.captureBoundsFor(element.getBoundingClientRect());
+    this.clearUiFrame("hover");
+    this.showUiFrame(this.captureBounds, "selected");
+    this.renderUiPickBar("selected");
+  }
+
+  private captureBoundsFor(rect: DOMRect | { left: number; top: number; width: number; height: number }) {
+    return this.normalizedCaptureBounds(rect.left, rect.top, rect.left + rect.width, rect.top + rect.height);
+  }
+
+  private normalizedCaptureBounds(startX: number, startY: number, endX: number, endY: number) {
+    const left = Math.max(0, Math.min(startX, endX));
+    const top = Math.max(0, Math.min(startY, endY));
+    const right = Math.min(window.innerWidth, Math.max(startX, endX));
+    const bottom = Math.min(window.innerHeight, Math.max(startY, endY));
+    return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+  }
+
+  private appendCaptureResizeHandles(frame: HTMLDivElement) {
+    const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+    for (const handle of handles) {
+      const control = document.createElement("button");
+      control.type = "button";
+      control.className = `capture-resize-handle ${handle}`;
+      control.setAttribute("aria-label", `Resize capture ${handle}`);
+      control.addEventListener("pointerdown", (event) => this.startCaptureResize(event, handle));
+      frame.append(control);
+    }
+  }
+
+  private setCaptureControlsVisible(visible: boolean) {
+    this.captureControlsHidden = !visible;
+    if (this.captureBounds) this.showUiFrame(this.captureBounds, "selected");
+  }
+
+  private startCaptureResize(event: PointerEvent, handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w") {
+    const origin = this.captureBounds;
+    if (!origin) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const move = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      const minSize = 24;
+      let left = origin.left;
+      let top = origin.top;
+      let right = origin.left + origin.width;
+      let bottom = origin.top + origin.height;
+      if (handle.includes("w")) left = Math.max(0, Math.min(right - minSize, origin.left + dx));
+      if (handle.includes("e")) right = Math.min(window.innerWidth, Math.max(left + minSize, origin.left + origin.width + dx));
+      if (handle.includes("n")) top = Math.max(0, Math.min(bottom - minSize, origin.top + dy));
+      if (handle.includes("s")) bottom = Math.min(window.innerHeight, Math.max(top + minSize, origin.top + origin.height + dy));
+      this.captureBounds = { left, top, width: right - left, height: bottom - top };
+      this.showUiFrame(this.captureBounds, "selected");
+      this.renderUiPickBar("selected");
+    };
+    const end = (endEvent: PointerEvent) => {
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", end, true);
+      this.captureSuppressClick = true;
+      endEvent.preventDefault();
+      endEvent.stopPropagation();
+      endEvent.stopImmediatePropagation();
+    };
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", end, true);
+  }
+
+  private renderCaptureMask(bounds?: { left: number; top: number; width: number; height: number }) {
+    this.clearCaptureMask();
+    const target = bounds || this.captureBounds;
+    const regions = target
+      ? [
+          { top: 0, left: 0, width: window.innerWidth, height: Math.max(0, target.top) },
+          { top: target.top, left: 0, width: Math.max(0, target.left), height: target.height },
+          { top: target.top, left: target.left + target.width, width: Math.max(0, window.innerWidth - target.left - target.width), height: target.height },
+          { top: target.top + target.height, left: 0, width: window.innerWidth, height: Math.max(0, window.innerHeight - target.top - target.height) }
+        ]
+      : [{ top: 0, left: 0, width: window.innerWidth, height: window.innerHeight }];
+    for (const region of regions) {
+      if (region.width <= 0 || region.height <= 0) continue;
+      const mask = document.createElement("div");
+      mask.className = "capture-mask-segment";
+      mask.style.top = `${region.top}px`;
+      mask.style.left = `${region.left}px`;
+      mask.style.width = `${region.width}px`;
+      mask.style.height = `${region.height}px`;
+      this.overlayLayer.append(mask);
+    }
+  }
+
+  private clearCaptureMask() {
+    for (const mask of Array.from(this.overlayLayer.querySelectorAll(".capture-mask-segment"))) mask.remove();
   }
 
   private linkedImageFromElement(target: Element): HTMLImageElement | null {
@@ -863,10 +1169,13 @@ class WebPicker {
     const metadata = collectPageMetadata(document);
     const payload = this.basePayload("link", "whole_page", {
       contentUrl: location.href,
-      thumbnailUrl: metadata.ogImage,
-      thumbnailCandidates: metadata.ogImage ? [metadata.ogImage] : [],
       pageMetadata: metadata
     });
+    const captured = await this.captureScreenshot({ type: "CAPTURE_PAGE_PREVIEW" });
+    if (captured.status === "error") { this.showToast(captured); return captured; }
+    if (captured.status !== "captured") return { status: "error", message: text.unsupportedContent };
+    payload.thumbnailBase64 = captured.contentBase64;
+    payload.thumbnailMimeType = captured.contentMimeType;
 
     return this.savePick(payload);
   }
@@ -917,7 +1226,31 @@ class WebPicker {
     return { status: "ok" };
   }
 
+  private startUiPickMode(): PickerMessageResponse {
+    if (!this.pickerEnabled) return { status: "error", message: text.enablePicker };
+    this.mode = "ui_pick_mode";
+    this.uiHoverElement = null;
+    this.uiSelectedElement = null;
+    this.captureBounds = null;
+    this.capturePointerStart = null;
+    this.captureDragging = false;
+    this.captureControlsHidden = false;
+    this.multiSelectMode = false;
+    this.selectedChatMessages.clear();
+    this.clearMultiPickControls();
+    this.clearStagedPick();
+    this.clearHoverFrame();
+    this.clearUiFrame();
+    this.hideSelectionToolbar();
+    this.hideHoverButton();
+    this.hideChatHoverButton();
+    this.renderCaptureMask();
+    this.renderUiPickBar("picking");
+    return { status: "ok" };
+  }
+
   private stopPickMode(): PickerMessageResponse {
+    this.uiProcessingShield.hidden = true;
     this.mode = "idle";
     this.multiSelectMode = false;
     this.selectedChatMessages.clear();
@@ -930,7 +1263,172 @@ class WebPicker {
     this.hideChatHoverButton();
     this.hideSelectionToolbar();
     this.hideCameraFrame();
+    this.uiHoverElement = null;
+    this.uiSelectedElement = null;
+    this.captureBounds = null;
+    this.capturePointerStart = null;
+    this.captureDragging = false;
+    this.captureControlsHidden = false;
+    this.clearUiFrame();
     return { status: "ok" };
+  }
+
+  private renderUiPickBar(state: "picking" | "selected") {
+    this.uiProcessingShield.hidden = true;
+    this.multiPickBar.innerHTML = "";
+    this.multiPickBar.dataset.mode = "ui";
+    const title = document.createElement("span");
+    title.className = "mode-title";
+    title.textContent = state === "selected" ? text.uiSelected : text.pickUiMode;
+    const detail = document.createElement("span");
+    detail.className = "mode-detail";
+    detail.textContent = state === "selected" ? this.captureBoundsLabel() : text.pickUiTitle;
+    const actions = document.createElement("div");
+    actions.className = "bottom-bar-actions";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.dataset.variant = "primary";
+    save.textContent = state === "selected" ? text.capture : text.windowRange;
+    save.addEventListener("click", () => void (state === "selected" ? this.saveUiSnapshot() : this.captureCurrentWindow()));
+    actions.append(save, this.createBottomBarCloseButton(() => this.cancelPickMode()));
+    this.multiPickBar.append(title, detail, actions);
+    this.multiPickBar.hidden = false;
+  }
+
+  private createBottomBarCloseButton(onClick: () => void) {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "bottom-bar-close";
+    close.setAttribute("aria-label", text.cancel);
+    close.title = text.cancel;
+    close.append(this.captureActionIcon("close"));
+    close.addEventListener("click", onClick);
+    return close;
+  }
+
+  private captureActionIcon(kind: "close") {
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("viewBox", "0 0 20 20");
+    icon.setAttribute("fill", "none");
+    icon.setAttribute("stroke", "currentColor");
+    icon.setAttribute("stroke-width", "2");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "m4.5 4.5 11 11m0-11-11 11");
+    path.setAttribute("stroke-linecap", "round");
+    icon.append(path);
+    return icon;
+  }
+
+  private async captureCurrentWindow() {
+    // A complete viewport needs no crop. Reuse the page-preview capture so we
+    // do not decode and re-encode a full-resolution image merely to save all
+    // of its pixels again.
+    const payload = this.capturePayload({
+      contentUrl: `sourcebook://capture/${crypto.randomUUID()}.png`
+    });
+    const captured = await this.captureScreenshot({ type: "CAPTURE_PAGE_PREVIEW" }, { hideOverlay: true });
+    if (captured.status === "error") {
+      this.showToast(captured);
+      return;
+    }
+    if (captured.status !== "captured") return;
+
+    payload.contentBase64 = captured.contentBase64;
+    payload.contentMimeType = captured.contentMimeType;
+    this.beginCaptureSave();
+    const response = await this.savePick(payload);
+    if ("sourceItemId" in response) this.stopPickMode();
+    else this.restoreCaptureAfterSave("picking");
+  }
+
+  private captureBoundsLabel() {
+    if (!this.captureBounds) return text.pickUiTitle;
+    return `${Math.round(this.captureBounds.width)} × ${Math.round(this.captureBounds.height)} px`;
+  }
+
+  private async saveUiSnapshot(bounds = this.captureBounds): Promise<void> {
+    if (!bounds || bounds.width < 24 || bounds.height < 24) {
+      this.showToast({ status: "error", message: text.uiUnsupported });
+      return;
+    }
+    const payload = this.capturePayload();
+    const reference = this.captureReferenceFor(bounds);
+    this.setCaptureControlsVisible(false);
+    const captured = await this.captureScreenshot({ type: "CAPTURE_AREA", capture: reference });
+    if (captured.status === "error") {
+      this.setCaptureControlsVisible(true);
+      this.showToast(captured);
+      return;
+    }
+    if (captured.status !== "captured") {
+      this.setCaptureControlsVisible(true);
+      return;
+    }
+    payload.contentBase64 = captured.contentBase64;
+    payload.contentMimeType = captured.contentMimeType;
+    this.beginCaptureSave();
+    const response = await this.savePick(payload);
+    if ("sourceItemId" in response) this.stopPickMode();
+    else this.restoreCaptureAfterSave("selected");
+  }
+
+  private beginCaptureSave() {
+    // This only runs after Chrome has returned the frozen screenshot. It can
+    // block interaction and show save feedback without becoming part of it.
+    this.uiProcessingShield.hidden = false;
+    this.multiPickBar.hidden = true;
+  }
+
+  private restoreCaptureAfterSave(state: "picking" | "selected") {
+    this.uiProcessingShield.hidden = true;
+    this.setCaptureControlsVisible(true);
+    this.renderUiPickBar(state);
+  }
+
+  private async captureScreenshot(
+    message: Extract<PickerMessage, { type: "CAPTURE_AREA" | "CAPTURE_PAGE_PREVIEW" }>,
+    options: { hideOverlay?: boolean } = {}
+  ): Promise<PickerMessageResponse> {
+    // The action bar must never become pixels in the saved image. A full-window
+    // Capture also hides the selection mask: it is an interaction aid, not part
+    // of the source image.
+    const wasHidden = this.multiPickBar.hidden;
+    const wasOverlayHidden = this.overlayLayer.hidden;
+    this.multiPickBar.hidden = true;
+    if (options.hideOverlay) this.overlayLayer.hidden = true;
+    // One compositor turn is enough for the toolbar to disappear. The old
+    // two-frame delay plus an arbitrary timeout made every screenshot feel
+    // stalled before the actual capture had even started.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      return await browser.runtime.sendMessage(message) as PickerMessageResponse;
+    } catch (error) {
+      return { status: "error", message: error instanceof Error ? error.message : text.unsupportedContent };
+    } finally {
+      this.multiPickBar.hidden = wasHidden;
+      this.overlayLayer.hidden = wasOverlayHidden;
+    }
+  }
+
+  private isUiProcessing() { return false; }
+
+  private capturePayload(overrides: Partial<PickPayload> = {}): PickPayload {
+    const title = overrides.title || document.title || "Screenshot";
+    return this.basePayload("image", "image", {
+      title,
+      contentText: title,
+      contentUrl: `sourcebook://capture/${crypto.randomUUID()}.webp`,
+      pageMetadata: { ...collectPageMetadata(), description: title },
+      ...overrides
+    });
+  }
+
+  private captureReferenceFor(bounds: { left: number; top: number; width: number; height: number }): CaptureReference {
+    return {
+      bounds: { left: Math.round(bounds.left), top: Math.round(bounds.top), width: Math.round(bounds.width), height: Math.round(bounds.height) },
+      viewport: { width: Math.round(window.innerWidth), height: Math.round(window.innerHeight) }
+    };
   }
 
   private getPickerStatus(): PickerMessageResponse {
@@ -986,15 +1484,13 @@ class WebPicker {
     confirm.textContent = stagedCount === 1 ? text.confirmPick : text.confirmCount(stagedCount);
     confirm.addEventListener("click", () => void this.confirmStagedPick());
 
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.dataset.variant = "cancel";
-    cancel.textContent = text.cancel;
-    cancel.addEventListener("click", () => this.cancelPickMode());
+    const cancel = this.createBottomBarCloseButton(() => this.cancelPickMode());
 
     const actions = document.createElement("div");
     actions.className = "bottom-bar-actions";
-    actions.append(cancel, confirm);
+    // Keep the close affordance in one predictable place across every Pick
+    // bottom bar: the far right, after the action that confirms the pick.
+    actions.append(confirm, cancel);
 
     this.multiPickBar.append(title, hint, actions);
     this.multiPickBar.hidden = false;
@@ -1148,17 +1644,15 @@ class WebPicker {
     pickVisible.textContent = text.pickVisible;
     pickVisible.addEventListener("click", () => this.selectAllLoadedChatMessages());
 
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.dataset.variant = "cancel";
-    cancel.textContent = text.cancel;
-    cancel.addEventListener("click", () => this.cancelChatMultiPickAndOpenPopup());
+    const cancel = this.createBottomBarCloseButton(() => this.cancelChatMultiPickAndOpenPopup());
 
     this.multiPickBar.innerHTML = "";
     this.multiPickBar.dataset.mode = "chat";
     const actions = document.createElement("div");
     actions.className = "bottom-bar-actions";
-    actions.append(pickVisible, cancel, pickSelected);
+    // The close control is intentionally last so it remains the far-right
+    // control in both the desktop and condensed bottom-bar layouts.
+    actions.append(pickVisible, pickSelected, cancel);
 
     this.multiPickBar.append(title, context, actions);
     this.multiPickBar.hidden = false;
@@ -1411,10 +1905,16 @@ class WebPicker {
     spinner.className = "pick-task-spinner";
     spinner.setAttribute("aria-label", text.saving);
     const label = document.createElement("strong");
-    label.textContent = payload.modality === "image" ? text.downloading : text.saving;
+    label.textContent = payload.contentUrl?.startsWith("sourcebook://capture/")
+      ? text.saving
+      : payload.modality === "image"
+        ? text.downloading
+        : text.saving;
     element.append(spinner, label);
     this.taskStack.append(element);
-    return { element, payload };
+    const task = { element, payload };
+    this.pickTasks.add(task);
+    return task;
   }
 
   private setPickButtonContent(button: HTMLButtonElement, label: string) {
@@ -1493,26 +1993,162 @@ class WebPicker {
     const bookToggle = document.createElement("button");
     bookToggle.type = "button";
     bookToggle.className = "pick-task-book";
+    const bookLabel = document.createElement("span");
+    bookLabel.className = "pick-task-book-label";
+    bookLabel.textContent = text.saveToPrefix;
     const bookName = document.createElement("span");
+    bookName.className = "pick-task-book-name";
     bookName.textContent = currentBookName;
     const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     chevron.setAttribute("viewBox", "0 0 24 24");
     chevron.setAttribute("aria-hidden", "true");
     chevron.innerHTML = '<path d="m7 10 5 5 5-5" />';
-    bookToggle.append(bookName, chevron);
-    details.append(status, bookToggle);
+    bookToggle.append(bookLabel, bookName, chevron);
+    const noteAction = document.createElement("button");
+    noteAction.type = "button";
+    noteAction.className = "pick-task-note";
+    const noteLabel = document.createElement("span");
+    noteLabel.className = "pick-task-note-label";
+    const noteIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    noteIcon.setAttribute("viewBox", "0 0 24 24");
+    noteIcon.setAttribute("aria-hidden", "true");
+    const renderNoteAction = () => {
+      const hasNote = Boolean(task.note);
+      noteLabel.textContent = hasNote ? `${text.notePrefix}${task.note}` : text.addNote;
+      noteAction.setAttribute("aria-label", hasNote ? text.editNoteAria : text.addNoteAria);
+      noteIcon.innerHTML = hasNote
+        ? '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/>'
+        : '<path d="M12 5v14M5 12h14"/>';
+    };
+    noteAction.append(noteLabel, noteIcon);
+    renderNoteAction();
+    const actions = document.createElement("div");
+    actions.className = "pick-task-actions";
+    actions.append(bookToggle, noteAction);
+    details.append(status, actions);
 
     const chooser = this.createBookChooser(task, currentBookId, books, bookName, bookToggle);
     bookToggle.addEventListener("click", () => {
       const open = chooser.hidden;
+      if (open && task.noteEditor) this.closeTaskNoteEditor(task, status, noteAction, bookToggle, renderNoteAction);
       chooser.hidden = !open;
       task.element.classList.toggle("is-book-open", open);
       bookToggle.setAttribute("aria-expanded", String(open));
-      if (open) window.clearTimeout(task.dismissTimer);
-      else this.removeTaskLater(task);
+      if (open) this.pausePickTaskDismissals();
+      else this.resumePickTaskDismissals();
+    });
+    noteAction.addEventListener("click", () => {
+      if (task.noteEditor) {
+        this.closeTaskNoteEditor(task, status, noteAction, bookToggle, renderNoteAction);
+        return;
+      }
+      chooser.hidden = true;
+      task.element.classList.remove("is-book-open");
+      bookToggle.setAttribute("aria-expanded", "false");
+      this.renderTaskNoteEditor(task, status, noteAction, bookToggle, renderNoteAction);
     });
 
     task.element.replaceChildren(this.taskPreview(task.payload), details, chooser);
+  }
+
+  private renderTaskNoteEditor(
+    task: PickTask,
+    status: HTMLElement,
+    noteAction: HTMLButtonElement,
+    bookToggle: HTMLButtonElement,
+    renderNoteAction: () => void
+  ) {
+    if (!task.sourceItemId || task.noteEditor) return;
+    this.pausePickTaskDismissals();
+    task.element.classList.add("is-note-editing");
+    noteAction.disabled = true;
+    noteAction.setAttribute("aria-hidden", "true");
+    bookToggle.disabled = true;
+
+    const editor = document.createElement("div");
+    editor.className = "pick-task-note-editor";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = task.note || "";
+    input.placeholder = text.addNotePlaceholder;
+    input.maxLength = 240;
+    input.ariaLabel = text.addNoteAria;
+    this.isolatePickerTextInput(input);
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "pick-task-note-save";
+    save.setAttribute("aria-label", text.saveNoteAria);
+    save.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+    editor.append(input, save);
+    task.noteEditor = editor;
+
+    const finish = () => {
+      editor.remove();
+      task.noteEditor = undefined;
+      task.element.classList.remove("is-note-editing");
+      noteAction.disabled = false;
+      noteAction.removeAttribute("aria-hidden");
+      bookToggle.disabled = false;
+      status.textContent = text.saved;
+      renderNoteAction();
+      this.resumePickTaskDismissals();
+    };
+    const saveEdit = async () => {
+      if (!task.sourceItemId || save.disabled) return;
+      const note = input.value.trim();
+      save.disabled = true;
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: "UPDATE_SOURCE_NOTE",
+          sourceItemId: task.sourceItemId,
+          bookId: task.sourceBookId,
+          note
+        } satisfies PickerMessage) as PickerMessageResponse;
+        if (response.status === "error") {
+          status.textContent = response.message || text.noteSaveFailed;
+          save.disabled = false;
+          input.focus();
+          return;
+        }
+        task.note = note || undefined;
+        finish();
+      } catch {
+        status.textContent = text.noteSaveFailed;
+        save.disabled = false;
+        input.focus();
+      }
+    };
+
+    save.addEventListener("click", () => void saveEdit());
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void saveEdit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeTaskNoteEditor(task, status, noteAction, bookToggle, renderNoteAction);
+      }
+    });
+    task.element.append(editor);
+    input.focus();
+  }
+
+  private closeTaskNoteEditor(
+    task: PickTask,
+    status: HTMLElement,
+    noteAction: HTMLButtonElement,
+    bookToggle: HTMLButtonElement,
+    renderNoteAction: () => void
+  ) {
+    task.noteEditor?.remove();
+    task.noteEditor = undefined;
+    task.element.classList.remove("is-note-editing");
+    noteAction.disabled = false;
+    noteAction.removeAttribute("aria-hidden");
+    bookToggle.disabled = false;
+    status.textContent = text.saved;
+    renderNoteAction();
+    this.resumePickTaskDismissals();
   }
 
   private renderFailedTask(task: PickTask, message: string) {
@@ -1526,10 +2162,13 @@ class WebPicker {
     retry.textContent = text.retry;
     retry.addEventListener("click", () => {
       task.element.remove();
+      window.clearTimeout(task.dismissTimer);
+      this.pickTasks.delete(task);
       void this.savePick(task.payload);
     });
     task.element.replaceChildren(this.taskPreview(task.payload), details, retry);
-    this.removeTaskLater(task);
+    task.dismissalScheduled = true;
+    this.resumePickTaskDismissals();
   }
 
   private createBookChooser(
@@ -1558,7 +2197,9 @@ class WebPicker {
     form.className = "pick-task-new-book-form";
     form.hidden = true;
     const input = document.createElement("input");
+    input.type = "text";
     input.placeholder = text.newBookPlaceholder;
+    this.isolatePickerTextInput(input);
     const create = document.createElement("button");
     create.type = "submit";
     create.textContent = text.newBook;
@@ -1589,6 +2230,7 @@ class WebPicker {
     newButton.addEventListener("click", () => { form.hidden = false; input.focus(); });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      event.stopPropagation();
       if (!input.value.trim()) return;
       create.disabled = true;
       const created = await browser.runtime.sendMessage({ type: "CREATE_BOOK", name: input.value.trim() } satisfies PickerMessage) as PickerMessageResponse;
@@ -1603,7 +2245,7 @@ class WebPicker {
     });
     confirm.addEventListener("click", async () => {
       if (!task.sourceItemId || !task.sourceBookId || !selectedBookId) return;
-      if (selectedBookId === task.sourceBookId) { chooser.hidden = true; task.element.classList.remove("is-book-open"); this.removeTaskLater(task); return; }
+      if (selectedBookId === task.sourceBookId) { chooser.hidden = true; task.element.classList.remove("is-book-open"); this.resumePickTaskDismissals(); return; }
       confirm.disabled = true;
       const moved = await browser.runtime.sendMessage({ type: "MOVE_PICK_TO_BOOK", sourceItemId: task.sourceItemId, sourceBookId: task.sourceBookId, targetBookId: selectedBookId } satisfies PickerMessage) as PickerMessageResponse;
       if (moved.status === "moved") {
@@ -1613,7 +2255,7 @@ class WebPicker {
         chooser.hidden = true;
         task.element.classList.remove("is-book-open");
         bookToggle.setAttribute("aria-expanded", "false");
-        this.removeTaskLater(task);
+        this.resumePickTaskDismissals();
       } else if (moved.status === "error") this.renderFailedTask(task, moved.message || text.moveFailed);
       confirm.disabled = false;
     });
@@ -1621,10 +2263,15 @@ class WebPicker {
   }
 
   private taskPreview(payload: PickPayload): HTMLElement {
-    if ((payload.modality === "image" || payload.modality === "video" || payload.modality === "post") && (payload.thumbnailUrl || payload.contentUrl)) {
+    const inlinePreview = payload.thumbnailBase64
+      ? `data:${payload.thumbnailMimeType || "image/png"};base64,${payload.thumbnailBase64}`
+      : payload.contentBase64 && payload.modality === "image"
+        ? `data:${payload.contentMimeType || "image/png"};base64,${payload.contentBase64}`
+        : undefined;
+    if ((payload.modality === "image" || payload.modality === "video" || payload.modality === "post" || payload.modality === "link") && (inlinePreview || payload.thumbnailUrl || payload.contentUrl)) {
       const image = document.createElement("img");
       image.className = "pick-task-preview";
-      image.src = payload.thumbnailUrl || payload.contentUrl || "";
+      image.src = inlinePreview || payload.thumbnailUrl || payload.contentUrl || "";
       image.alt = "";
       image.addEventListener("error", () => image.replaceWith(this.taskPreviewFallback(payload)));
       return image;
@@ -1659,17 +2306,50 @@ class WebPicker {
       : { books: [], activeBookId: undefined };
   }
 
+  private hasOpenPickTaskPanel(): boolean {
+    return Array.from(this.pickTasks).some((task) =>
+      task.element.classList.contains("is-book-open") || Boolean(task.noteEditor)
+    );
+  }
+
+  private pausePickTaskDismissals() {
+    for (const task of this.pickTasks) {
+      if (task.dismissTimer !== undefined) window.clearTimeout(task.dismissTimer);
+      task.dismissTimer = undefined;
+    }
+  }
+
+  private resumePickTaskDismissals() {
+    if (this.hasOpenPickTaskPanel()) return;
+    for (const task of this.pickTasks) {
+      if (task.dismissalScheduled && task.element.isConnected) this.removeTaskLater(task);
+    }
+  }
+
   private removeTaskLater(task: PickTask) {
     const scheduleDismissal = () => {
-      if (task.element.classList.contains("is-book-open")) return;
-      window.clearTimeout(task.dismissTimer);
-      task.dismissTimer = window.setTimeout(() => task.element.remove(), 3_000);
+      if (task.dismissTimer !== undefined) window.clearTimeout(task.dismissTimer);
+      task.dismissTimer = undefined;
+      task.dismissalScheduled = true;
+      if (this.hasOpenPickTaskPanel() || task.pointerInside) return;
+      task.dismissTimer = window.setTimeout(() => {
+        task.element.remove();
+        task.dismissTimer = undefined;
+        this.pickTasks.delete(task);
+      }, 3_000);
     };
 
     if (!task.dismissalBound) {
       task.dismissalBound = true;
-      task.element.addEventListener("pointerenter", () => window.clearTimeout(task.dismissTimer));
-      task.element.addEventListener("pointerleave", scheduleDismissal);
+      task.element.addEventListener("pointerenter", () => {
+        task.pointerInside = true;
+        if (task.dismissTimer !== undefined) window.clearTimeout(task.dismissTimer);
+        task.dismissTimer = undefined;
+      });
+      task.element.addEventListener("pointerleave", () => {
+        task.pointerInside = false;
+        scheduleDismissal();
+      });
     }
 
     scheduleDismissal();
@@ -1734,6 +2414,7 @@ class WebPicker {
     const save = document.createElement("button");
     save.type = "button";
     save.textContent = text.save;
+    save.setAttribute("aria-label", text.saveNoteAria);
     save.addEventListener("click", () => void this.saveNote(input.value, toast));
 
     const cancel = document.createElement("button");
@@ -1753,6 +2434,7 @@ class WebPicker {
     const response = (await browser.runtime.sendMessage({
       type: "UPDATE_SOURCE_NOTE",
       sourceItemId: this.lastPick.sourceItemId,
+      bookId: this.lastPick.bookId,
       note
     } satisfies PickerMessage)) as PickerMessageResponse;
 
@@ -1858,9 +2540,20 @@ class WebPicker {
 
       .pick-button[hidden],
       .bottom-bar[hidden],
+      .overlay-layer[hidden],
       .toast[hidden],
-      .camera-frame[hidden] {
+      .camera-frame[hidden],
+      .ui-processing-shield[hidden] {
         display: none;
+      }
+
+      .ui-processing-shield {
+        background: rgba(12, 12, 11, 0.14);
+        cursor: progress;
+        inset: 0;
+        pointer-events: auto;
+        position: fixed;
+        z-index: 2147483646;
       }
 
       .camera-frame {
@@ -1941,6 +2634,50 @@ class WebPicker {
         background: rgba(23, 105, 255, 0.1);
       }
 
+      .ui-pick-frame {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-sizing: border-box;
+        outline: 2px solid #1769ff;
+        pointer-events: none;
+        position: fixed;
+        transition: background 110ms ease, border-color 110ms ease;
+      }
+
+      .ui-pick-frame.selected {
+        outline-width: 3px;
+      }
+
+      .capture-mask-segment {
+        background: rgba(12, 18, 28, 0.46);
+        pointer-events: none;
+        position: fixed;
+      }
+
+      .capture-resize-handle {
+        background: #ffffff;
+        border: 2px solid #1769ff;
+        border-radius: 999px;
+        box-sizing: border-box;
+        height: 12px;
+        padding: 0;
+        pointer-events: auto;
+        position: absolute;
+        width: 12px;
+      }
+
+      /* The centre of each handle sits on the outline. Half of the visual
+         control extends outward while the resize point remains exact. */
+      .capture-resize-handle.nw { cursor: nwse-resize; left: 0; top: 0; transform: translate(-50%, -50%); }
+      .capture-resize-handle.n { cursor: ns-resize; left: 50%; top: 0; transform: translate(-50%, -50%); }
+      .capture-resize-handle.ne { cursor: nesw-resize; left: 100%; top: 0; transform: translate(-50%, -50%); }
+      .capture-resize-handle.e { cursor: ew-resize; left: 100%; top: 50%; transform: translate(-50%, -50%); }
+      .capture-resize-handle.se { cursor: nwse-resize; left: 100%; top: 100%; transform: translate(-50%, -50%); }
+      .capture-resize-handle.s { cursor: ns-resize; left: 50%; top: 100%; transform: translate(-50%, -50%); }
+      .capture-resize-handle.sw { cursor: nesw-resize; left: 0; top: 100%; transform: translate(-50%, -50%); }
+      .capture-resize-handle.w { cursor: ew-resize; left: 0; top: 50%; transform: translate(-50%, -50%); }
+
       .chat-select-marker:hover,
       .chat-select-marker:focus-visible {
         background: #30302d;
@@ -1949,8 +2686,9 @@ class WebPicker {
 
       .bottom-bar {
         align-items: center;
-        background: #1c1c1b;
-        border: 1px solid rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(16px) saturate(112%);
+        background: rgba(28, 28, 27, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 10px;
         bottom: 18px;
         box-shadow: 0 18px 46px rgba(17, 17, 15, 0.26);
@@ -1967,6 +2705,44 @@ class WebPicker {
         position: fixed;
         transform: translateX(-50%);
         z-index: 2147483647;
+      }
+
+      .bottom-bar[data-mode="ui"] {
+        min-height: 42px;
+        padding: 6px 8px;
+      }
+
+      .bottom-bar button.bottom-bar-close {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        color: #f7f7f4;
+        display: inline-flex;
+        height: 28px;
+        justify-content: center;
+        padding: 0;
+        width: 28px;
+      }
+
+      .bottom-bar-actions .bottom-bar-close {
+        flex: 0 0 28px;
+        margin-left: 2px;
+      }
+
+      .bottom-bar button.bottom-bar-close:hover,
+      .bottom-bar button.bottom-bar-close:focus-visible {
+        background: transparent;
+        border-color: transparent;
+        color: #ffffff;
+        outline: none;
+        transform: none;
+      }
+
+      .bottom-bar button.bottom-bar-close svg {
+        display: block;
+        height: 18px;
+        width: 18px;
       }
 
       .bottom-bar .mode-title {
@@ -1992,6 +2768,26 @@ class WebPicker {
         flex: 0 0 auto;
         gap: 6px;
         margin-left: auto;
+      }
+
+      .ui-selected-actions {
+        align-items: end;
+        display: grid;
+        flex: 0 0 auto;
+        gap: 6px;
+        justify-items: end;
+        margin-left: auto;
+      }
+
+      .ui-selected-actions .bottom-bar-actions {
+        margin-left: 0;
+      }
+
+      .ui-hierarchy-guide {
+        color: #c9c9c3;
+        font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+        max-width: min(500px, calc(100vw - 80px));
+        text-align: right;
       }
 
       .bottom-bar button {
@@ -2029,6 +2825,18 @@ class WebPicker {
         cursor: not-allowed;
       }
 
+      .button-spinner {
+        animation: pickerSpin 720ms linear infinite;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        display: inline-block;
+        flex: 0 0 auto;
+        height: 12px;
+        margin-right: 7px;
+        width: 12px;
+      }
+
       .flash-rect {
         display: none;
       }
@@ -2059,6 +2867,28 @@ class WebPicker {
         min-height: 68px;
         padding: 12px;
         position: relative;
+      }
+
+      .pick-task.is-saved {
+        align-content: start;
+        grid-template-rows: auto;
+      }
+      .pick-task.is-saved.is-book-open,
+      .pick-task.is-saved.is-note-editing {
+        grid-template-rows: auto auto;
+      }
+      .pick-task.is-saved > .pick-task-preview,
+      .pick-task.is-saved > .pick-task-fallback {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .pick-task.is-saved > .pick-task-details {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .pick-task.is-saved > .pick-task-book-panel,
+      .pick-task.is-saved > .pick-task-note-editor {
+        grid-row: 2;
       }
 
       .pick-task.is-loading {
@@ -2121,20 +2951,104 @@ class WebPicker {
         font: 500 12px/1.2 ui-sans-serif, system-ui, sans-serif;
       }
 
+      .pick-task-actions {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        min-width: 0;
+      }
       .pick-task-book {
         align-items: center;
         background: transparent;
         border: 0;
         cursor: pointer;
         display: inline-flex;
-        gap: 3px;
+        flex: 1 1 auto;
+        gap: 4px;
+        min-width: 0;
         padding: 0;
         text-align: left;
-        width: max-content;
       }
-
+      .pick-task-book-label { flex: 0 0 auto; white-space: nowrap; }
+      .pick-task-book-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .pick-task-book:hover,
       .pick-task-book:focus-visible { color: #ffffff; outline: none; }
+      .pick-task-note {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 5px;
+        color: #c5c5be;
+        cursor: pointer;
+        display: flex;
+        font: 500 12px/1.25 ui-sans-serif, system-ui, sans-serif;
+        flex: 0 1 auto;
+        gap: 5px;
+        justify-self: start;
+        max-width: 48%;
+        min-width: 0;
+        padding: 1px 0;
+        text-align: left;
+      }
+      .pick-task-note[hidden] { display: none; }
+      .pick-task.is-note-editing .pick-task-note { visibility: hidden; }
+      .pick-task-note:hover,
+      .pick-task-note:focus-visible { color: #ffffff; outline: none; }
+      .pick-task-note-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pick-task-note svg {
+        fill: none;
+        flex: 0 0 13px;
+        height: 13px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+        width: 13px;
+      }
+      .pick-task-note-editor {
+        align-items: center;
+        display: flex;
+        gap: 6px;
+        grid-column: 2 / -1;
+        min-width: 0;
+      }
+      .pick-task-note-editor input {
+        background: #20201f;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 7px;
+        color: #fff;
+        flex: 1 1 auto;
+        font: 500 12px/1 ui-sans-serif, system-ui, sans-serif;
+        height: 31px;
+        min-width: 0;
+        outline: none;
+        padding: 0 8px;
+      }
+      .pick-task-note-editor input:focus { border-color: rgba(255, 255, 255, 0.62); }
+      .pick-task-note-editor .pick-task-note-save {
+        align-items: center;
+        background: #f8f8f4;
+        border: 0;
+        border-radius: 7px;
+        color: #171716;
+        cursor: pointer;
+        display: inline-flex;
+        height: 31px;
+        justify-content: center;
+        padding: 0;
+        width: 34px;
+      }
+      .pick-task-note-save svg {
+        fill: none;
+        height: 17px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2.3;
+        width: 17px;
+      }
+      .pick-task-note-editor button:disabled { cursor: wait; opacity: 0.6; }
+      .pick-task-book:disabled { cursor: default; opacity: 1; }
       .pick-task-book svg { fill: none; height: 12px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; transition: transform 160ms ease; width: 12px; }
       .pick-task.is-book-open .pick-task-book svg { transform: rotate(180deg); }
 
@@ -2283,6 +3197,19 @@ class WebPicker {
           width: 100%;
         }
 
+        .ui-selected-actions {
+          align-items: stretch;
+          flex: 1 1 100%;
+          justify-items: stretch;
+          margin-left: 0;
+          width: 100%;
+        }
+
+        .ui-hierarchy-guide {
+          max-width: none;
+          text-align: left;
+        }
+
         .bottom-bar-actions button {
           flex: 1 1 0;
         }
@@ -2300,6 +3227,7 @@ class WebPicker {
       }
 
       @keyframes pickerSpin { to { transform: rotate(360deg); } }
+
     `;
     return style;
   }

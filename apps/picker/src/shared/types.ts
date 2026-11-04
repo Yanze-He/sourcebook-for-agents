@@ -94,7 +94,16 @@ export type ConversationPick = {
   roleCounts: Record<ChatMessageRole, number>;
 };
 
-export type PickerMode = "idle" | "pick_mode" | "chat_select_mode";
+export type PickerMode = "idle" | "pick_mode" | "chat_select_mode" | "ui_pick_mode";
+
+/**
+ * Transient geometry used only while the Picker captures a region of a tab.
+ * It is never persisted with the Sourcebook material.
+ */
+export type CaptureReference = {
+  bounds: { left: number; top: number; width: number; height: number };
+  viewport: { width: number; height: number };
+};
 
 export type PickPayload = {
   /** Resolved by the background worker before a Pick is sent to Sourcebook Desktop. */
@@ -177,6 +186,9 @@ export type PickerMessage =
   | { type: "PICK_VISIBLE_CHAT" }
   | { type: "START_PICK_MODE" }
   | { type: "STOP_PICK_MODE" }
+  | { type: "START_UI_PICK_MODE" }
+  | { type: "CAPTURE_AREA"; capture: CaptureReference }
+  | { type: "CAPTURE_PAGE_PREVIEW" }
   | { type: "CONFIRM_PICK_MODE" }
   | { type: "GET_PICKER_STATUS" }
   | { type: "SET_PICKER_ENABLED"; enabled: boolean }
@@ -187,7 +199,7 @@ export type PickerMessage =
   | { type: "PICK_CONTEXT_LINK"; payload: PickPayload }
   | { type: "OPEN_SOURCES"; bookId?: string }
   | { type: "OPEN_PICKER_POPUP" }
-  | { type: "UPDATE_SOURCE_NOTE"; sourceItemId: string; note: string }
+  | { type: "UPDATE_SOURCE_NOTE"; sourceItemId: string; bookId?: string; note: string }
   | { type: "MOVE_PICK_TO_BOOK"; sourceItemId: string; sourceBookId: string; targetBookId: string }
   | { type: "CREATE_BOOK"; name: string }
   | { type: "SET_ACTIVE_BOOK"; bookId: string }
@@ -203,5 +215,6 @@ export type PickerMessageResponse =
   | { status: "unsupported" }
   | { status: "moved"; sourceItemId: string; bookId: string }
   | { status: "book_created"; book: PickerBook }
+  | { status: "captured"; contentBase64: string; contentMimeType: "image/png" | "image/webp" }
   | { status: "ok" }
   | { status: "error"; message: string };

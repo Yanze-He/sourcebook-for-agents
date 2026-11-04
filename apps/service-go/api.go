@@ -805,6 +805,11 @@ func savePick(ctx *BookContext, value map[string]any) (map[string]any, error) {
 		if modality == "post" && stringValue(value["thumbnailBase64"]) != "" {
 			shouldAddAsset = true
 		}
+		// Keep the visible page snapshot as a durable preview while preserving
+		// the URL itself as the link material.
+		if modality == "link" && stringValue(value["thumbnailBase64"]) != "" {
+			shouldAddAsset = true
+		}
 		if shouldAddAsset {
 			originalURL := firstString(contentURL, stringValue(value["thumbnailUrl"]))
 			if modality == "post" {
@@ -865,9 +870,9 @@ func addAsset(tx *sql.Tx, ctx *BookContext, resourceID, suffix, title string, va
 		_, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, bookMediaPath(ctx.Book.ID, assetID), "cached", fileName, "linked")
 		return err
 	}
-	mimeType := map[string]string{"image": "image/*", "audio": "audio/*", "video": "video/*", "post": "image/*"}[modality]
+	mimeType := map[string]string{"image": "image/*", "audio": "audio/*", "video": "video/*", "post": "image/*", "link": "image/*"}[modality]
 	var previewFileName, previewMimeType any
-	if (modality == "video" || modality == "post") && stringValue(value["thumbnailBase64"]) != "" {
+	if (modality == "video" || modality == "post" || modality == "link") && stringValue(value["thumbnailBase64"]) != "" {
 		bytes, err := base64.StdEncoding.DecodeString(stringValue(value["thumbnailBase64"]))
 		if err != nil || len(bytes) == 0 {
 			return errors.New("素材封面无效")
@@ -1062,9 +1067,9 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 			contentURL.Valid = true
 		}
 		if effectiveModality == "link" {
-			// Link cards stay text-first, but the detail view can still show the
-			// page's social preview image when the site provides one.
-			if preview := externalURL(metadata["ogImage"]); preview != "" {
+			if previewFileName.Valid && previewMimeType.Valid {
+				thumbnail = bookPreviewPath(ctx.Book.ID, itemID)
+			} else if preview := externalURL(metadata["ogImage"]); preview != "" {
 				thumbnail = preview
 			} else {
 				thumbnail = nil
@@ -1485,7 +1490,7 @@ func (server *Server) previewSource(response http.ResponseWriter, bookID, source
 	var modality, metadataJSON string
 	var previewFileName, previewMimeType, sourceURL sql.NullString
 	err = ctx.DB.QueryRow("SELECT picks.modality,picks.metadata_json,assets.preview_file_name,assets.preview_mime_type,sources.url FROM source_items JOIN picks ON picks.source_item_id=source_items.id JOIN sources ON sources.id=source_items.source_id LEFT JOIN assets ON assets.resource_id=source_items.resource_id WHERE source_items.id=?", sourceItemID).Scan(&modality, &metadataJSON, &previewFileName, &previewMimeType, &sourceURL)
-	if errors.Is(err, sql.ErrNoRows) || (modality != "video" && modality != "post") {
+	if errors.Is(err, sql.ErrNoRows) || (modality != "video" && modality != "post" && modality != "link") {
 		return &apiError{status: http.StatusNotFound, code: "PREVIEW_UNAVAILABLE", message: "素材封面不可用"}
 	}
 	if err != nil {

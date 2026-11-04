@@ -32,9 +32,23 @@ This directory contains the Sourcebook Picker Chrome/Chromium extension and its 
    npm run build
    ```
 
-4. Load the generated extension from `.output/chrome-mv3` in Chrome's extension page.
+4. In Chrome's extension page, choose **Load unpacked** once and select
+   `apps/picker/artifacts/unpacked`. This is the fixed local test folder.
+   Every subsequent `npm run build` replaces its contents in place, so the
+   extension can be updated with Chrome's **Reload** button instead of loading
+   a new folder each time.
 
-5. For Desktop development, open the connected Sourcebook and choose a Book:
+5. Create a versioned local-test ZIP only when one needs to be handed off:
+
+   ```bash
+   npm run package:local -- build.005
+   ```
+
+   The ZIP is saved under `artifacts/local-test/` using the existing
+   `sourcebook-picker-v<version>-build.NNN.zip` convention. It never replaces
+   an earlier candidate.
+
+6. For Desktop development, open the connected Sourcebook and choose a Book:
 
    ```text
    http://127.0.0.1:4177/

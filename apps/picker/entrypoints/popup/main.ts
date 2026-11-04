@@ -31,6 +31,7 @@ const settingsPositionLabel = document.querySelector<HTMLElement>("#settings-pos
 const settingsPositionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-picker-position]"));
 const pickPage = document.querySelector<HTMLButtonElement>("#pick-page");
 const startPicking = document.querySelector<HTMLButtonElement>("#start-picking");
+const pickUi = document.querySelector<HTMLButtonElement>("#pick-ui");
 const selectChatMessages = document.querySelector<HTMLButtonElement>("#select-chat-messages");
 const recentPicks = document.querySelector<HTMLDivElement>("#recent-picks");
 const bookControl = document.querySelector<HTMLElement>("#book-control");
@@ -74,10 +75,12 @@ const copy = {
     startContinuousPick: "Pick 媒体",
     done: "完成",
     pickPage: "Pick 网页",
+    pickUi: "截取",
     pickPost: "Pick 帖子",
     selectMessages: "Pick 对话",
     cancel: "取消",
     pickPageTip: "保存当前网页的标题、URL、来源信息和描述摘要。",
+    pickUiTip: "点击组件或拖拽选择区域，将网页保存为截图。",
     pickPostTip: "保存当前帖子的正文、作者、发布时间和媒体信息。",
     pickMediaTip: "连续选择图片、视频、链接等媒体资源，确认后保存。",
     pickChatTip: "选择多条 Agent 对话，合并保存为一个上下文片段。",
@@ -106,6 +109,7 @@ const copy = {
     disabled: "Picker 已关闭",
     settingFailed: "Picker 设置更新失败，请重试",
     pickingOn: "Picker 已进入媒体选择模式",
+    uiPickingOn: "Picker 已进入截取模式",
     exited: "Picker 已退出选择模式",
     chatUnavailable: "Picker 未识别出当前页面的对话",
     currentPageCannotInject: "当前页面无法注入 Picker。",
@@ -147,10 +151,12 @@ const copy = {
     startContinuousPick: "Pick media",
     done: "Done",
     pickPage: "Pick page",
+    pickUi: "Capture",
     pickPost: "Pick post",
     selectMessages: "Pick chat",
     cancel: "Cancel",
     pickPageTip: "Save this page title, URL, source information, and summary.",
+    pickUiTip: "Click a component or drag to select an area, then save it as an image.",
     pickPostTip: "Save the current post text, author, date, and media details.",
     pickMediaTip: "Select images, videos, and links in sequence, then confirm to save.",
     pickChatTip: "Select multiple agent messages and save them as one context fragment.",
@@ -179,6 +185,7 @@ const copy = {
     disabled: "Picker is off",
     settingFailed: "Picker settings could not be updated. Try again.",
     pickingOn: "Picker is ready to select media",
+    uiPickingOn: "Picker is ready to capture an area",
     exited: "Picker exited selection mode",
     chatUnavailable: "Picker could not detect chat messages on this page",
     currentPageCannotInject: "Picker cannot run on this page.",
@@ -222,6 +229,10 @@ pickPage?.addEventListener("click", () => {
 startPicking?.addEventListener("click", () => {
   if (showBlockedReason(startPicking)) return;
   void toggleMediaPickMode();
+});
+pickUi?.addEventListener("click", () => {
+  if (showBlockedReason(pickUi)) return;
+  void sendToActiveTab({ type: "START_UI_PICK_MODE" }, text.uiPickingOn);
 });
 selectChatMessages?.addEventListener("click", () => {
   if (showBlockedReason(selectChatMessages)) return;
@@ -274,7 +285,7 @@ async function sendToActiveTab(message: PickerMessage, successLabel: string) {
     }
     setStatus(successLabel);
     void refreshPickerStatus();
-    if (message.type === "START_PICK_MODE" || message.type === "START_CHAT_MULTI_PICK") window.close();
+    if (message.type === "START_PICK_MODE" || message.type === "START_CHAT_MULTI_PICK" || message.type === "START_UI_PICK_MODE") window.close();
   } catch {
     setStatus(text.currentPageUnavailable);
   }
@@ -291,6 +302,7 @@ async function setPickerEnabled(enabled: boolean) {
         setActionLabel(startPicking, text.startContinuousPick);
         startPicking.dataset.active = "false";
       }
+      setButtonState(pickUi, false, text.enableOverlayReason, text.pickUiTip);
       if (selectChatMessages) {
         setActionLabel(selectChatMessages, text.selectMessages);
         selectChatMessages.dataset.active = "false";
@@ -374,6 +386,7 @@ function applyStaticText() {
   if (bookLabel) bookLabel.textContent = text.defaultSaveTo;
   updatePickerToggle();
   if (startPicking) setActionLabel(startPicking, text.startContinuousPick);
+  if (pickUi) setActionLabel(pickUi, text.pickUi);
   if (pickPage) setActionLabel(pickPage, text.pickPage);
   if (selectChatMessages) setActionLabel(selectChatMessages, text.selectMessages);
   const recentTitle = document.querySelector<HTMLElement>(".recent-panel .panel-title strong");
@@ -421,6 +434,11 @@ function applyPickerStatus(response: PickerStatusResponse) {
     startPicking.dataset.active = String(response.mode === "pick_mode");
   }
 
+  if (pickUi) {
+    setActionLabel(pickUi, text.pickUi);
+    pickUi.dataset.active = String(response.mode === "ui_pick_mode");
+  }
+
   if (selectChatMessages) {
     setActionLabel(selectChatMessages, response.mode === "chat_select_mode" ? text.cancel : text.selectMessages);
     selectChatMessages.dataset.active = String(response.mode === "chat_select_mode");
@@ -433,6 +451,7 @@ function applyPickerStatus(response: PickerStatusResponse) {
   if (pickPage) setActionLabel(pickPage, pageActionLabel);
   setButtonState(pickPage, pageActionEnabled, pageDisabledReason, pageActionTip);
   setButtonState(startPicking, pageActionEnabled, pageDisabledReason, text.mediaSupportHelp);
+  setButtonState(pickUi, pageActionEnabled || response.mode === "ui_pick_mode", pageDisabledReason, text.pickUiTip);
 
   const chatEnabled = Boolean(pageActionEnabled && response.chatProvider);
   const chatReason = disabledReasonForChatAction(response, pageDisabledReason);
@@ -444,8 +463,8 @@ function applyPickerStatus(response: PickerStatusResponse) {
 
 function connectionStrings() {
   return locale === "zh"
-    ? { title: "请选择 Picker 的连接对象", body: "选择你正在使用的 Sourcebook。", obsidian: "方式1: 连接 Obsidian", obsidianHint: "融入知识管理软件生态", desktop: "方式2: 连接 Desktop App", desktopHint: "和本地Agent的最佳协作方式", code: "配对码", pair: "连接", obsidianFailed: "连接失败，请检查配对码后重试。", desktopFailed: "连接失败，请先启动本地应用。", retry: "连接", download: "去下载", switchTarget: "切换连接对象", codeRequired: "请输入 Obsidian 配对码。", pairing: "正在连接 Obsidian…" }
-    : { title: "Choose a Picker connection", body: "Select the Sourcebook you are using.", obsidian: "Method 1: Connect Obsidian", obsidianHint: "Fit into your knowledge-management ecosystem", desktop: "Method 2: Connect Desktop App", desktopHint: "The best way to collaborate with local agents", code: "Pairing code", pair: "Connect", obsidianFailed: "Connection failed. Check the pairing code and retry.", desktopFailed: "Connection failed. Start the local app, then retry.", retry: "Connect", download: "Get App", switchTarget: "Switch connection target", codeRequired: "Enter the Obsidian pairing code.", pairing: "Connecting to Obsidian…" };
+    ? { title: "请选择 Picker 的连接对象", body: "选择你正在使用的 Sourcebook。", obsidian: "方式1: 连接 Obsidian", obsidianHint: "融入知识管理软件生态 · 在社区插件市场搜索 Sourcebook 安装", desktop: "方式2: 连接 Desktop App", desktopHint: "和本地Agent的最佳协作方式", code: "配对码", pair: "连接", obsidianFailed: "连接失败，请检查配对码后重试。", desktopFailed: "连接失败，请先启动本地应用。", retry: "连接", download: "去下载", switchTarget: "切换连接对象", codeRequired: "请输入 Obsidian 配对码。", pairing: "正在连接 Obsidian…" }
+    : { title: "Choose a Picker connection", body: "Select the Sourcebook you are using.", obsidian: "Method 1: Connect Obsidian", obsidianHint: "For your knowledge-management workflow · Install from Community plugins by searching Sourcebook", desktop: "Method 2: Connect Desktop App", desktopHint: "The best way to collaborate with local agents", code: "Pairing code", pair: "Connect", obsidianFailed: "Connection failed. Check the pairing code and retry.", desktopFailed: "Connection failed. Start the local app, then retry.", retry: "Connect", download: "Get App", switchTarget: "Switch connection target", codeRequired: "Enter the Obsidian pairing code.", pairing: "Connecting to Obsidian…" };
 }
 
 function renderConnectionGate() {
@@ -593,6 +612,7 @@ function labelForMode(mode: PickerMode, pageAvailable: boolean): string {
   if (!pageAvailable) return text.currentPageUnavailable;
   if (mode === "pick_mode") return text.modePicking;
   if (mode === "chat_select_mode") return text.modeChatSelecting;
+  if (mode === "ui_pick_mode") return text.uiPickingOn;
   return text.modeReady;
 }
 

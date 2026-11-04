@@ -1218,13 +1218,14 @@ function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOp
   const language = useLanguage(); const copy = interfaceCopy[language];
   const excerpt = descriptionFor(item);
   const isWebLink = item.modality === "link" && item.pickType !== "local_import";
+  const hasPageSnapshot = isWebLink && Boolean(item.thumbnailUrl?.startsWith("/api/books/"));
   const isPost = item.modality === "post";
   const post = isPost ? item.metadata.post : undefined;
   const isWebVideo = isWebVideoReference(item);
   const isFileCard = item.modality === "file" || item.modality === "link" && item.pickType === "local_import";
   const usesCardSourceMark = isFileCard || item.modality === "audio" || isWebLink || isPost;
   const hasTextArtwork = item.modality === "text" || item.modality === "conversation";
-  const hasVisual = !usesCardSourceMark && (["image", "video", "conversation"].includes(item.modality) || hasTextArtwork);
+  const hasVisual = hasPageSnapshot || !usesCardSourceMark && (["image", "video", "conversation"].includes(item.modality) || hasTextArtwork);
   const isPlayable = (item.modality === "video" || item.modality === "audio") && !isWebVideo;
   const previewable = item.modality === "image" || isPlayable;
   const openableLocalFile = localFileState(item) === "cached";
@@ -1258,7 +1259,7 @@ function SourceThumbnail({ item, compact = false }: { item: SourceItem; compact?
   const [imagePreviewFailed, setImagePreviewFailed] = useState(false);
   const [imageRetryCount, setImageRetryCount] = useState(0);
   const imageRetryTimerRef = useRef<number | null>(null);
-  const useImagePreview = !isWebLink && hasRenderableThumbnail(item) && !useVideoFrame && Boolean(imagePreviewSrc) && !imagePreviewFailed;
+  const useImagePreview = (!isWebLink || imagePreviewSrc?.startsWith("/api/books/")) && hasRenderableThumbnail(item) && !useVideoFrame && Boolean(imagePreviewSrc) && !imagePreviewFailed;
   const [videoFrameReady, setVideoFrameReady] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<string | undefined>();
   useEffect(() => { setVideoFrameReady(false); }, [item.id, item.thumbnailUrl, useVideoFrame]);
