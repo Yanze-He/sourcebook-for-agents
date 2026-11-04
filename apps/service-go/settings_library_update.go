@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ var appBuild = ""
 
 type releaseInfo struct {
 	Version     string `json:"version"`
+	Revision    string `json:"revision,omitempty"`
 	Name        string `json:"name"`
 	Notes       string `json:"notes"`
 	URL         string `json:"url"`
@@ -186,8 +188,7 @@ func clearInstalledRelease(settings desktopSettings) (desktopSettings, bool) {
 	if settings.AvailableRelease == nil {
 		return settings, false
 	}
-	version := settings.AvailableRelease.Version
-	if !isSemanticVersion(version) || compareVersions(version, appVersion) <= 0 {
+	if !updateIsNewer(*settings.AvailableRelease) {
 		settings.AvailableRelease = nil
 		return settings, true
 	}
@@ -207,7 +208,7 @@ func (server *Server) checkForUpdates(settings desktopSettings) desktopSettings 
 		settings.UpdateError = "无法检查更新：" + err.Error()
 		return settings
 	}
-	if compareVersions(latest.Version, appVersion) > 0 {
+	if updateIsNewer(latest) {
 		settings.AvailableRelease = &latest
 	} else {
 		settings.AvailableRelease = nil
@@ -227,6 +228,70 @@ func updateSettingsPayload(settings desktopSettings) map[string]any {
 	return map[string]any{"version": appVersion, "build": appBuild, "autoCheck": automaticUpdateChecks(settings), "lastCheckedAt": settings.LastUpdateCheck, "release": settings.AvailableRelease, "status": status, "error": settings.UpdateError}
 }
 
+type githubRelease struct {
+	Draft       bool          `json:"draft"`
+	TagName     string        `json:"tag_name"`
+	Name        string        `json:"name"`
+	Body        string        `json:"body"`
+	HTMLURL     string        `json:"html_url"`
+	PublishedAt string        `json:"published_at"`
+	Assets      []githubAsset `json:"assets"`
+}
+
+type githubAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
+}
+
+func updatePlatform() string {
+	if runtime.GOOS == "darwin" {
+		return "macos"
+	}
+	return runtime.GOOS
+}
+
+func updateIsNewer(release releaseInfo) bool {
+	if !isSemanticVersion(release.Version) {
+		return false
+	}
+	comparison := compareVersions(release.Version, appVersion)
+	if comparison != 0 {
+		return comparison > 0
+	}
+	// A same-version replacement is shown only when both builds use the
+	// platform-specific revision scheme. Legacy builds remain version-only.
+	platform := updatePlatform()
+	if !strings.HasPrefix(release.Revision, platformBuildPrefix(platform)) || !strings.HasPrefix(appBuild, platformBuildPrefix(platform)) {
+		return false
+	}
+	return comparePlatformRevisions(release.Revision, appBuild) > 0
+}
+
+func platformBuildPrefix(platform string) string {
+	if platform == "macos" {
+		return "mac."
+	}
+	if platform == "windows" {
+		return "win."
+	}
+	return ""
+}
+
+func comparePlatformRevisions(a, b string) int {
+	left, leftError := strconv.Atoi(strings.TrimPrefix(a, platformBuildPrefix(updatePlatform())))
+	right, rightError := strconv.Atoi(strings.TrimPrefix(b, platformBuildPrefix(updatePlatform())))
+	if leftError != nil || rightError != nil {
+		return 0
+	}
+	if left < right {
+		return -1
+	}
+	if left > right {
+		return 1
+	}
+	return 0
+}
+
 func fetchLatestRelease() (releaseInfo, error) {
 	request, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos/"+updateRepository+"/releases?per_page=100", nil)
 	if err != nil {
@@ -242,30 +307,106 @@ func fetchLatestRelease() (releaseInfo, error) {
 	if response.StatusCode != http.StatusOK {
 		return releaseInfo{}, errors.New("GitHub returned " + response.Status)
 	}
-	var releases []struct {
-		Draft       bool   `json:"draft"`
-		TagName     string `json:"tag_name"`
-		Name        string `json:"name"`
-		Body        string `json:"body"`
-		HTMLURL     string `json:"html_url"`
-		PublishedAt string `json:"published_at"`
-	}
+	var releases []githubRelease
 	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
 		return releaseInfo{}, err
 	}
-	options := []releaseInfo{}
+	options := []struct {
+		info        releaseInfo
+		manifestURL string
+	}{}
+	platform := updatePlatform()
 	for _, release := range releases {
 		version := strings.TrimPrefix(strings.TrimSpace(release.TagName), "v")
 		if release.Draft || !isSemanticVersion(version) {
 			continue
 		}
-		options = append(options, releaseInfo{Version: version, Name: firstString(release.Name, "v"+version), Notes: strings.TrimSpace(release.Body), URL: release.HTMLURL, PublishedAt: release.PublishedAt})
+		hasInstaller, manifestURL := releaseAssetsForPlatform(release.Assets, version, platform)
+		if hasInstaller {
+			options = append(options, struct {
+				info        releaseInfo
+				manifestURL string
+			}{releaseInfo{Version: version, Name: firstString(release.Name, "v"+version), Notes: strings.TrimSpace(release.Body), URL: release.HTMLURL, PublishedAt: release.PublishedAt}, manifestURL})
+		}
 	}
 	if len(options) == 0 {
 		return releaseInfo{}, errors.New("没有可用的正式或预发布版本")
 	}
-	sort.Slice(options, func(i, j int) bool { return compareVersions(options[i].Version, options[j].Version) > 0 })
-	return options[0], nil
+	sort.Slice(options, func(i, j int) bool { return compareVersions(options[i].info.Version, options[j].info.Version) > 0 })
+	latest := options[0]
+	if latest.manifestURL == "" && compareVersions(latest.info.Version, "0.1.4") >= 0 {
+		return releaseInfo{}, errors.New("release manifest is missing")
+	}
+	if latest.manifestURL != "" {
+		manifest, err := fetchReleaseManifest(latest.manifestURL)
+		if err != nil {
+			return releaseInfo{}, err
+		}
+		if manifest.Version != latest.info.Version {
+			return releaseInfo{}, errors.New("release manifest version does not match the release")
+		}
+		platformRelease, present := manifest.Platforms[platform]
+		if !present || !strings.HasPrefix(platformRelease.Revision, platformBuildPrefix(platform)) || platformRelease.Asset != releaseInstallerName(latest.info.Version, platform) {
+			return releaseInfo{}, errors.New("release manifest has no revision for this platform")
+		}
+		latest.info.Revision = platformRelease.Revision
+	}
+	return latest.info, nil
+}
+
+func releaseAssetsForPlatform(assets []githubAsset, version, platform string) (bool, string) {
+	if platform != "macos" && platform != "windows" {
+		return false, ""
+	}
+	installerName := releaseInstallerName(version, platform)
+	hasInstaller, manifestURL := false, ""
+	for _, asset := range assets {
+		if asset.Name == installerName {
+			hasInstaller = true
+		}
+		if asset.Name == "sourcebook-release-manifest.json" {
+			manifestURL = asset.URL
+		}
+	}
+	return hasInstaller, manifestURL
+}
+
+func releaseInstallerName(version, platform string) string {
+	extension := ".dmg"
+	if platform == "windows" {
+		extension = ".exe"
+	}
+	return "sourcebook-desktop-installer-v" + version + extension
+}
+
+type releaseManifest struct {
+	Version   string `json:"version"`
+	Platforms map[string]struct {
+		Revision string `json:"revision"`
+		Asset    string `json:"asset"`
+		SHA256   string `json:"sha256"`
+	} `json:"platforms"`
+}
+
+func fetchReleaseManifest(url string) (releaseManifest, error) {
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	request.Header.Set("User-Agent", "Sourcebook-for-Agents/"+appVersion)
+	response, err := (&http.Client{Timeout: 8 * time.Second}).Do(request)
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return releaseManifest{}, errors.New("GitHub returned " + response.Status)
+	}
+	var manifest releaseManifest
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&manifest); err != nil {
+		return releaseManifest{}, err
+	}
+	return manifest, nil
 }
 
 func isSemanticVersion(version string) bool {

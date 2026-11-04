@@ -114,6 +114,34 @@ func TestInstalledReleaseClearsSavedUpdateNotice(t *testing.T) {
 	}
 }
 
+func TestPlatformReleaseAssetsExcludeOtherInstaller(t *testing.T) {
+	assets := []githubAsset{
+		{Name: "sourcebook-desktop-installer-v0.1.4.dmg"},
+		{Name: "sourcebook-release-manifest.json", URL: "https://example.com/manifest"},
+	}
+	if found, manifest := releaseAssetsForPlatform(assets, "0.1.4", "macos"); !found || manifest == "" {
+		t.Fatal("macOS should find its installer and manifest")
+	}
+	if found, _ := releaseAssetsForPlatform(assets, "0.1.4", "windows"); found {
+		t.Fatal("a macOS-only release must not appear as a Windows update")
+	}
+}
+
+func TestSameVersionUpdateRequiresNewerPlatformRevision(t *testing.T) {
+	originalVersion, originalBuild := appVersion, appBuild
+	appVersion, appBuild = "0.1.4", "mac.080"
+	t.Cleanup(func() { appVersion, appBuild = originalVersion, originalBuild })
+	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "mac.080"}) {
+		t.Fatal("the installed candidate must not be offered again")
+	}
+	if !updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "mac.081"}) {
+		t.Fatal("a newer platform revision should be offered")
+	}
+	if updateIsNewer(releaseInfo{Version: "0.1.4", Revision: "win.081"}) {
+		t.Fatal("a revision for another platform must be ignored")
+	}
+}
+
 func TestUpdateSettingsIncludesBuildLabelWithoutChangingVersion(t *testing.T) {
 	originalVersion, originalBuild := appVersion, appBuild
 	appVersion, appBuild = "0.1.1-beta.4", "build.003"

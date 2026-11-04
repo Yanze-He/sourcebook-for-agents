@@ -10,14 +10,14 @@ Cloud sync, accounts, billing, and team workflows are not release dependencies f
 
 ## What CI produces
 
-The release workflow builds artifacts for inspection:
+The release workflow builds selected artifacts for inspection:
 
 - A Chromium extension ZIP.
 - A macOS Desktop DMG.
 - A Windows Desktop installer.
 - Workflow artifacts for the extension, macOS Desktop, and Windows Desktop.
 
-Pushing a `v*` tag, or running the workflow manually, never signs, notarizes, or publishes a GitHub Release. CI has read-only repository permissions and no signing credentials.
+Run the workflow manually with a target version, platform, and `mac.NNN` or `win.NNN` candidate label. Only that platform is built. Picker is built only when its own code or manifest changed. CI never signs, notarizes, or publishes a GitHub Release; it has read-only repository permissions and no signing credentials.
 
 ## Local macOS signing and notarization
 
@@ -39,27 +39,29 @@ Only a maintainer-controlled Mac signs and notarizes macOS releases. Keep the De
 
 ### Create a macOS release
 
-Run from a clean checkout at an exact version tag:
+After the local macOS candidate has been installed and accepted, run from its clean, exact source commit. The candidate metadata and unsigned app archive are produced by `scripts/prepare-candidate-artifact.mjs` from the locally built installer and app. The signing command verifies their checksums, version, build label, commit, and source tree before using the accepted app:
 
 ```bash
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAM_ID)"
 export SOURCEBOOK_NOTARY_PROFILE="sourcebook-notary"
+export SOURCEBOOK_BUILD="mac.NNN"
+export SOURCEBOOK_CANDIDATE_METADATA="/path/to/candidate/build-info.json"
 npm run release:macos:local
 ```
 
-The command builds the platform-native Go service and application, applies a Developer ID signature with Hardened Runtime and timestamping, creates the DMG, submits it to Apple notarization, staples the resulting ticket, validates the result, and writes `release/macos/SHA256SUMS.txt`.
+The command signs the accepted app with Hardened Runtime and timestamping, creates the DMG, submits it to Apple notarization, staples the resulting ticket, validates the result, and writes `release/macos/SHA256SUMS.txt` and `release/macos/sourcebook-release-manifest.json`. The manifest records the platform revision used by the updater.
 
-Create or edit the matching GitHub Release manually, then upload the notarized `sourcebook-desktop-installer-v<version>.dmg`, its `SHA256SUMS.txt`, and any separately verified versioned Picker or Windows artifacts.
+Prepare the matching GitHub Release as a draft with the notarized `sourcebook-desktop-installer-v<version>.dmg`, checksums, manifest, and any separately verified Picker or Windows artifacts. Publishing requires a separate final confirmation. A platform-only release must state which platform has an installer.
 
 ## Release checklist
 
 1. Confirm `main` is green in CI.
-2. Test the extension and Desktop on clean macOS and Windows machines. For each Desktop installer, also test an upgrade over the prior release: open the app, click **Install Picker**, and confirm the browser opens the Chrome Web Store installation page.
+2. Test every platform included in this release, including an upgrade over the prior release. Keep each accepted candidate's source commit, tree, and checksum in the private release registry.
 3. Update `CHANGELOG.md` with user-visible changes and known limitations.
 4. Choose a version tag such as `v0.1.0-beta.3`.
-5. Create and push a protected version tag such as `v0.1.0-beta.3`. The release workflow uses this tag as the Desktop and installer version.
-6. Let CI build and test its artifacts, then create the signed and notarized macOS artifact locally from that exact tag.
-7. Verify checksums, downloads, first launch, local storage location, and extension-to-Desktop connection before manually publishing a GitHub Release. Settings reads published, non-draft Releases, so include clear release notes and the matching Desktop installer before publishing.
+5. Build the macOS candidate locally and hand it to the user. If Windows is included, dispatch the Windows-only CI candidate from the same accepted source tree and hand it to the user separately.
+6. After acceptance, sign and notarize the exact accepted macOS app. Prepare a draft GitHub Release with only verified platform assets and a release manifest.
+7. Get final publication confirmation, then publish and verify the tag, checksums, downloads, first launch, and update detection. Settings reads published, non-draft Releases and considers only installers for the current platform.
 
 ## Installation notes
 

@@ -2,7 +2,7 @@
 
 All notable user-facing changes are documented here.
 
-## Unreleased
+## 0.1.4 — 2026-11-04
 
 - Limit **Copy links** to selected materials that are available only as links. Materials with a transferable local file stay in **Copy files**, even when they also retain their original web address; the file-copy confirmation stays focused on the copied files and paste destination.
 - Add keyboard selection rules: `Ctrl/⌘ + A` selects all currently visible sources and enters selection mode when no popover or dialog is open; `Esc` closes an open surface, or exits selection mode when none is open.
@@ -120,5 +120,5 @@ Known limitations:
 ## Release policy
 
 - Public releases use semantic version tags such as `v0.1.0-beta.1`.
-- A release includes a Chromium extension ZIP, macOS DMG, Windows installer, checksums, and release notes.
+- A release includes verified installers only for its stated platforms, checksums, a platform revision manifest, and release notes. The Picker ZIP is included only when that component changes.
 - Breaking changes to local storage or Pack format require migration and recovery notes.

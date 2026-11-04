@@ -1,17 +1,21 @@
 name: Build release artifacts
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Build only the selected test platform"
+        required: true
+        type: choice
+        options:
+          - windows
+          - macos
       target_version:
         description: "Desktop version for this candidate, such as 0.1.1-beta.4"
         required: true
         type: string
       build_label:
-        description: "Candidate build label, such as build.003"
+        description: "Candidate label, such as win.001 or mac.080"
         required: true
         type: string
       picker_changed:
@@ -25,7 +29,7 @@ permissions:
 
 jobs:
   extension:
-    if: github.event_name == 'push' || inputs.picker_changed
+    if: inputs.picker_changed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +50,7 @@ jobs:
           path: release/extension/
 
   macos:
+    if: inputs.platform == 'macos'
     runs-on: macos-14
     env:
       SOURCEBOOK_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.target_version || github.ref_type == 'tag' && github.ref_name || '' }}
@@ -73,6 +78,7 @@ jobs:
             release/macos/candidate/
 
   windows:
+    if: inputs.platform == 'windows'
     runs-on: windows-latest
     env:
       SOURCEBOOK_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.target_version || github.ref_type == 'tag' && github.ref_name || '' }}

@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -15,7 +16,7 @@ const version = (process.env.SOURCEBOOK_VERSION || JSON.parse(readFileSync(join(
 
 if (!["macos", "windows"].includes(platform)) throw new Error("Pass --platform macos or --platform windows.");
 if (!installer || !existsSync(installer)) throw new Error("Pass an existing --installer path.");
-if (!/^build\.\d{3,}$/.test(build || "")) throw new Error("SOURCEBOOK_BUILD must be a label such as build.003.");
+if (!new RegExp(`^${platform === "macos" ? "mac" : "win"}\\.\\d{3,}$`).test(build || "")) throw new Error(`SOURCEBOOK_BUILD must be a ${platform} label such as ${platform === "macos" ? "mac.080" : "win.001"}.`);
 if (platform === "macos" && (!app || !existsSync(app))) throw new Error("macOS candidates require an existing --app path.");
 
 const outputRoot = join(dirname(installer), "candidate");
@@ -31,11 +32,13 @@ const metadata = {
   commit: git("rev-parse", "HEAD"),
   tree: git("rev-parse", "HEAD^{tree}"),
   installer: installerName,
+  installerSha256: createHash("sha256").update(readFileSync(installer)).digest("hex"),
 };
 if (platform === "macos") {
   const appArchive = `sourcebook-desktop-macos-v${version}-${build}-unsigned-app.tar.gz`;
   execFileSync("tar", ["-czf", join(outputRoot, appArchive), "-C", dirname(app), basename(app)], { stdio: "inherit" });
   metadata.appArchive = appArchive;
+  metadata.appArchiveSha256 = createHash("sha256").update(readFileSync(join(outputRoot, appArchive))).digest("hex");
 }
 writeFileSync(join(outputRoot, "build-info.json"), JSON.stringify(metadata, null, 2) + "\n");
 console.log(`Prepared ${platform} candidate artifact in ${outputRoot}`);
