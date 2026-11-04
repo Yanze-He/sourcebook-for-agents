@@ -2,6 +2,13 @@
 
 All notable user-facing changes are documented here.
 
+## 0.1.5 — 2026-11-05
+
+- Pair Desktop with Picker 0.1.6. A picked webpage keeps its visible snapshot as a local card preview while the original URL remains the material link.
+- Show captured webpage previews in Book cards and details after a refresh or restart.
+- On Windows, keep the material library and Picker available while hiding the Agent connection action in Settings and the Agent submissions entry in the header.
+- Picker 0.1.6 adds page and area capture, plus note editing and Book changes directly in the Pick success notice. The extension is versioned and distributed separately from Desktop.
+
 ## 0.1.4 — 2026-11-04
 
 - Limit **Copy links** to selected materials that are available only as links. Materials with a transferable local file stay in **Copy files**, even when they also retain their original web address; the file-copy confirmation stays focused on the copied files and paste destination.
