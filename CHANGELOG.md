@@ -4,6 +4,7 @@ All notable user-facing changes are documented here.
 
 ## 0.1.5 — 2026-11-05
 
+- On macOS, first opening a newly installed build offers Agent connection once. A new empty library shows the data-location window first, then the Agent connection window; existing libraries skip the data-location step.
 - Pair Desktop with Picker 0.1.6. A picked webpage keeps its visible snapshot as a local card preview while the original URL remains the material link.
 - Show captured webpage previews in Book cards and details after a refresh or restart.
 - Remove the extra space between webpage previews and titles. Posts with thumbnails now show their covers in Book cards, and long post detail previews keep the text area bounded while the cover fills its side.

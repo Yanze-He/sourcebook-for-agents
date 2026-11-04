@@ -160,6 +160,7 @@ export default function SourcebookSources() {
   // Agent integration is not exposed in the Windows Desktop UI yet. Keep the
   // material library and Picker usable there without showing dead-end actions.
   const isWindowsHost = /Windows/i.test(window.navigator.userAgent);
+  const desktopLaunchVersion = new URLSearchParams(window.location.search).get("desktop");
   const [items, setItems] = useState<SourceItem[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -198,6 +199,7 @@ export default function SourcebookSources() {
   const [isLibrarySettingsOpen, setIsLibrarySettingsOpen] = useState(false);
   const [isUpdateSettingsOpen, setIsUpdateSettingsOpen] = useState(false);
   const [isMCPSettingsOpen, setIsMCPSettingsOpen] = useState(false);
+  const [startupLibraryChecked, setStartupLibraryChecked] = useState(false);
   const [isMCPSuggestionsOpen, setIsMCPSuggestionsOpen] = useState(() => new URLSearchParams(window.location.search).get("panel") === "agent-submissions");
   const [librarySettings, setLibrarySettings] = useState<LibrarySettingsResponse | null>(null);
   const [updateSettings, setUpdateSettings] = useState<UpdateSettingsResponse | null>(null);
@@ -247,6 +249,7 @@ export default function SourcebookSources() {
   const syncingAgentScopeRef = useRef(false);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestedBookIdRef = useRef(new URLSearchParams(window.location.search).get("bookId"));
+  const startupAgentPromptRequestedRef = useRef(false);
   const agentSessionIdRef = useRef(new URLSearchParams(window.location.search).get("agentSession"));
   const agentSessionTokenRef = useRef(new URLSearchParams(window.location.search).get("agentSessionToken"));
   const pageInstanceIdRef = useRef(window.crypto.randomUUID());
@@ -456,12 +459,20 @@ export default function SourcebookSources() {
   useEffect(() => {
     void request<LibrarySettingsResponse>("/api/settings/library").then((response) => {
       setLibrarySettings(response);
-      if (response.requiresSetup) setIsLibrarySettingsOpen(true);
+      if (response.requiresSetup && response.isEmpty) setIsLibrarySettingsOpen(true);
+      setStartupLibraryChecked(true);
     }).catch((error) => setMessage(errorMessage(error)));
     void request<UpdateSettingsResponse>("/api/settings/update").then(setUpdateSettings).catch(() => undefined);
     void request<MCPSettingsResponse>("/api/settings/mcp").then(setMCPSettings).catch(() => undefined);
     void refreshMCPSuggestions();
   }, []);
+  useEffect(() => {
+    if (!desktopLaunchVersion || isWindowsHost || agentSessionIdRef.current || !startupLibraryChecked || isLibrarySettingsOpen || startupAgentPromptRequestedRef.current) return;
+    startupAgentPromptRequestedRef.current = true;
+    void request<{ showAgentConnect: boolean }>(`/api/settings/agent-onboarding/claim?desktop=${encodeURIComponent(desktopLaunchVersion)}`, { method: "POST" })
+      .then((result) => { if (result.showAgentConnect) setIsMCPSettingsOpen(true); })
+      .catch((error) => showSourcesMessage(errorMessage(error), 5000, "error"));
+  }, [desktopLaunchVersion, isLibrarySettingsOpen, isWindowsHost, startupLibraryChecked]);
   useEffect(() => { if (activeBookId) void loadItems(); }, [activeBookId]);
   useEffect(() => { if (activeBookId && (query.trim() || kind.length || source.length || linkFilter.length || localFilter.length || dateFilter !== "all" || onlyFavorites)) void loadItems({ limit: bookSourceLimit }); }, [activeBookId, dateEnd, dateFilter, dateStart, kind, linkFilter, localFilter, onlyFavorites, query, source]);
   useEffect(() => { if (!items.some((item) => item.assetCacheState === "downloading")) return; const timer = window.setInterval(() => void loadItems({ background: true }), 1500); return () => window.clearInterval(timer); }, [activeBookId, items]);
@@ -1150,7 +1161,7 @@ export default function SourcebookSources() {
           <div aria-label={language === "zh" ? "卡片密度" : "Card density"} className="density-control" role="group">
             {(["compact", "standard", "spacious"] as CardDensity[]).map((entry) => <button aria-label={entry} aria-pressed={density === entry} className={`density-button is-${entry}`} key={entry} onClick={() => setDensity(entry)} type="button"><span /></button>)}
           </div>
-          <input accept={localImportAccept} className="visually-hidden" multiple onChange={(event) => { if (event.target.files?.length) void importLocalFiles(Array.from(event.target.files)); event.currentTarget.value = ""; }} ref={localImportInputRef} type="file" /><input accept=".sourcebook-backup" className="visually-hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importBackup(file); event.currentTarget.value = ""; }} ref={backupInputRef} type="file" />
+          <input accept={localImportAccept} className="visually-hidden" multiple onChange={(event) => { if (event.target.files?.length) void importLocalFiles(Array.from(event.target.files)); event.currentTarget.value = ""; }} ref={localImportInputRef} type="file" /><input accept=".sourcebook-backup" className="visually-hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importBackup(file).finally(() => { if (isLibrarySettingsOpen && librarySettings?.requiresSetup && librarySettings.isEmpty) setIsLibrarySettingsOpen(false); }); event.currentTarget.value = ""; }} ref={backupInputRef} type="file" />
         </div>
       </div>
       {loading && !bootstrapError ? <EmptyState icon={<LoaderCircle className="spin" size={22} />} title={copy.loadingSources} description={copy.readingSources} /> : null}
@@ -1175,7 +1186,7 @@ export default function SourcebookSources() {
     <PromptSettingsModal isOpen={isPromptSettingsOpen} language={language} savedTemplate={promptTemplate} onClose={() => setIsPromptSettingsOpen(false)} onSave={savePromptTemplate} />
     <PackHandoffModal bookName={books.find((book) => book.id === activeBookId)?.name || "Default Book"} isOpen={isPackOpen} items={selectedItems} language={language} onClose={() => setIsPackOpen(false)} onCopyMaterials={copyPackedMaterials} onCopyPrompt={copyPackPrompt} onEditTemplate={() => { setIsPackOpen(false); setIsPromptSettingsOpen(true); }} promptTemplate={promptTemplate} />
     <ClipboardImportModal busy={isClipboardImporting} language={language} onClose={() => !isClipboardImporting && setClipboardPlan(null)} onConfirm={() => void importClipboardPlan()} plan={clipboardPlan} />
-    <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
+    <LocalDataManagerModal isOpen={isLibrarySettingsOpen} language={language} onClear={() => { setIsLibrarySettingsOpen(false); setIsClearDataOpen(true); }} onClose={() => setIsLibrarySettingsOpen(false)} onExport={() => { setIsLibrarySettingsOpen(false); openBackupExport(); }} onImport={() => { if (!(librarySettings?.requiresSetup && librarySettings.isEmpty)) setIsLibrarySettingsOpen(false); backupInputRef.current?.click(); }} onLoad={setLibrarySettings} onMigrated={() => showSourcesMessage(language === "zh" ? "素材库已迁移到新位置。" : "Your library was moved to the new location.", 3600, "success")} settings={librarySettings} />
     <UpdateSettingsModal isOpen={isUpdateSettingsOpen} language={language} onClose={() => setIsUpdateSettingsOpen(false)} onLoad={setUpdateSettings} settings={updateSettings} />
     <MCPSettingsModal isOpen={isMCPSettingsOpen} language={language} onClose={() => setIsMCPSettingsOpen(false)} onLoad={setMCPSettings} onNotice={(text, tone) => showSourcesMessage(text, tone === "error" ? 6000 : 3600, tone)} settings={mcpSettings} />
     <MCPSuggestionsModal batchId={requestedSubmissionBatchIdRef.current} isOpen={isMCPSuggestionsOpen} language={language} onClose={() => setIsMCPSuggestionsOpen(false)} onConnectAgent={() => { setIsMCPSuggestionsOpen(false); setIsMCPSettingsOpen(true); }} onLoad={(suggestions) => { knownPendingSuggestionIdsRef.current = new Set(suggestions.filter((entry) => entry.suggestion.status === "pending").map((entry) => entry.suggestion.id)); setMCPSuggestions(suggestions); }} onReview={async (bookId, suggestionId, decision) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}/${decision}`), { method: "POST" }); await refreshMCPSuggestions(); await loadItems({ background: true }); }} onUpdate={async (bookId, suggestionId, payload) => { await request(agentSuggestionPath(`/api/mcp/suggestions/${encodeURIComponent(bookId)}/${encodeURIComponent(suggestionId)}`), { method: "PATCH", body: JSON.stringify(payload) }); await refreshMCPSuggestions(); }} suggestionPath={agentSuggestionPath} suggestions={mcpSuggestions} />

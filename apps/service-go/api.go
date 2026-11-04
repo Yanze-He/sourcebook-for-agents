@@ -200,6 +200,9 @@ func (server *Server) route(response http.ResponseWriter, request *http.Request)
 	if request.Method == http.MethodGet && path == "/api/settings/library" {
 		return server.getLibrarySettings(response)
 	}
+	if request.Method == http.MethodPost && path == "/api/settings/agent-onboarding/claim" {
+		return server.claimAgentOnboarding(response, request)
+	}
 	if request.Method == http.MethodPut && path == "/api/settings/library" {
 		return server.updateLibrarySettings(response, request)
 	}
