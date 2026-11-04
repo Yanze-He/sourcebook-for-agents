@@ -10,9 +10,9 @@ https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
 ## References that travel and grow
 
-- **Keep the source of an idea.** Save images, links, and notes in a Book so a useful reference remains available after the prompt is over.
-- **Switch AI tools without collecting again.** Choose what each task needs from the same Book instead of rebuilding your references across chats.
-- **Let each round inform the next.** Review Agent-proposed additions or edits and keep the useful ones in the Book for future work.
+- **Give direction through references.** Choose images and notes that show the look, subject, or constraints you want. Give the Agent a clear goal instead of scripting every step.
+- **Carry that direction across AI tools.** Select what each task needs from the same Book rather than rebuilding your references in every chat.
+- **Make each round improve the next.** Judge the result, keep useful references, and review Agent-proposed additions or edits before they enrich the Book.
 
 <img width="1672" height="743" alt="Sourcebook project Books and material cards" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
 
