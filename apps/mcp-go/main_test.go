@@ -121,7 +121,7 @@ func TestSourcebookNavigationReusesOrReplacesOnlyThePageToken(t *testing.T) {
 	}
 }
 
-func TestSourcebookNavigationUsesLocalhostOnlyForCodexBrowserPages(t *testing.T) {
+func TestSourcebookNavigationUsesServiceIPv4ForCodexBrowserPages(t *testing.T) {
 	t.Setenv("SOURCEBOOK_AGENT_NAME", "Codex")
 	bridge := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
@@ -145,8 +145,8 @@ func TestSourcebookNavigationUsesLocalhostOnlyForCodexBrowserPages(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Hostname() != "localhost" {
-		t.Fatalf("Codex browser page must use localhost, got %q", navigationURL)
+	if parsed.Hostname() != "127.0.0.1" {
+		t.Fatalf("Codex browser page must use the Desktop service's IPv4 loopback address, got %q", navigationURL)
 	}
 	if !strings.HasPrefix(parsed.Path, "/p/") || parsed.Query().Get("agentSession") != "" || parsed.Query().Get("agentSessionToken") != "" {
 		t.Fatalf("Codex browser page must use a short local link without copied session credentials, got %q", navigationURL)
@@ -441,8 +441,7 @@ func TestCodexUsesPersistentBrowserTabWithoutTurnScopedApp(t *testing.T) {
 		t.Fatalf("Codex resources = %#v, %v", resources, err)
 	}
 	opened, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_sourcebook"})
-	bridgeURL, parseErr := url.Parse(bridge.URL)
-	if err != nil || parseErr != nil || opened.IsError || !strings.Contains(textResult(opened), "http://localhost:"+bridgeURL.Port()+"/p/") || strings.Contains(textResult(opened), "agentSessionToken=") || !strings.Contains(textResult(opened), "open_in_codex") || !strings.Contains(textResult(opened), "do not use CUA to open or verify") {
+	if err != nil || opened.IsError || !strings.Contains(textResult(opened), bridge.URL+"/p/") || strings.Contains(textResult(opened), "agentSessionToken=") || !strings.Contains(textResult(opened), "open_in_codex") || !strings.Contains(textResult(opened), "do not use CUA to open or verify") {
 		t.Fatalf("open_sourcebook = %#v, %v", opened, err)
 	}
 	assertManualOpenLink(t, opened)

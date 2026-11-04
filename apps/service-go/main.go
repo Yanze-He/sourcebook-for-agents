@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,8 +32,26 @@ func main() {
 
 	server := NewServer(library, os.Getenv("SOURCEBOOK_SOURCES_WEB_DIR"))
 	address := "127.0.0.1:" + strconv.Itoa(port)
+	ipv4Listener, err := net.Listen("tcp4", address)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Older Codex page links use localhost, which some embedded browsers resolve
+	// to ::1 without falling back to IPv4. Serve that loopback address too when
+	// available, while keeping 127.0.0.1 as the required Desktop endpoint.
+	ipv6Address := "[::1]:" + strconv.Itoa(port)
+	if ipv6Listener, err := net.Listen("tcp6", ipv6Address); err == nil {
+		go func() {
+			log.Printf("Sourcebook Go service ready at http://%s", ipv6Address)
+			if err := http.Serve(ipv6Listener, server); err != nil {
+				log.Printf("Sourcebook IPv6 loopback listener stopped: %v", err)
+			}
+		}()
+	} else {
+		log.Printf("Sourcebook IPv6 loopback unavailable: %v", err)
+	}
 	log.Printf("Sourcebook Go service ready at http://%s", address)
-	if err := http.ListenAndServe(address, server); err != nil {
+	if err := http.Serve(ipv4Listener, server); err != nil {
 		log.Fatal(err)
 	}
 }
