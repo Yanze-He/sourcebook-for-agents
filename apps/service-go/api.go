@@ -30,6 +30,14 @@ const (
 	maxMediaBytes    = 20 * 1024 * 1024
 )
 
+func bookMediaPath(bookID, assetID string) string {
+	return "/api/books/" + url.PathEscape(bookID) + "/media/" + url.PathEscape(assetID)
+}
+
+func bookPreviewPath(bookID, sourceItemID string) string {
+	return "/api/books/" + url.PathEscape(bookID) + "/sources/" + url.PathEscape(sourceItemID) + "/preview"
+}
+
 // LocalPickerExtensionID is derived from the public key in
 // apps/picker/wxt.config.ts. Chrome Web Store packages cannot carry that key:
 // the Store signs them with its own key and assigns ChromeWebStorePickerExtensionID.
@@ -151,6 +159,9 @@ func isExclusiveLibraryOperation(request *http.Request) bool {
 
 func (server *Server) route(response http.ResponseWriter, request *http.Request) error {
 	path := request.URL.Path
+	if strings.HasPrefix(path, "/p/") {
+		return server.openAgentPageLink(response, request)
+	}
 	// MCP bridge requests deliberately use a separate, versioned API.  They are
 	// authenticated with a pairing credential and are not available to web
 	// pages or the Picker through the regular browser API.
@@ -834,7 +845,7 @@ func addAsset(tx *sql.Tx, ctx *BookContext, resourceID, suffix, title string, va
 		if err := os.WriteFile(filepath.Join(ctx.MediaRoot, fileName), bytes, 0o644); err != nil {
 			return err
 		}
-		_, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, "/api/books/"+ctx.Book.ID+"/media/"+assetID, "cached", fileName, "linked")
+		_, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, originalURL, bookMediaPath(ctx.Book.ID, assetID), "cached", fileName, "linked")
 		return err
 	}
 	mimeType := map[string]string{"image": "image/*", "audio": "audio/*", "video": "video/*", "post": "image/*"}[modality]
@@ -928,7 +939,7 @@ func importLocalFile(ctx *BookContext, value map[string]any) (map[string]any, er
 		if err = os.WriteFile(filepath.Join(ctx.MediaRoot, fileName), bytes, 0o644); err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, nil, "/api/books/"+ctx.Book.ID+"/media/"+assetID, "cached", fileName, "none"); err != nil {
+		if _, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, nil, bookMediaPath(ctx.Book.ID, assetID), "cached", fileName, "none"); err != nil {
 			return nil, err
 		}
 	}
@@ -1018,17 +1029,20 @@ func sourceItems(ctx *BookContext, limitValue, cursorValue string) (map[string]a
 		}
 		if effectiveModality == "video" || effectiveModality == "post" {
 			if previewFileName.Valid && previewMimeType.Valid {
-				previewURL = "/api/books/" + ctx.Book.ID + "/sources/" + itemID + "/preview"
+				previewURL = bookPreviewPath(ctx.Book.ID, itemID)
 			} else if previewURL != "" {
 				metadata["mediaPreviewUrl"] = previewURL
-				previewURL = "/api/books/" + ctx.Book.ID + "/sources/" + itemID + "/preview"
+				previewURL = bookPreviewPath(ctx.Book.ID, itemID)
 			}
 		}
 		thumbnail := nullableString(thumbnailURL)
 		if assetID.Valid && cacheState.String == "cached" && fileName.Valid {
 			// Backups may be imported under a new Book ID. Build this URL from the
 			// current Book and asset IDs instead of trusting a stored historic URI.
-			thumbnail = "/api/books/" + ctx.Book.ID + "/media/" + assetID.String
+			localMediaURL := bookMediaPath(ctx.Book.ID, assetID.String)
+			thumbnail = localMediaURL
+			contentURL.String = localMediaURL
+			contentURL.Valid = true
 		}
 		if effectiveModality == "link" {
 			// Link cards stay text-first, but the detail view can still show the
@@ -1630,7 +1644,7 @@ func copyTransferAsset(tx *sql.Tx, from, target *BookContext, row transferRow, r
 			if err := copyFile(sourcePath, filepath.Join(target.MediaRoot, fileName)); err != nil {
 				return err
 			}
-			fileURI = "/api/books/" + target.Book.ID + "/media/" + assetID
+			fileURI = bookMediaPath(target.Book.ID, assetID)
 			state = "cached"
 		} else if state == "cached" {
 			state = "missing"
@@ -1712,7 +1726,7 @@ func cacheImage(ctx *BookContext, resourceID string) {
 	if err := os.WriteFile(filepath.Join(ctx.MediaRoot, fileName), bytes, 0o644); err != nil {
 		return
 	}
-	_, _ = ctx.DB.Exec("UPDATE assets SET mime_type=?,file_uri=?,cache_state='cached',file_name=? WHERE id=?", mimeType, "/api/books/"+ctx.Book.ID+"/media/"+assetID, fileName, assetID)
+	_, _ = ctx.DB.Exec("UPDATE assets SET mime_type=?,file_uri=?,cache_state='cached',file_name=? WHERE id=?", mimeType, bookMediaPath(ctx.Book.ID, assetID), fileName, assetID)
 	_, _ = ctx.DB.Exec("UPDATE source_items SET storage_state='available' WHERE resource_id=?", resourceID)
 }
 

@@ -345,8 +345,16 @@ func TestSourceItemsExposeCachedFileName(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
+	manifest, err := library.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Books = append(manifest.Books, Book{ID: "sourcebook brand", Name: "Sourcebook brand", Directory: "sourcebook brand"})
+	if err := library.writeManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
 
-	ctx, err := library.Context("sourcebook")
+	ctx, err := library.Context("sourcebook brand")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,8 +400,14 @@ func TestSourceItemsExposeCachedFileName(t *testing.T) {
 	if got := items[0]["assetId"]; got != "asset-image" {
 		t.Fatalf("expected asset ID %q, got %#v", "asset-image", got)
 	}
-	if got := items[0]["thumbnailUrl"]; got != "/api/books/sourcebook/media/asset-image" {
+	if got := items[0]["thumbnailUrl"]; got != "/api/books/sourcebook%20brand/media/asset-image" {
 		t.Fatalf("expected local media URL, got %#v", got)
+	}
+	mediaRequest := httptest.NewRequest(http.MethodGet, "http://localhost:4177"+items[0]["thumbnailUrl"].(string), nil)
+	mediaResult := httptest.NewRecorder()
+	NewServer(library, "").ServeHTTP(mediaResult, mediaRequest)
+	if mediaResult.Code != http.StatusOK || mediaResult.Header().Get("Content-Type") != "image/png" || mediaResult.Body.String() != "image bytes" {
+		t.Fatalf("cached media = %d, type %q, body %q", mediaResult.Code, mediaResult.Header().Get("Content-Type"), mediaResult.Body.String())
 	}
 }
 

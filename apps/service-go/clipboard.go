@@ -351,7 +351,7 @@ func importClipboardReader(ctx *BookContext, name string, input io.Reader) (map[
 		if err = os.Rename(tempPath, finalPath); err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, nil, "/api/books/"+ctx.Book.ID+"/media/"+assetID, "cached", fileName, "none"); err != nil {
+		if _, err = tx.Exec("INSERT INTO assets (id,resource_id,mime_type,original_url,file_uri,cache_state,file_name,link_state) VALUES (?,?,?,?,?,?,?,?)", assetID, resourceID, mimeType, nil, bookMediaPath(ctx.Book.ID, assetID), "cached", fileName, "none"); err != nil {
 			return nil, err
 		}
 	}

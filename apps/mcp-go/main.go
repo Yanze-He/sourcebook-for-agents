@@ -415,11 +415,23 @@ func sourcebookNavigationURL(client *bridgeClient, state *sessionState, serviceU
 	if requestedBookID == "" && bookID != "" {
 		query.Set("bookId", bookID)
 	}
-	query.Set("agentSession", sessionID)
-	query.Set("agentSessionToken", sessionToken)
-	query.Set("sourcebookHost", strings.ToLower(sourcebookAgentName()))
+	if isCodex() {
+		// Keep the URL the Agent must pass to the host browser short. The local
+		// service resolves this code to the registered page session and redirects
+		// the browser; no session credentials need to be copied between tools.
+		parsed.Path = "/p/" + agentPageLinkCode(sessionToken)
+	} else {
+		query.Set("agentSession", sessionID)
+		query.Set("agentSessionToken", sessionToken)
+		query.Set("sourcebookHost", strings.ToLower(sourcebookAgentName()))
+	}
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
+}
+
+func agentPageLinkCode(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(digest[:16])
 }
 
 func sourcebookAppMeta() mcp.Meta {

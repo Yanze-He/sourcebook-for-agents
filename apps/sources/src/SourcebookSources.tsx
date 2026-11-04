@@ -462,18 +462,21 @@ export default function SourcebookSources() {
     }
     setIsRefreshingAgentPageConnection(true);
     showSourcesMessage(wasDisconnected ? (language === "zh" ? "正在连接此页…" : "Connecting this tab…") : (language === "zh" ? "正在刷新连接…" : "Refreshing connection…"), 0);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {
-      await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken }) });
+      await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/reconnect`, { method: "POST", body: JSON.stringify({ pageToken }), signal: controller.signal });
       await request(`/api/agent-sessions/${encodeURIComponent(sessionId)}/scope`, {
         method: "PUT",
         body: JSON.stringify({ pageToken, bookId: activeBookId, selectedSourceIds: selectedIds, filteredSourceIds: visibleItems.map((item) => item.id), filters: { query, kind, source, linkFilter, localFilter, dateFilter, dateStart, dateEnd, onlyFavorites } }),
+        signal: controller.signal,
       });
       setAgentPageConnection("connected");
       showSourcesMessage(wasDisconnected ? (language === "zh" ? "此页已连接。" : "This tab is connected.") : (language === "zh" ? "连接已刷新。" : "Connection refreshed."), 3600, "success");
     } catch (error) {
       if (isDisconnectedAgentPageError(error)) setAgentPageConnection("disconnected");
       showSourcesMessage(agentPageConnectionErrorMessage(error, language), 5000, "error");
-    } finally { setIsRefreshingAgentPageConnection(false); }
+    } finally { window.clearTimeout(timeout); setIsRefreshingAgentPageConnection(false); }
   };
   useEffect(() => {
     const sessionId = agentSessionIdRef.current;
@@ -1094,13 +1097,43 @@ function SourceThumbnail({ item, compact = false }: { item: SourceItem; compact?
   const useVideoFrame = item.modality === "video" && item.assetCacheState === "cached" && !item.metadata.mediaPreviewUrl && Boolean(item.thumbnailUrl);
   const [imagePreviewSrc, setImagePreviewSrc] = useState(item.thumbnailUrl || item.metadata.mediaPreviewUrl);
   const [imagePreviewFailed, setImagePreviewFailed] = useState(false);
+  const [imageRetryCount, setImageRetryCount] = useState(0);
+  const imageRetryTimerRef = useRef<number | null>(null);
   const useImagePreview = !isWebLink && hasRenderableThumbnail(item) && !useVideoFrame && Boolean(imagePreviewSrc) && !imagePreviewFailed;
   const [videoFrameReady, setVideoFrameReady] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<string | undefined>();
   useEffect(() => { setVideoFrameReady(false); }, [item.id, item.thumbnailUrl, useVideoFrame]);
   useEffect(() => { setVideoAspectRatio(undefined); }, [item.id, item.thumbnailUrl, useVideoFrame]);
-  useEffect(() => { setImagePreviewSrc(item.thumbnailUrl || item.metadata.mediaPreviewUrl); setImagePreviewFailed(false); }, [item.id, item.thumbnailUrl, item.metadata.mediaPreviewUrl]);
+  useEffect(() => {
+    if (imageRetryTimerRef.current) window.clearTimeout(imageRetryTimerRef.current);
+    setImagePreviewSrc(item.thumbnailUrl || item.metadata.mediaPreviewUrl);
+    setImagePreviewFailed(false);
+    setImageRetryCount(0);
+    return () => { if (imageRetryTimerRef.current) window.clearTimeout(imageRetryTimerRef.current); };
+  }, [item.id, item.thumbnailUrl, item.metadata.mediaPreviewUrl]);
+  useEffect(() => {
+    const thumbnailURL = item.thumbnailUrl;
+    if (!imagePreviewFailed || !thumbnailURL?.startsWith("/api/books/")) return;
+    const retryWhenVisible = () => {
+      if (document.hidden) return;
+      setImagePreviewFailed(false);
+      setImageRetryCount(0);
+      setImagePreviewSrc(`${thumbnailURL}${thumbnailURL.includes("?") ? "&" : "?"}retry=${Date.now()}`);
+    };
+    window.addEventListener("focus", retryWhenVisible);
+    document.addEventListener("visibilitychange", retryWhenVisible);
+    return () => { window.removeEventListener("focus", retryWhenVisible); document.removeEventListener("visibilitychange", retryWhenVisible); };
+  }, [imagePreviewFailed, item.thumbnailUrl]);
   const handleImagePreviewError = () => {
+    const thumbnailURL = item.thumbnailUrl;
+    if (thumbnailURL?.startsWith("/api/books/") && imageRetryCount === 0) {
+      setImageRetryCount(1);
+      imageRetryTimerRef.current = window.setTimeout(() => {
+        setImagePreviewSrc(`${thumbnailURL}${thumbnailURL.includes("?") ? "&" : "?"}retry=${Date.now()}`);
+        imageRetryTimerRef.current = null;
+      }, 700);
+      return;
+    }
     const fallback = item.metadata.mediaPreviewUrl;
     if (fallback && fallback !== imagePreviewSrc) {
       setImagePreviewSrc(fallback);
@@ -2063,6 +2096,7 @@ async function requestBackupRestore(file: File, mode: "append" | "replace") { co
 function isDisconnectedAgentPageError(error: unknown) { return /Sourcebook page (is (not|no longer) connected|was replaced by a newer page)/i.test(errorMessage(error)); }
 function agentPageConnectionErrorMessage(error: unknown, language: Language) {
   const message = errorMessage(error);
+  if (isAbortedRequest(error)) return language === "zh" ? "连接超时。请确认 Sourcebook Desktop 正在运行，然后重试。" : "Connection timed out. Make sure Sourcebook Desktop is running, then try again.";
   if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) return language === "zh" ? "无法连接 Sourcebook Desktop。请确认应用仍在运行后重试。" : "Could not reach Sourcebook Desktop. Make sure the app is still running, then try again.";
   if (/replaced by a newer page/i.test(message)) return language === "zh" ? "此页已被另一个 Sourcebook 标签页替代。请在该标签页查看，或重新连接此页。" : "This tab was replaced by another Sourcebook tab. Use that tab, or reconnect this one.";
   if (/not connected to the current Agent session|belongs to a different Agent conversation/i.test(message)) return language === "zh" ? "此页的 Agent 连接已失效。请让 Agent 重新打开 Sourcebook。" : "This tab's Agent connection is no longer valid. Ask the Agent to reopen Sourcebook.";

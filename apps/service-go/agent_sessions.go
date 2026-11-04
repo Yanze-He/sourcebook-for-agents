@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -21,6 +24,52 @@ type agentSessionScope struct {
 	Filters           map[string]any
 	Revision          int
 	UpdatedAt         time.Time
+}
+
+func agentPageLinkCode(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(digest[:16])
+}
+
+func (server *Server) openAgentPageLink(response http.ResponseWriter, request *http.Request) error {
+	if request.Method != http.MethodGet {
+		return &apiError{status: http.StatusNotFound, code: "AGENT_PAGE_LINK_NOT_FOUND", message: "Sourcebook page link was not found."}
+	}
+	code := strings.TrimPrefix(request.URL.Path, "/p/")
+	server.agentSessionMu.Lock()
+	server.cleanupExpiredAgentSessionsLocked(time.Now())
+	var sessionID, pageToken, agentName, bookID string
+	for id, session := range server.agentSessions {
+		for _, token := range append([]string{session.Token}, session.RetiredTokens...) {
+			if subtle.ConstantTimeCompare([]byte(code), []byte(agentPageLinkCode(token))) == 1 {
+				sessionID, pageToken, agentName, bookID = id, token, session.AgentName, session.BookID
+				break
+			}
+		}
+		if sessionID != "" {
+			break
+		}
+	}
+	server.agentSessionMu.Unlock()
+	if sessionID == "" {
+		return &apiError{status: http.StatusNotFound, code: "AGENT_PAGE_LINK_NOT_FOUND", message: "This Sourcebook page link is no longer available. Ask the Agent to open Sourcebook again."}
+	}
+	query := url.Values{}
+	for _, name := range []string{"bookId", "panel", "batchId"} {
+		if value := request.URL.Query().Get(name); value != "" {
+			query.Set(name, value)
+		}
+	}
+	if query.Get("bookId") == "" && bookID != "" {
+		query.Set("bookId", bookID)
+	}
+	query.Set("agentSession", sessionID)
+	query.Set("agentSessionToken", pageToken)
+	query.Set("sourcebookHost", strings.ToLower(agentName))
+	response.Header().Set("Cache-Control", "no-store")
+	response.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(response, request, "/?"+query.Encode(), http.StatusFound)
+	return nil
 }
 
 func (server *Server) registerAgentSession(response http.ResponseWriter, request *http.Request) error {

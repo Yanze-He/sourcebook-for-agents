@@ -5,10 +5,42 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestShortAgentPageLinkResolvesRegisteredSession(t *testing.T) {
+	library, err := OpenLibrary(filepath.Join(t.TempDir(), "library"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	server := NewServer(library, "").(*Server)
+	const pageToken = "short-link-token-12345678901234567890"
+	server.agentSessions["session-test"] = agentSessionScope{Token: pageToken, AgentName: "Codex", BookID: "sourcebook brand", UpdatedAt: time.Now()}
+	request := httptest.NewRequest(http.MethodGet, "http://localhost:4177/p/"+agentPageLinkCode(pageToken)+"?panel=agent-submissions&batchId=batch-1", nil)
+	result := httptest.NewRecorder()
+	server.ServeHTTP(result, request)
+	if result.Code != http.StatusFound {
+		t.Fatalf("short link = %d: %s", result.Code, result.Body.String())
+	}
+	redirect, err := url.Parse(result.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := redirect.Query()
+	if redirect.Path != "/" || query.Get("agentSession") != "session-test" || query.Get("agentSessionToken") != pageToken || query.Get("bookId") != "sourcebook brand" || query.Get("sourcebookHost") != "codex" || query.Get("panel") != "agent-submissions" || query.Get("batchId") != "batch-1" {
+		t.Fatalf("short link redirect = %q", redirect.String())
+	}
+	unknown := httptest.NewRecorder()
+	server.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "http://localhost:4177/p/invalid", nil))
+	if unknown.Code != http.StatusNotFound {
+		t.Fatalf("unknown link = %d", unknown.Code)
+	}
+}
 
 func TestAgentPageScopeConnectsOnlyItsRegisteredMCPProcess(t *testing.T) {
 	library, err := OpenLibrary(filepath.Join(t.TempDir(), "Sourcebook Library"), "", "")
