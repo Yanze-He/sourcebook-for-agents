@@ -2517,6 +2517,9 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
   height: 100%;
   object-fit: cover;
 }
+.masonry-detail-modal .post-detail-cover[hidden] {
+  display: none;
+}
 
 .masonry-detail-modal .post-detail-preview {
   cursor: pointer;
@@ -2764,3 +2767,58 @@ button,input,textarea { font:inherit; } button { border:0; cursor:pointer; trans
 .agent-page-binding-choices { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 18px; background:#f7f0fb; color:#5c315e; font-size:12px; }
 .agent-page-binding-choices button { border:1px solid #c7a5d0; border-radius:6px; padding:4px 9px; background:#fff; color:#5c315e; font:inherit; font-weight:750; cursor:pointer; }
 .agent-page-binding-choices button:hover { background:#f4e6f8; }
+
+/* Cards with a preview no longer need the text-only source-mark clearance. */
+.source-masonry-card.has-card-preview .source-masonry-body {
+  padding-top: 13px;
+}
+
+/* Webpage snapshots and post covers fill the reserved media area. */
+.source-masonry-card.kind-post.has-card-preview .source-masonry-media {
+  aspect-ratio: 16 / 7;
+  border-bottom: 1px solid #ecebe6;
+}
+.source-masonry-card.has-card-preview .source-masonry-media .thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.source-masonry-card.has-card-preview .source-masonry-media .media-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Long posts keep the detail preview bounded while the cover fills its column. */
+.masonry-detail-modal .post-detail-preview.has-thumbnail {
+  max-height: 320px;
+  grid-template-rows: minmax(0, 1fr);
+}
+.masonry-detail-modal .post-detail-cover {
+  position: relative;
+  min-height: 0;
+}
+.masonry-detail-modal .post-detail-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+.masonry-detail-modal .post-detail-copy {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 700px) {
+  .masonry-detail-modal .post-detail-preview.has-thumbnail {
+    max-height: none;
+    grid-template-rows: 190px minmax(0, auto);
+  }
+  .masonry-detail-modal .post-detail-copy {
+    max-height: 280px;
+  }
+}

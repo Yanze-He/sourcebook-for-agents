@@ -1223,12 +1223,13 @@ function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOp
   const isWebLink = item.modality === "link" && item.pickType !== "local_import";
   const hasPageSnapshot = isWebLink && Boolean(item.thumbnailUrl?.startsWith("/api/books/"));
   const isPost = item.modality === "post";
+  const hasCardPreview = (hasPageSnapshot || isPost) && hasRenderableThumbnail(item);
   const post = isPost ? item.metadata.post : undefined;
   const isWebVideo = isWebVideoReference(item);
   const isFileCard = item.modality === "file" || item.modality === "link" && item.pickType === "local_import";
   const usesCardSourceMark = isFileCard || item.modality === "audio" || isWebLink || isPost;
   const hasTextArtwork = item.modality === "text" || item.modality === "conversation";
-  const hasVisual = hasPageSnapshot || !usesCardSourceMark && (["image", "video", "conversation"].includes(item.modality) || hasTextArtwork);
+  const hasVisual = hasCardPreview || !usesCardSourceMark && (["image", "video", "conversation"].includes(item.modality) || hasTextArtwork);
   const isPlayable = (item.modality === "video" || item.modality === "audio") && !isWebVideo;
   const previewable = item.modality === "image" || isPlayable;
   const openableLocalFile = localFileState(item) === "cached";
@@ -1236,7 +1237,7 @@ function SourceCard({ isBatchSelecting, item, selected, onCopy, onFavorite, onOp
   const duration = useMediaDuration(item);
   const previewLabel = item.modality === "audio" ? copy.play + " " + copy.audio : item.modality === "video" ? copy.play + " " + copy.video : copy.view + " " + copy.image;
   const usesFallbackArtwork = hasVisual && !hasTextArtwork && !hasRenderableThumbnail(item);
-  return <article aria-pressed={isBatchSelecting ? selected : undefined} className={`source-masonry-card kind-${item.modality} ${usesCardSourceMark ? "has-card-source-mark" : ""} ${usesFallbackArtwork ? "has-fallback-artwork" : ""} ${selected ? "selected" : ""} ${item.favorite ? "favorited" : ""} ${isBatchSelecting ? "is-batch-selecting" : ""}`} data-source-id={item.id} onClick={isBatchSelecting ? onToggle : onOpen}>
+  return <article aria-pressed={isBatchSelecting ? selected : undefined} className={`source-masonry-card kind-${item.modality} ${usesCardSourceMark ? "has-card-source-mark" : ""} ${hasCardPreview ? "has-card-preview" : ""} ${usesFallbackArtwork ? "has-fallback-artwork" : ""} ${selected ? "selected" : ""} ${item.favorite ? "favorited" : ""} ${isBatchSelecting ? "is-batch-selecting" : ""}`} data-source-id={item.id} onClick={isBatchSelecting ? onToggle : onOpen}>
     <button aria-label={selected ? copy.unselect : copy.select} aria-pressed={selected} className="source-selection-control source-card-select" onClick={(event) => { event.stopPropagation(); if (isBatchSelecting) onToggle(); else onSelect(); }} type="button">{selected ? <Check size={14} strokeWidth={2.8} /> : null}</button>
     <div className="source-card-hover-actions">
       {previewable ? <button aria-label={previewLabel} className="source-card-quick-action" data-tooltip={previewLabel} onClick={(event) => { event.stopPropagation(); onPreview(); }} type="button">{isPlayable ? <Play fill="currentColor" size={15} /> : <Maximize2 size={15} />}</button> : null}
