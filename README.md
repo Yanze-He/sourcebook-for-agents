@@ -1,18 +1,18 @@
 # Sourcebook — Creative Asset Relay for AI Agents
 
-**A local-first visual reference library and creative asset relay for AI agents.** Save images, files, media references, and links in project Books. Choose the materials for your next creative task and bring them into the AI tool you use.
+**A local-first visual reference library and creative asset relay for AI agents.** Keep images, files, media references, and links together for a quick task or an ongoing project, then bring the right materials into the AI tool you use.
 
 [Visit the website](https://sourcebook.online) · [Chinese README](README.zh-CN.md) · [Get started](docs/getting-started.md) · [Connect an Agent](docs/connect-agents.md)
 
 https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 
-## From saved references to an AI task
+## One place for materials across tasks and AI tools
 
-1. **Save references.** Capture images and links from supported webpages with Picker, or add files, text, and clipboard content in Desktop.
-2. **Prepare a set for the task.** Keep materials in a project Book, then search, filter, select, and annotate what matters now.
-3. **Use the set with AI.** Ask a connected Codex or WorkBuddy Agent to use it, or copy files, links, and a Pack prompt into another AI tool.
+**Quick needs and lasting projects.** Collect a few references for one prompt or keep building a Book for work that spans weeks. Search, filter, and select what matters now. Your useful references remain easy to find later, without requiring an elaborate asset-management system for every task.
 
-The **relay** is this last step: bringing selected creative references—images, files, media links, and notes—into a task. Your Book remains the saved collection. In a connected Codex or WorkBuddy page, the current selection and filter tell the Agent which materials to consider; it can read them and retrieve available files through local MCP tools when asked. Selecting a card does not itself send a chat message. For other AI tools, you paste the copied materials and prompt yourself.
+**One source for many AI tools.** Keep images, files, source links, and notes together in Sourcebook while using a different selection for each task. Bring that set into Codex or WorkBuddy through the connected page, or copy available files, links, and a Pack prompt into another AI tool. You can reuse the same references without rebuilding the collection in every conversation.
+
+This is what **relay** means here: the connected Agent can read the current Book, selection, and filter through local MCP tools when asked, and retrieve available files. In other AI tools, you paste the copied materials yourself. Selecting a card does not itself send a chat message.
 
 Sourcebook stores your Books on your computer. An Agent's proposed changes appear in Sourcebook for your review and are saved only after you accept them.
 
