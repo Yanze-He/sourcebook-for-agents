@@ -53,7 +53,7 @@ func currentDesktopMCP() (string, error) {
 		return "", errors.New("this Sourcebook Desktop version cannot provide its local MCP server; update and reopen Sourcebook Desktop")
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+	if err != nil || !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode()&0o111 == 0) {
 		return "", errors.New("Sourcebook Desktop was moved, removed, or is incomplete; reopen or reinstall it")
 	}
 	return path, nil

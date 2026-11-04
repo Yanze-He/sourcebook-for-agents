@@ -1222,7 +1222,7 @@ func desktopLauncherPath() (string, error) {
 	if marker.LauncherPath == "" || !filepath.IsAbs(path) || !isStableDesktopLauncher(path) {
 		return "", errors.New("this Sourcebook Desktop version cannot install its MCP connection; update and reopen Desktop")
 	}
-	if info, err := os.Stat(path); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode()&0o111 == 0) {
 		return "", errors.New("Sourcebook's local MCP launcher is unavailable; reopen or reinstall Desktop")
 	}
 	return path, nil

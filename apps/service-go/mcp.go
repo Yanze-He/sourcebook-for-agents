@@ -326,7 +326,7 @@ func desktopMCPLauncherPath() (string, error) {
 	if !filepath.IsAbs(path) || !isDesktopMCPLauncherPath(path) {
 		return "", errors.New("Sourcebook local MCP launcher is invalid")
 	}
-	if info, err := os.Stat(path); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode()&0o111 == 0) {
 		return "", errors.New("Sourcebook local MCP launcher is unavailable; reopen Desktop")
 	}
 	return path, nil
