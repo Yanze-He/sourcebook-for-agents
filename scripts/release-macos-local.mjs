@@ -34,7 +34,9 @@ try {
 }
 if (!existsSync(appPath) || !existsSync(dmgPath)) throw new Error("macOS package output is missing.");
 
-run("xcrun", ["notarytool", "submit", dmgPath, "--keychain-profile", notaryProfile, "--wait"]);
+const notarization = JSON.parse(execFileSync("xcrun", ["notarytool", "submit", dmgPath, "--keychain-profile", notaryProfile, "--wait", "--output-format", "json"], { cwd: repositoryRoot, encoding: "utf8" }));
+console.log(`Apple notarization ${notarization.status}: ${notarization.id}`);
+if (notarization.status !== "Accepted") throw new Error(`Apple rejected the DMG. Read the notarization report for ${notarization.id}; do not publish.`);
 run("xcrun", ["stapler", "staple", dmgPath]);
 run("xcrun", ["stapler", "validate", dmgPath]);
 run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath]);

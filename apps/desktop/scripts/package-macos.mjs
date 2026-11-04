@@ -86,7 +86,18 @@ const installerVolumeIcon = join(outputRoot, "SourcebookInstallerVolume.icns");
 createIcon(installerIconSource, installerVolumeIcon, "SourcebookInstallerVolume");
 
 if (signingIdentity) {
-  execFileSync("codesign", ["--force", "--deep", "--options", "runtime", "--timestamp", "--sign", signingIdentity, appRoot], { stdio: "inherit" });
+  // Go helpers in Resources are executable code, but --deep does not sign
+  // arbitrary binaries there. Sign each nested executable before the bundle.
+  for (const binary of [
+    join(resources, "sourcebook-mcp"),
+    join(resources, "sourcebook-mcp-launcher"),
+    join(contents, "MacOS", "sourcebook-service"),
+    join(contents, "MacOS", "Sourcebook Desktop"),
+  ]) {
+    execFileSync("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", signingIdentity, binary], { stdio: "inherit" });
+    execFileSync("codesign", ["--verify", "--strict", "--verbose=2", binary], { stdio: "inherit" });
+  }
+  execFileSync("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", signingIdentity, appRoot], { stdio: "inherit" });
   execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appRoot], { stdio: "inherit" });
 }
 
