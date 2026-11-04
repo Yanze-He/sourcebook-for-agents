@@ -3,5 +3,7 @@ node_modules/
 .wxt/
 .local/
 artifacts/unpacked/
+artifacts/local-test/
+artifacts/*-chrome-web-store.zip
 work/capture-store/
 npm-debug.log*
