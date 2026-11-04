@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -53,10 +54,14 @@ func TestCodexConnectionStatusUsesOnlyDesktopOwnedEntries(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("SOURCEBOOK_DATA_DIR", data)
 	launcher := filepath.Join(data, "sourcebook-mcp-launcher")
+	legacy := filepath.Join(data, "sourcebook-mcp")
+	if runtime.GOOS == "windows" {
+		launcher += ".exe"
+		legacy += ".exe"
+	}
 	if err := os.WriteFile(launcher, []byte("launcher"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	legacy := filepath.Join(data, "sourcebook-mcp")
 	marker, err := json.Marshal(map[string]string{"launcherPath": launcher, "mcpPath": legacy})
 	if err != nil {
 		t.Fatal(err)
@@ -72,16 +77,26 @@ func TestCodexConnectionStatusUsesOnlyDesktopOwnedEntries(t *testing.T) {
 			return []byte(output), err
 		}
 	}
+	configOutput := func(command string) string {
+		payload, err := json.Marshal(map[string]any{"transport": map[string]any{
+			"command": command,
+			"env":     map[string]string{"SOURCEBOOK_AGENT_NAME": "Codex"},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(payload)
+	}
 	if got := codexConnectionStatus(run("not found", errors.New("not found"))); got.Status != "not_connected" {
 		t.Fatalf("not found status = %#v", got)
 	}
 	if got := codexConnectionStatus(run(`{"transport":{"command":"/usr/local/bin/user-sourcebook","env":{}}}`, nil)); got.Status != "protected" {
 		t.Fatalf("user configuration status = %#v", got)
 	}
-	if got := codexConnectionStatus(run(`{"transport":{"command":"`+legacy+`","env":{"SOURCEBOOK_AGENT_NAME":"Codex"}}}`, nil)); got.Status != "repairable" {
+	if got := codexConnectionStatus(run(configOutput(legacy), nil)); got.Status != "repairable" {
 		t.Fatalf("legacy configuration status = %#v", got)
 	}
-	if got := codexConnectionStatus(run(`{"transport":{"command":"`+launcher+`","env":{"SOURCEBOOK_AGENT_NAME":"Codex"}}}`, nil)); got.Status != "connected" {
+	if got := codexConnectionStatus(run(configOutput(launcher), nil)); got.Status != "connected" {
 		t.Fatalf("current configuration status = %#v", got)
 	}
 }
