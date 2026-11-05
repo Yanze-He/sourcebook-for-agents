@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/5f0956cf-81d9-4861-a663-5596113db402
 - **Carry that direction across AI tools.** Select what each task needs from the same Book rather than rebuilding your references in every chat.
 - **Make each round improve the next.** Judge the result, keep useful references, and review Agent-proposed additions or edits before they enrich the Book.
 
-<img width="1672" height="743" alt="Sourcebook project Books and material cards" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
+<img width="1470" height="855" alt="Connected Agent working with a Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
 
 ## How it works today
 
@@ -25,7 +25,7 @@ Picker can save X and Xiaohongshu post text with available author and source det
 - **Codex and WorkBuddy:** Connect from Desktop. When asked, the Agent can read the Book and the selection or filter in its connected Sourcebook page through local MCP. No separate Agent plugin or Skill is needed.
 - **Other AI tools:** Copy selected files or links, or prepare a Pack with a prompt, then paste them into the tool yourself.
 
-<img width="1470" height="855" alt="Connected Agent working with a Sourcebook Book" src="https://github.com/user-attachments/assets/a98b72a2-346f-44c3-b76a-aba65413aac5" />
+<img width="1672" height="743" alt="Sourcebook project Books and material cards" src="https://github.com/user-attachments/assets/5f762a1d-7c0e-4456-8310-d01e3eae12f7" />
 
 ## Local-first by design
 
